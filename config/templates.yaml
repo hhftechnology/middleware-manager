@@ -4,7 +4,7 @@ middlewares:
     name: Authelia
     type: forwardAuth
     config:
-      address: "http://authelia:9091/api/verify?rd=https://auth.yourdomain.com"
+      address: "http://authelia:9091/api/authz/forward-auth"
       trustForwardHeader: true
       authResponseHeaders:
         - "Remote-User"
