@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useMiddlewares } from '../../contexts/MiddlewareContext';
-import { LoadingSpinner, ErrorMessage } from '../common';
+import { LoadingSpinner } from '../common';
+import { showErrorToast } from '../common/Toast';
 
 const MiddlewareForm = ({ id, isEditing, navigateTo }) => {
   const {
     middlewares,
     selectedMiddleware,
     loading,
-    error,
     fetchMiddleware,
     createMiddleware,
     updateMiddleware,
@@ -21,7 +21,6 @@ const MiddlewareForm = ({ id, isEditing, navigateTo }) => {
     config: {}
   });
   const [configText, setConfigText] = useState('{\n  "users": [\n    "admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"\n  ]\n}');
-  const [formError, setFormError] = useState(null);
   const [orderedMiddlewares, setOrderedMiddlewares] = useState([]);
   
   // Available middleware types
@@ -139,7 +138,6 @@ const MiddlewareForm = ({ id, isEditing, navigateTo }) => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setFormError(null);
     
     try {
       // Parse config JSON
@@ -150,14 +148,16 @@ const MiddlewareForm = ({ id, isEditing, navigateTo }) => {
         try {
           configObj = JSON.parse(configText);
         } catch (err) {
-          setFormError('Invalid JSON configuration');
+          const errorMsg = 'Invalid JSON configuration';
+          showErrorToast(errorMsg, 'Please check your JSON syntax and try again.');
           return;
         }
       } else {
         try {
           configObj = JSON.parse(configText);
         } catch (err) {
-          setFormError('Invalid JSON configuration');
+          const errorMsg = 'Invalid JSON configuration';
+          showErrorToast(errorMsg, 'Please check your JSON syntax and try again.');
           return;
         }
       }
@@ -176,7 +176,8 @@ const MiddlewareForm = ({ id, isEditing, navigateTo }) => {
       
       navigateTo('middlewares');
     } catch (err) {
-      setFormError(`Failed to ${isEditing ? 'update' : 'create'} middleware: ${err.message}`);
+      const errorMsg = `Failed to ${isEditing ? 'update' : 'create'} middleware`;
+      showErrorToast(errorMsg, err.message);
     }
   };
 
@@ -198,19 +199,6 @@ const MiddlewareForm = ({ id, isEditing, navigateTo }) => {
         </h1>
       </div>
 
-      {error && (
-        <ErrorMessage
-          message={error}
-          onDismiss={() => setFormError(null)}
-        />
-      )}
-
-      {formError && (
-        <ErrorMessage
-          message={formError}
-          onDismiss={() => setFormError(null)}
-        />
-      )}
 
       <div className="bg-white p-6 rounded-lg shadow">
         <form onSubmit={handleSubmit}>
