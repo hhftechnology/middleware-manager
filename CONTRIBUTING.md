@@ -150,27 +150,27 @@ as well as clear in content within the description.
 Describe the change as a one-line in some descriptive manner. Add sufficient
 context for a reader to understand what is improved. If platform-specific
 consider adding the platform as a prefix, like `[Android]` or any other tags may
-be useful for quick filtering like `[TC-ABC-1.2]` to tag test changes.
+be useful for quick filtering like `[PMM-ABC-1.2]` to tag test changes.
 
 Examples of descriptive titles:
 
--   `[Silabs] Fix compile of SiWx917 if LED and BUTTON are disabled`
--   `[Telink] Update build Dockerfile with new Zephyr SHA: c05c4.....`
--   `General Commissioning Cluster: use AttributeAccessInterface/CommandHandlerInterface for processing`
--   `Scenes Management/CopyScene: set access as manage instead of default to match the spec`
--   `Fix build errors due to ChipDeviceEvent default constructor not being available`
--   `Fix crash during DNSSD processing due to malformed packet`
--   `[NRF] Fix crash due to stack overflow during logging for PW-RPC builds`
--   `[TC-ABC-2.3] added new python test case based on test plan`
--   `[TC-ABC] migrate tests from yaml to python`
+-   `[Traefik] Fix middleware chain processing when using ForwardAuth`
+-   `[Docker] Update base image to Alpine 3.18 for security patches`
+-   `Middleware Templates: Add CrowdSec bouncer configuration with proper defaults`
+-   `Router Management: Set priority values correctly to match Traefik documentation`
+-   `Fix build errors due to missing React-Toastify dependency in Docker build`
+-   `Fix crash during API request processing due to malformed JSON response`
+-   `[UI] Fix layout overflow in middleware configuration editor on mobile devices`
+-   `[PMM-123] Add support for Traefik v3 plugin configuration format`
+-   `[Config] Migrate default templates from YAML to structured Go code`
 
 Examples of titles that are vague (not clear what the change is, one would need
 to open the pull request for details or open additional issue in GitHub)
 
 -   `Work on issue 1234`
--   `Fix android JniTypeWrappers`
--   `Fix segfault in BLE`
--   `Fix TC-ABC-1.2`
+-   `Fix Traefik integration`
+-   `Fix segfault in API handler`
+-   `Fix PMM-456`
 -   `Update Readme`
 
 ##### Summary contents
