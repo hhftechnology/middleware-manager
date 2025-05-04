@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { showErrorToast } from './Toast';
 
 /**
  * Error message component for displaying errors
@@ -8,14 +9,22 @@ import React from 'react';
  * @param {string} props.details - Optional error details
  * @param {function} props.onRetry - Optional retry function
  * @param {function} props.onDismiss - Optional dismiss function
+ * @param {boolean} props.showToast - Whether to also show a toast notification
  * @returns {JSX.Element}
  */
 const ErrorMessage = ({ 
   message, 
   details = null, 
   onRetry = null, 
-  onDismiss = null 
+  onDismiss = null,
+  showToast = false
 }) => {
+  useEffect(() => {
+    if (showToast) {
+      showErrorToast(message, details);
+    }
+  }, [message, details, showToast]);
+
   return (
     <div className="bg-red-100 text-red-700 p-6 rounded-lg border border-red-300 mb-4">
       <div className="flex items-start">

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useMiddlewares } from '../../contexts/MiddlewareContext';
 import { LoadingSpinner, ErrorMessage } from '../common';
+import ConfirmationModal from '../common/ConfirmationModal';
+import { showErrorToast, showSuccessToast } from '../common/Toast';
 
 const MiddlewaresList = ({ navigateTo }) => {
   const {
@@ -14,6 +16,7 @@ const MiddlewaresList = ({ navigateTo }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [middlewareToDelete, setMiddlewareToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchMiddlewares();
@@ -28,12 +31,16 @@ const MiddlewaresList = ({ navigateTo }) => {
     if (!middlewareToDelete) return;
     
     try {
+      setIsDeleting(true);
       await deleteMiddleware(middlewareToDelete.id);
+      showSuccessToast(`Middleware "${middlewareToDelete.name}" was successfully deleted.`);
       setShowDeleteModal(false);
       setMiddlewareToDelete(null);
     } catch (err) {
-      alert('Failed to delete middleware');
+      showErrorToast('Failed to delete middleware', err.message);
       console.error('Delete middleware error:', err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -151,38 +158,19 @@ const MiddlewaresList = ({ navigateTo }) => {
         </table>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && middlewareToDelete && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
-            <div className="px-6 py-4 border-b">
-              <h3 className="text-lg font-semibold text-red-600">Confirm Deletion</h3>
-            </div>
-            <div className="px-6 py-4">
-              <p className="mb-4">
-                Are you sure you want to delete the middleware "{middlewareToDelete.name}"?
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                This action cannot be undone and may affect any resources currently using this middleware.
-              </p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={cancelDelete}
-                  className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteMiddleware}
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Professional Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        title="Confirm Deletion"
+        message={middlewareToDelete ? `Are you sure you want to delete the middleware "${middlewareToDelete.name}"?` : ''}
+        details="This action cannot be undone and may affect any resources currently using this middleware."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonType="danger"
+        onConfirm={handleDeleteMiddleware}
+        onCancel={cancelDelete}
+        isProcessing={isDeleting}
+      />
     </div>
   );
 };

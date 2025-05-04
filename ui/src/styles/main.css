@@ -431,9 +431,66 @@ td button:empty:before {
     justify-content: center;
     z-index: 1000;
   }
-  
+
   .bg-gray-600.bg-opacity-50 {
     background-color: rgba(0, 0, 0, 0.7) !important;
+  }
+
+  /* Toast-like modal styling */
+  .animate-scaleIn {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1), 0 3px 3px rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+  }
+
+  /* Match toast colors for different button types */
+  .bg-red-600 {
+    background-color: #e53e3e !important;
+  }
+  .hover\:bg-red-700:hover {
+    background-color: #c53030 !important;
+  }
+
+  .bg-yellow-600 {
+    background-color: #d97706 !important;
+  }
+  .hover\:bg-yellow-700:hover {
+    background-color: #b45309 !important;
+  }
+
+  .bg-green-600 {
+    background-color: #059669 !important;
+  }
+  .hover\:bg-green-700:hover {
+    background-color: #047857 !important;
+  }
+
+  .bg-blue-600 {
+    background-color: #2563eb !important;
+  }
+  .hover\:bg-blue-700:hover {
+    background-color: #1d4ed8 !important;
+  }
+
+  /* Dark mode modal styling */
+  .dark-mode .animate-scaleIn {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3), 0 3px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .dark-mode .bg-red-50 {
+    background-color: rgba(220, 38, 38, 0.1) !important;
+  }
+
+  .dark-mode .text-red-600 {
+    color: #f87171 !important;
+  }
+
+  /* Modal animation timing */
+  .animate-fadeIn {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .animate-scaleIn {
+    animation: scaleIn 0.2s ease-out;
   }
   
   /* =====================
@@ -814,4 +871,206 @@ td button:empty:before {
   opacity: 1 !important;
   visibility: visible !important;
   font-weight: 600 !important;
-} 
+}
+
+/* =====================
+   ANIMATIONS
+   ===================== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* =====================
+   ANT DESIGN MODAL STYLING
+   ===================== */
+.ant-modal-root {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  pointer-events: auto;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.ant-modal-wrap {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: auto;
+  outline: 0;
+  pointer-events: auto;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ant-modal {
+  box-sizing: border-box;
+  padding: 0;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  line-height: 1.5714285714285714;
+  list-style: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  position: relative;
+  top: 100px;
+  width: auto;
+  max-width: calc(100vw - 32px);
+  margin: 0 auto;
+  padding-bottom: 24px;
+  pointer-events: none;
+}
+
+.ant-modal-content {
+  position: relative;
+  background-color: #ffffff;
+  background-clip: padding-box;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  pointer-events: auto;
+  padding: 20px 24px;
+}
+
+.ant-modal-confirm-body {
+  display: flex;
+  align-items: flex-start;
+}
+
+.ant-modal-confirm-body-has-title > .anticon {
+  margin-right: 16px;
+  font-size: 22px;
+}
+
+.ant-modal-confirm-paragraph {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.ant-modal-confirm-title {
+  color: rgba(0, 0, 0, 0.88);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+  display: block;
+}
+
+.ant-modal-confirm-content {
+  margin-top: 8px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.ant-modal-confirm-btns {
+  margin-top: 24px;
+  text-align: right;
+}
+
+.ant-btn {
+  font-size: 14px;
+  height: 32px;
+  padding: 4px 15px;
+  border-radius: 6px;
+  outline: none;
+  position: relative;
+  display: inline-block;
+  font-weight: 400;
+  white-space: nowrap;
+  text-align: center;
+  background-image: none;
+  background-color: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+  user-select: none;
+  touch-action: manipulation;
+  line-height: 1.5714285714285714;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.ant-btn-default {
+  background-color: #ffffff;
+  border-color: #d9d9d9;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ant-btn-default:hover {
+  color: #4096ff;
+  border-color: #4096ff;
+}
+
+.ant-btn-primary {
+  background-color: #1677ff;
+  border-color: #1677ff;
+  color: #ffffff;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ant-btn-primary:hover {
+  background-color: #0055cc;
+  border-color: #0055cc;
+}
+
+/* Add danger button style */
+.ant-btn-danger {
+  background-color: #ff4d4f;
+  border-color: #ff4d4f;
+  color: #ffffff;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ant-btn-danger:hover {
+  background-color: #ff7875;
+  border-color: #ff7875;
+}
+
+/* Add warning button style */
+.ant-btn-warning {
+  background-color: #faad14;
+  border-color: #faad14;
+  color: #ffffff;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ant-btn-warning:hover {
+  background-color: #ffc53d;
+  border-color: #ffc53d;
+}
+
+/* Add success button style */
+.ant-btn-success {
+  background-color: #52c41a;
+  border-color: #52c41a;
+  color: #ffffff;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ant-btn-success:hover {
+  background-color: #73d13d;
+  border-color: #73d13d;
+}

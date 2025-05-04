@@ -4,6 +4,8 @@ import { ResourceProvider } from './contexts/ResourceContext';
 import { MiddlewareProvider } from './contexts/MiddlewareContext';
 import { DataSourceProvider } from './contexts/DataSourceContext';
 import { Header } from './components/common';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Import page components
 import Dashboard from './components/dashboard/Dashboard';
@@ -78,6 +80,18 @@ const MainContent = () => {
       <main className="container mx-auto px-6 py-6">
         {renderPage()}
       </main>
+      <ToastContainer 
+        position="top-center"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        style={{ width: "500px" }}
+      />
     </div>
   );
 };

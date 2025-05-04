@@ -510,12 +510,41 @@ go run main.go
 go build -o middleware-manager
 ```
 
+Note: you may have to set a hostname record in /etc/hosts for pangolin based on the internal IP for the pangolin container
+```
+docker network inspect -v pangolin
+```
+
+Here is a command that will update your /etc/hosts file
+
+1. Set or update pangolin in /etc/hosts
+```
+PANGOLIN_IP=$(docker network inspect pangolin | jq -r '.[0].Containers[] | select(.Name == "pangolin") | .IPv4Address' | cut -d'/' -f1) && \
+sudo sed -i "/[[:space:]]pangolin$/d" /etc/hosts && \
+echo "$PANGOLIN_IP pangolin" | sudo tee -a /etc/hosts
+```
+
+2. Set or update host.docker.internal in /etc/hosts
+```
+HOST_IP=$(docker network inspect pangolin | jq -r '.[0].Containers[] | select(.Name == "gerbil") | .IPv4Address' | cut -d'/' -f1) && \
+sudo sed -i "/[[:space:]]host.docker.internal$/d" /etc/hosts && \
+echo "$HOST_IP host.docker.internal" | sudo tee -a /etc/hosts
+```
+
 ### Frontend Development
 
 ```bash
 cd ui
+cp src/package.json .
 npm install
 npm start
+```
+Note: if you are getting an error such as `options.allowedHosts[0] should be a non-empty string`
+
+you should create a .env file in /ui folder. Do not do this in production (development only)
+
+```sh
+DANGEROUSLY_DISABLE_HOST_CHECK=true
 ```
 
 ## License
