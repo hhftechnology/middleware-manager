@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useResources } from '../../contexts/ResourceContext';
-import { LoadingSpinner, ErrorMessage } from '../common';
+import { LoadingSpinner, ErrorMessage, ConfirmationModal } from '../common';
 import { MiddlewareUtils } from '../../services/api';
 
 /**
@@ -17,20 +17,39 @@ const ResourcesList = ({ navigateTo }) => {
   } = useResources();
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [resourceToDelete, setResourceToDelete] = useState(null);
 
   // Load resources when component mounts
   useEffect(() => {
     fetchResources();
   }, [fetchResources]);
 
-  // Handle resource deletion with confirmation
-  const handleDeleteResource = async (id, host) => {
-    if (window.confirm(`Are you sure you want to delete the resource "${host}"? This cannot be undone.`)) {
-      const success = await deleteResource(id);
-      if (success) {
-        // Success already handled in the context
-      }
+  // Open confirmation modal for resource deletion
+  const confirmDelete = (resource) => {
+    setResourceToDelete(resource);
+    setShowDeleteModal(true);
+    if (setError) setError(null); // Clear previous errors if setError exists
+  };
+
+  // Handle resource deletion after confirmation
+  const handleDeleteConfirmed = async () => {
+    if (!resourceToDelete) return;
+    
+    const success = await deleteResource(resourceToDelete.id);
+    if (success) {
+      setShowDeleteModal(false);
+      setResourceToDelete(null);
+      // Success already handled in the context
     }
+    // Error is handled by context
+  };
+
+  // Cancel deletion
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setResourceToDelete(null);
+    if (setError) setError(null); // Clear error on cancel if setError exists
   };
 
   // Filter resources based on search term
@@ -46,7 +65,7 @@ const ResourcesList = ({ navigateTo }) => {
     <div>
       <h1 className="text-2xl font-bold mb-6">Resources</h1>
       
-      {error && (
+      {error && !showDeleteModal && (
         <ErrorMessage 
           message="Failed to load resources" 
           details={error}
@@ -142,7 +161,7 @@ const ResourcesList = ({ navigateTo }) => {
                     </button>
                     {isDisabled && (
                       <button
-                        onClick={() => handleDeleteResource(resource.id, resource.host)}
+                        onClick={() => confirmDelete(resource)}
                         className="text-red-600 hover:text-red-900"
                       >
                         Delete
@@ -165,6 +184,18 @@ const ResourcesList = ({ navigateTo }) => {
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        show={showDeleteModal && !!resourceToDelete}
+        title="Confirm Deletion"
+        message={`Are you sure you want to delete the resource "${resourceToDelete?.host}"?`}
+        details="This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={cancelDelete}
+      />
     </div>
   );
 };

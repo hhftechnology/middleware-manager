@@ -1,9 +1,9 @@
 // ui/src/components/resources/ResourceDetail.js
-import React, { useEffect, useState, useCallback } from 'react'; // Added useCallback
+import React, { useEffect, useState, useCallback } from 'react';
 import { useResources } from '../../contexts/ResourceContext';
 import { useMiddlewares } from '../../contexts/MiddlewareContext';
 import { useServices } from '../../contexts/ServiceContext';
-import { LoadingSpinner, ErrorMessage } from '../common';
+import { LoadingSpinner, ErrorMessage, ConfirmationModal } from '../common';
 import HTTPConfigModal from './config/HTTPConfigModal';
 import TLSConfigModal from './config/TLSConfigModal';
 import TCPConfigModal from './config/TCPConfigModal';
@@ -67,6 +67,10 @@ const ResourceDetail = ({ id, navigateTo }) => {
   const [resourceService, setResourceService] = useState(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [headerInput, setHeaderInput] = useState({ key: '', value: '' });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRemoveMiddlewareModal, setShowRemoveMiddlewareModal] = useState(false);
+  const [middlewareToRemove, setMiddlewareToRemove] = useState(null);
+  const [showRemoveServiceModal, setShowRemoveServiceModal] = useState(false);
 
   // Configuration state
   const [config, setConfig] = useState({
@@ -225,13 +229,31 @@ const ResourceDetail = ({ id, navigateTo }) => {
     }
   };
 
-  const handleRemoveMiddleware = async (middlewareId) => {
-    if (isDisabled || !window.confirm('Are you sure you want to remove this middleware?')) return;
+  // Confirm middleware removal
+  const confirmRemoveMiddleware = (middlewareId) => {
+    if (isDisabled) return;
     clearError();
-    const success = await removeMiddleware(id, middlewareId);
+    setMiddlewareToRemove(middlewareId);
+    setShowRemoveMiddlewareModal(true);
+  };
+
+  // Handle middleware removal after confirmation
+  const handleRemoveMiddlewareConfirmed = async () => {
+    if (!middlewareToRemove) return;
+    
+    const success = await removeMiddleware(id, middlewareToRemove);
+    setShowRemoveMiddlewareModal(false);
+    setMiddlewareToRemove(null);
+    
     if (!success) {
       alert(`Failed to remove middleware. ${resourceError || 'Check console for details.'}`);
     }
+  };
+
+  // Cancel middleware removal
+  const cancelRemoveMiddleware = () => {
+    setShowRemoveMiddlewareModal(false);
+    setMiddlewareToRemove(null);
   };
 
   // Service Assignment
@@ -250,18 +272,30 @@ const ResourceDetail = ({ id, navigateTo }) => {
     }
   };
 
-  const handleRemoveService = async () => {
-    if (isDisabled || !window.confirm('Remove custom service assignment? The resource will use its default service.')) return;
+  // Confirm service removal
+  const confirmRemoveService = () => {
+    if (isDisabled) return;
     clearError();
+    setShowRemoveServiceModal(true);
+  };
+
+  // Handle service removal after confirmation
+  const handleRemoveServiceConfirmed = async () => {
     try {
       await ResourceService.removeServiceFromResource(id);
       await fetchResourceService(); // Re-fetch (should be null now)
+      setShowRemoveServiceModal(false);
     } catch (err) {
-        const errorMsg = `Failed to remove service assignment: ${err.message || 'Unknown error'}`;
-        setServicesError(errorMsg);
-        alert(errorMsg);
-        console.error('Error removing service assignment:', err);
+      const errorMsg = `Failed to remove service assignment: ${err.message || 'Unknown error'}`;
+      setServicesError(errorMsg);
+      alert(errorMsg);
+      console.error('Error removing service assignment:', err);
     }
+  };
+
+  // Cancel service removal
+  const cancelRemoveService = () => {
+    setShowRemoveServiceModal(false);
   };
 
   // Render service summary
@@ -325,21 +359,20 @@ const ResourceDetail = ({ id, navigateTo }) => {
   };
 
   // Deletion
-  const handleDeleteResource = async () => {
-    if (!isDisabled) {
-        alert("Resource must be enabled (present in data source) to modify or delete via standard methods. If it's permanently gone, you can delete it here.");
-        // Reconfirm if they still want to delete the record
-        if (!window.confirm(`DELETE disabled resource record "${selectedResource.host}"? This is permanent.`)) {
-            return;
-        }
-    } else if (!window.confirm(`DELETE disabled resource record "${selectedResource.host}"? This is permanent.`)) {
-      return;
-    }
-
+  const confirmDeleteResource = () => {
     clearError();
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteResourceConfirmed = async () => {
     const success = await deleteResource(id);
     if (success) navigateTo('resources');
     // Error handled by context otherwise
+    setShowDeleteModal(false);
+  };
+
+  const cancelDeleteResource = () => {
+    setShowDeleteModal(false);
   };
 
   // --- Modal Rendering ---
@@ -443,7 +476,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                        Configuration changes are saved but inactive. You can permanently delete the record.
                    </p>
                    <div className="mt-2">
-                     <button onClick={handleDeleteResource} className="text-sm text-red-700 dark:text-red-300 underline font-medium hover:text-red-600 dark:hover:text-red-200">
+                     <button onClick={confirmDeleteResource} className="text-sm text-red-700 dark:text-red-300 underline font-medium hover:text-red-600 dark:hover:text-red-200">
                        Permanently Delete Record
                      </button>
                    </div>
@@ -553,7 +586,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                              </div>
                              <div className="flex space-x-2 flex-shrink-0 mt-2 sm:mt-0 self-start sm:self-center">
                                  <button onClick={() => navigateTo('service-form', resourceService.id)} className="btn-link text-xs" disabled={isDisabled} title="Edit the base service definition">Edit Base Service</button>
-                                 <button onClick={handleRemoveService} className="btn-link text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300" disabled={isDisabled} title="Remove custom service assignment">Remove Assignment</button>
+                                 <button onClick={confirmRemoveService} className="btn-link text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300" disabled={isDisabled} title="Remove custom service assignment">Remove Assignment</button>
                              </div>
                          </div>
                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 italic">
@@ -651,7 +684,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                        <td className="py-2 px-6 text-center text-sm text-gray-500 dark:text-gray-400">{middleware.priority}</td>
                        <td className="py-2 px-6 text-right">
                          <button
-                           onClick={() => handleRemoveMiddleware(middleware.id)}
+                           onClick={() => confirmRemoveMiddleware(middleware.id)}
                            className="btn-link text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                            disabled={isDisabled}
                          >
@@ -753,6 +786,44 @@ const ResourceDetail = ({ id, navigateTo }) => {
           isDisabled={isDisabled}
         />
       )}
+
+      {/* Delete Resource Confirmation Modal */}
+      <ConfirmationModal
+        show={showDeleteModal}
+        title="Confirm Resource Deletion"
+        message={`Are you sure you want to delete the resource "${selectedResource?.host}"?`}
+        details={isDisabled 
+          ? "This action cannot be undone." 
+          : "Resource must be disabled (removed from data source) to be deleted. This action cannot be undone."}
+        confirmText="Delete Resource"
+        cancelText="Cancel"
+        onConfirm={handleDeleteResourceConfirmed}
+        onCancel={cancelDeleteResource}
+      />
+
+      {/* Remove Middleware Confirmation Modal */}
+      <ConfirmationModal
+        show={showRemoveMiddlewareModal}
+        title="Confirm Middleware Removal"
+        message="Are you sure you want to remove this middleware?"
+        details="This will remove the middleware from this resource but won't delete the middleware itself."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={handleRemoveMiddlewareConfirmed}
+        onCancel={cancelRemoveMiddleware}
+      />
+
+      {/* Remove Service Confirmation Modal */}
+      <ConfirmationModal
+        show={showRemoveServiceModal}
+        title="Confirm Service Removal"
+        message="Remove custom service assignment?"
+        details="The resource will use its default service."
+        confirmText="Remove Assignment"
+        cancelText="Cancel"
+        onConfirm={handleRemoveServiceConfirmed}
+        onCancel={cancelRemoveService}
+      />
     </div>
   );
 };

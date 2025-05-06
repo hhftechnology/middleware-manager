@@ -1,30 +1,7 @@
 // ui/src/components/middlewares/MiddlewaresList.js
 import React, { useEffect, useState } from 'react';
 import { useMiddlewares } from '../../contexts/MiddlewareContext';
-import { LoadingSpinner, ErrorMessage } from '../common';
-
-// Reusable Modal Component (can be moved to common components later)
-const ConfirmationModal = ({ title, message, details, confirmText, cancelText, onConfirm, onCancel, show }) => {
-  if (!show) return null;
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content max-w-md"> {/* Standard width */}
-        <div className="modal-header">
-          <h3 className="modal-title text-red-600 dark:text-red-400">{title}</h3>
-          <button onClick={onCancel} className="modal-close-button">&times;</button>
-        </div>
-        <div className="modal-body">
-          <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{message}</p>
-          {details && <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{details}</p>}
-        </div>
-        <div className="modal-footer">
-          <button onClick={onCancel} className="btn btn-secondary">{cancelText}</button>
-          <button onClick={onConfirm} className="btn btn-danger">{confirmText}</button>
-        </div>
-      </div>
-    </div>
-  );
-};
+import { LoadingSpinner, ErrorMessage, ConfirmationModal } from '../common';
 
 const MiddlewaresList = ({ navigateTo }) => {
   const {
