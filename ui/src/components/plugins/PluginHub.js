@@ -1,7 +1,7 @@
 // ui/src/components/plugins/PluginHub.js
 import React, { useEffect, useState } from 'react';
 import { usePlugins } from '../../contexts/PluginContext';
-import { LoadingSpinner, ErrorMessage as GlobalErrorMessage } from '../common'; // Renamed to avoid conflict
+import { LoadingSpinner, ErrorMessage as GlobalErrorMessage, ConfirmationModal } from '../common'; // Renamed to avoid conflict
 import PluginCard from './PluginCard';
 
 const PluginHub = () => {
@@ -20,6 +20,11 @@ const PluginHub = () => {
   const [currentPath, setCurrentPath] = useState('');
   const [pathError, setPathError] = useState('');
   const [pathSaving, setPathSaving] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+
+  const cancelWarning = () => {
+    setShowWarningModal(false);
+  };
 
   useEffect(() => {
     if (traefikConfigPath) {
@@ -40,8 +45,18 @@ const PluginHub = () => {
       // Error is set in context, this is for immediate feedback
       setPathError(error || 'Failed to update path. Check console.');
     } else {
-        alert('Path updated. This change is in-memory and will be lost on application restart unless persisted in the backend configuration (e.g., environment variable or config file).');
-    }
+        {/* Warning Confirmation Modal */}
+        <ConfirmationModal
+        show={showWarningModal}
+        title="Warning"
+        message={`Path updated. `}
+        details="This change is in-memory and will be lost on application restart unless persisted in the backend configuration (e.g., environment variable or config file)."
+        cancelText="Cancel"
+        onCancel={cancelWarning}
+        />
+//        alert('Path updated. This change is in-memory and will be lost on application restart unless persisted in the backend configuration (e.g., environment variable or config file).');
+
+      }
     setPathSaving(false);
   };
 

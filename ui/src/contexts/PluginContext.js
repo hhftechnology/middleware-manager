@@ -2,6 +2,7 @@
 import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
 // Ensure GlobalErrorMessage is imported correctly if you use it elsewhere in this file.
 // For now, local error display via alert/setError should suffice for these new functions.
+import { ConfirmationModal } from '../components/common';
 
 const API_URL = '/api/plugins';
 
@@ -13,6 +14,7 @@ export const PluginProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [traefikConfigPath, setTraefikConfigPath] = useState('');
   const [fetchingPath, setFetchingPath] = useState(true);
+  const [alert, setAlert] = useState({ show: false, title: '', message: '' });
 
   const fetchPlugins = useCallback(async () => {
     setLoading(true);
@@ -48,7 +50,12 @@ export const PluginProvider = ({ children }) => {
         throw new Error(errData.message);
       }
       const result = await response.json();
-      alert(result.message || 'Plugin installation initiated successfully! Restart Traefik to apply.');
+      //alert(result.message || 'Plugin installation initiated successfully! Restart Traefik to apply.'); // Alert is now in the Confirmation Dialog component
+      setAlert({
+        show: true,
+        title: 'Success',
+        message: result.message || 'Plugin installation initiated successfully! Restart Traefik to apply.',
+      });
       fetchPlugins(); // Refresh plugin list to show installed status
       return true;
     } catch (err) {
@@ -75,7 +82,12 @@ export const PluginProvider = ({ children }) => {
         throw new Error(errData.message);
       }
       const result = await response.json();
-      alert(result.message || 'Plugin removal initiated successfully! Restart Traefik to apply.');
+      //alert(result.message || 'Plugin removal initiated successfully! Restart Traefik to apply.'); // Alert is now in the Confirmation Dialog component
+      setAlert({
+        show: true,
+        title: 'Success',
+        message: result.message || 'Plugin removal initiated successfully! Restart Traefik to apply.',
+      });
       fetchPlugins(); // Refresh plugin list
       return true;
     } catch (err) {
@@ -124,7 +136,12 @@ export const PluginProvider = ({ children }) => {
       }
       const data = await response.json();
       setTraefikConfigPath(data.path || '');
-      alert(data.message || 'Traefik config path updated successfully!');
+      //alert(data.message || 'Traefik config path updated successfully!'); // Alert is now in the Confirmation Dialog component
+      setAlert({
+        show: true,
+        title: 'Success',
+        message: data.message || 'Traefik config path updated successfully!',
+      });
       return true;
     } catch (err) {
       console.error('Failed to update Traefik config path:', err);
@@ -158,6 +175,16 @@ export const PluginProvider = ({ children }) => {
   return (
     <PluginContext.Provider value={value}>
       {children}
+
+      {/* Alert modal rendered here */}
+      <ConfirmationModal
+        show={alert.show}
+        mode="alert"
+        title={alert.title}
+        message={alert.message}
+        onConfirm={() => setAlert(prev => ({ ...prev, show: false }))}
+      />
+
     </PluginContext.Provider>
   );
 };
