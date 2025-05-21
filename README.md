@@ -75,7 +75,7 @@ networks:
 
 services:
   pangolin:
-    image: fosrl/pangolin:1.3.0 # Use your desired Pangolin version
+    image: fosrl/pangolin:1.4.0 # Use your desired Pangolin version
     container_name: pangolin
     restart: unless-stopped
     volumes:
@@ -116,7 +116,7 @@ services:
       - pangolin_network
 
   traefik:
-    image: traefik:v3.3.3
+    image: traefik:v3.4.0
     container_name: traefik
     restart: unless-stopped
 

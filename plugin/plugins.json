@@ -37,5 +37,18 @@
     "stars": 225,
     "homepage": "https://github.com/tomMoulard/fail2ban",
     "docs": "https://github.com/tomMoulard/fail2ban#readme"
+  },
+  {
+    "displayName": "Statiq",
+    "type": "middleware",
+    "iconPath": ".assets/f2b.png",
+    "import": "github.com/hhftechnology/statiq",
+    "summary": "Statiq - Webserver Plugin for Traefik v3",
+    "author": "Hhftechnology",
+    "version": "v1.0.1",
+    "tested_with": "Traefik v2.9+, v3.0+",
+    "stars": 3,
+    "homepage": "https://github.com/hhftechnology/statiq",
+    "docs": "https://github.com/hhftechnology/statiq#readme"
   }
 ]
