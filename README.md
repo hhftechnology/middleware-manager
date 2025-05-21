@@ -390,14 +390,27 @@ Switch `active_data_source` and update URLs/credentials via the **Settings** pan
 go run main.go 
 # For build:
 # go build -o middleware-manager main.go
+
+```
+Tip: Use this command if you need to set a hostname record in /etc/hosts for pangolin based on the internal IP for the pangolin container
+```
+docker network inspect -v pangolin
 ```
 
 ### Frontend
 
 ```bash
 cd ui
-# If node_modules is missing: npm install (or yarn install)
-npm start # or yarn start
+cp src/package.json .
+npm install
+npm start
+```
+Note: if you are getting an error such as `options.allowedHosts[0] should be a non-empty string`
+
+you should create a .env file in /ui folder. Do not do this in production (development only)
+
+```sh
+DANGEROUSLY_DISABLE_HOST_CHECK=true
 ```
 
 ## License
