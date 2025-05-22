@@ -3,8 +3,6 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
-      - master
       - dev
     paths:
       - 'Dockerfile'
@@ -19,9 +17,6 @@ on:
       - 'models/**'
       - 'services/**'
       - 'ui/**'
-
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 env:
@@ -53,48 +48,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Get current date for image tags
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
-      
       # Prepare tags based on branch and version
       - name: Prepare Docker tags
         id: docker_tags
         run: |
           TAGS=""
-          
-          # Add branch-specific tags
-          if [[ "${{ github.ref_name }}" == "main" || "${{ github.ref_name }}" == "master" ]]; then
-            # For main/master branch, add latest tag
-            TAGS="$TAGS ${{ env.DOCKERHUB_IMAGE_NAME }}:latest"
-          elif [[ "${{ github.ref_name }}" == "dev" ]]; then
-            # For dev branch
-            TAGS="$TAGS ${{ env.DOCKERHUB_IMAGE_NAME }}:dev"
-          elif [[ "${{ github.ref_type }}" == "branch" ]]; then
-            # For other branches
-            TAGS="$TAGS ${{ env.DOCKERHUB_IMAGE_NAME }}:${{ github.ref_name }}"
+          if [[ "${{ github.ref_type }}" == "branch" && "${{ github.ref_name }}" == "dev" ]]; then
+            TAGS="${{ env.DOCKERHUB_IMAGE_NAME }}:dev"
           fi
-          
-          # Add sha tag for all branches
-          if [[ "${{ github.ref_type }}" == "branch" ]]; then
-            TAGS="$TAGS,${{ env.DOCKERHUB_IMAGE_NAME }}:sha-${GITHUB_SHA::7}"
-          fi
-          
-          # Add version tag for tagged releases
-          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${{ github.ref_name }}"
-            
-            # Add full version tag
-            TAGS="$TAGS,${{ env.DOCKERHUB_IMAGE_NAME }}:$VERSION"
-          fi
-          
-          # Add date tag for all builds
-          TAGS="$TAGS,${{ env.DOCKERHUB_IMAGE_NAME }}:${{ steps.date.outputs.date }}"
-          
-          # Remove leading space or comma if present
-          TAGS=$(echo "$TAGS" | sed 's/^[ ,]*//')
-          
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Docker tags: $TAGS"
 
@@ -102,7 +63,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
+          push: ${{ steps.docker_tags.outputs.tags != '' }} # IMPORTANT: Only push if tags were generated
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.docker_tags.outputs.tags }}
           cache-from: type=gha
