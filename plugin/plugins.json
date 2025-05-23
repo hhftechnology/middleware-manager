@@ -26,17 +26,17 @@
     "docs": "https://plugins.traefik.io/plugins/623c53a712c0b093a60f441a/geo-block"
   },
   {
-    "displayName": "Fail2Ban",
+    "displayName": "Pangolin-robots-txt",
     "type": "middleware",
     "iconPath": ".assets/f2b.png",
-    "import": "github.com/tomMoulard/fail2ban",
-    "summary": "Fail2ban for Traefik",
-    "author": "tomMoulard",
-    "version": "v0.8.3",
+    "import": "github.com/hhftechnology/traefik-pangolin-robots-txt",
+    "summary": "Dynamically creates or enhances the `/robots.txt` file of your website",
+    "author": "Hhftechnology",
+    "version": "v1.0.0",
     "tested_with": "Traefik v2.9+, v3.0+",
-    "stars": 225,
-    "homepage": "https://github.com/tomMoulard/fail2ban",
-    "docs": "https://github.com/tomMoulard/fail2ban#readme"
+    "stars": 3,
+    "homepage": "https://github.com/hhftechnology/traefik-pangolin-robots-txt",
+    "docs": "https://github.com/hhftechnology/traefik-pangolin-robots-txt#readme"
   },
   {
     "displayName": "Statiq",
