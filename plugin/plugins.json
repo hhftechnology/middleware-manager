@@ -50,5 +50,18 @@
     "stars": 3,
     "homepage": "https://github.com/hhftechnology/statiq",
     "docs": "https://github.com/hhftechnology/statiq#readme"
+  },
+  {
+    "displayName": "IP Whitelist Shaper",
+    "type": "middleware",
+    "iconPath": ".assets/f2b.png",
+    "import": "github.com/hhftechnology/ip-whitelist-shaper",
+    "summary": "IP Whitelist Shaper - A dynamic IP whitelisting mechanism with an admin approval flow",
+    "author": "Hhftechnology",
+    "version": "v1.0.7",
+    "tested_with": "Traefik v2.9+, v3.0+",
+    "stars": 3,
+    "homepage": "https://github.com/hhftechnology/ip-whitelist-shaper",
+    "docs": "https://github.com/hhftechnology/ip-whitelist-shaper#readme"
   }
 ]
