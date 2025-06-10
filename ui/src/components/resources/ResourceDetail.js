@@ -83,20 +83,16 @@ const ResourceDetail = ({ id, navigateTo }) => {
   });
 
   // --- Data Fetching ---
-  // Fetch resource details, middlewares, and services
   useEffect(() => {
-    console.log("Fetching resource with ID:", id);
     if (id) {
       fetchResource(id);
       fetchMiddlewares();
       loadServices();
     } else {
-      console.error("ResourceDetail: No ID provided.");
       setResourceError("No resource ID specified.");
     }
   }, [id, fetchResource, fetchMiddlewares, loadServices, setResourceError]);
 
-  // Fetch the specific service assigned to this resource
   const fetchResourceService = useCallback(async () => {
     if (!id) return;
     try {
@@ -108,7 +104,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
         console.error("Error fetching resource service:", err);
         setServicesError(`Failed to fetch assigned service: ${err.message}`);
       } else {
-        setResourceService(null);
+        setResourceService(null); // No custom service assigned
       }
     }
   }, [id, setServicesError]);
@@ -117,21 +113,13 @@ const ResourceDetail = ({ id, navigateTo }) => {
     fetchResourceService();
   }, [fetchResourceService]);
 
-  // Update local config state when the main resource data is loaded or changes
   useEffect(() => {
     if (selectedResource) {
-      console.log("Updating local state from selectedResource:", selectedResource);
       try {
         let parsedHeaders = {};
         if (selectedResource.custom_headers) {
           if (typeof selectedResource.custom_headers === 'string' && selectedResource.custom_headers.trim()) {
-            try {
-              parsedHeaders = JSON.parse(selectedResource.custom_headers);
-            } catch (e) {
-              console.error("Error parsing custom_headers JSON:", e);
-              setResourceError("Failed to parse custom headers configuration.");
-              parsedHeaders = {};
-            }
+            parsedHeaders = JSON.parse(selectedResource.custom_headers);
           } else if (typeof selectedResource.custom_headers === 'object') {
             parsedHeaders = selectedResource.custom_headers;
           }
@@ -143,35 +131,31 @@ const ResourceDetail = ({ id, navigateTo }) => {
           tcpEnabled: selectedResource.tcp_enabled === true,
           tcpEntrypoints: selectedResource.tcp_entrypoints || 'tcp',
           tcpSNIRule: selectedResource.tcp_sni_rule || '',
-          customHeaders: parsedHeaders,
+          customHeaders: parsedHeaders || {}, // Ensure it's an object
         });
         setRouterPriority(selectedResource.router_priority || 100);
-        // Don't clear errors here immediately, let specific actions clear them
       } catch (error) {
         console.error("Error updating local state from resource:", error);
         setResourceError(`Error processing resource data: ${error.message}`);
       }
     }
-  }, [selectedResource, setResourceError]); // Only depend on selectedResource and setError
+  }, [selectedResource, setResourceError]);
 
 
   // --- Loading & Error Handling ---
   const loading = resourceLoading || middlewaresLoading || servicesLoading;
-  // Consolidate errors, prioritizing resource error
   const error = resourceError || middlewaresError || servicesError;
 
   const clearError = () => {
-    setResourceError(null);
-    setMiddlewaresError(null);
-    setServicesError(null);
+    if (setResourceError) setResourceError(null);
+    if (setMiddlewaresError) setMiddlewaresError(null);
+    if (setServicesError) setServicesError(null);
   };
 
-  // Show loading spinner if still fetching essential data
   if (loading && !selectedResource) {
     return <LoadingSpinner message="Loading resource details..." />;
   }
 
-  // Show error if resource couldn't be loaded
   if (!selectedResource && !loading) {
      return (
         <ErrorMessage
@@ -182,28 +166,23 @@ const ResourceDetail = ({ id, navigateTo }) => {
         />
      );
   }
-  // If resource loaded but other things failed, error is shown inline later
-
-  // Ensure selectedResource is valid before proceeding
   if (!selectedResource) return null;
 
 
   // --- Helper Functions & Derived State ---
   const assignedMiddlewares = MiddlewareUtils.parseMiddlewares(selectedResource.middlewares);
   const assignedMiddlewareIds = new Set(assignedMiddlewares.map(m => m.id));
-  const availableMiddlewares = middlewares.filter(m => !assignedMiddlewareIds.has(m.id));
+  const availableMiddlewares = (middlewares || []).filter(m => !assignedMiddlewareIds.has(m.id));
   const isDisabled = selectedResource.status === 'disabled';
 
   const openConfigModal = (type) => {
-      clearError(); // Clear errors when opening a modal
+      clearError();
       setModal({ isOpen: true, type });
   }
   const closeModal = () => setModal({ isOpen: false, type: null });
 
 
   // --- Action Handlers ---
-
-  // Middleware Assignment
   const handleMiddlewareSelectionChange = (e) => {
     const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
     setSelectedMiddlewaresToAdd(selectedOptions);
@@ -212,7 +191,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
   const handleAssignMiddlewareSubmit = async (e) => {
     e.preventDefault();
     if (isDisabled || !selectedMiddlewaresToAdd.length) return;
-    clearError(); // Clear previous errors
+    clearError();
 
     const middlewaresToAdd = selectedMiddlewaresToAdd.map(middlewareId => ({
       middleware_id: middlewareId,
@@ -229,7 +208,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
     }
   };
 
-  // Confirm middleware removal
   const confirmRemoveMiddleware = (middlewareId) => {
     if (isDisabled) return;
     clearError();
@@ -237,7 +215,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
     setShowRemoveMiddlewareModal(true);
   };
 
-  // Handle middleware removal after confirmation
   const handleRemoveMiddlewareConfirmed = async () => {
     if (!middlewareToRemove) return;
     
@@ -250,85 +227,81 @@ const ResourceDetail = ({ id, navigateTo }) => {
     }
   };
 
-  // Cancel middleware removal
   const cancelRemoveMiddleware = () => {
     setShowRemoveMiddlewareModal(false);
     setMiddlewareToRemove(null);
   };
 
-  // Service Assignment
-  const handleAssignService = async (serviceId) => {
+  const handleAssignService = async (serviceIdToAssign) => {
     if (isDisabled) return;
     clearError();
     try {
-      await ResourceService.assignServiceToResource(id, { service_id: serviceId });
-      await fetchResourceService(); // Re-fetch the assigned service
+      // If serviceIdToAssign is empty, it means we are removing the custom assignment.
+      if (!serviceIdToAssign) {
+        await ResourceService.removeServiceFromResource(id);
+      } else {
+        await ResourceService.assignServiceToResource(id, { service_id: serviceIdToAssign });
+      }
+      await fetchResourceService(); 
       setShowServiceModal(false);
     } catch (err) {
-      const errorMsg = `Failed to assign service: ${err.message || 'Unknown error'}`;
-      setServicesError(errorMsg); // Use service context error
+      const errorMsg = `Failed to assign/remove service: ${err.message || 'Unknown error'}`;
+      setServicesError(errorMsg); 
       alert(errorMsg);
-      console.error('Error assigning service:', err);
+      console.error('Error assigning/removing service:', err);
     }
   };
-
-  // Confirm service removal
+  
   const confirmRemoveService = () => {
     if (isDisabled) return;
     clearError();
     setShowRemoveServiceModal(true);
   };
 
-  // Handle service removal after confirmation
   const handleRemoveServiceConfirmed = async () => {
-    try {
-      await ResourceService.removeServiceFromResource(id);
-      await fetchResourceService(); // Re-fetch (should be null now)
-      setShowRemoveServiceModal(false);
-    } catch (err) {
-      const errorMsg = `Failed to remove service assignment: ${err.message || 'Unknown error'}`;
-      setServicesError(errorMsg);
-      alert(errorMsg);
-      console.error('Error removing service assignment:', err);
-    }
+    // This now calls handleAssignService with an empty ID to signify removal
+    await handleAssignService(''); 
+    setShowRemoveServiceModal(false);
   };
 
-  // Cancel service removal
   const cancelRemoveService = () => {
     setShowRemoveServiceModal(false);
   };
 
-  // Render service summary
   const renderServiceSummary = (service) => {
     if (!service || !service.config) return 'Details unavailable';
-    const config = typeof service.config === 'string' ? JSON.parse(service.config || '{}') : (service.config || {});
+    const serviceConfigObj = typeof service.config === 'string' ? JSON.parse(service.config || '{}') : (service.config || {});
 
     switch (service.type) {
         case 'loadBalancer':
-            const servers = config.servers || [];
+            const servers = serviceConfigObj.servers || [];
             const serverInfo = servers.map(s => s.url || s.address).join(', ');
             return `Servers: ${serverInfo || 'None'}`;
         case 'weighted':
-            const weightedServices = config.services || [];
+            const weightedServices = serviceConfigObj.services || [];
             const weightedInfo = weightedServices.map(s => `${s.name}(${s.weight})`).join(', ');
             return `Weighted: ${weightedInfo || 'None'}`;
         case 'mirroring':
-            const mirrors = config.mirrors || [];
-            return `Primary: ${config.service || 'N/A'}, Mirrors: ${mirrors.length}`;
+            const mirrors = serviceConfigObj.mirrors || [];
+            return `Primary: ${serviceConfigObj.service || 'N/A'}, Mirrors: ${mirrors.length}`;
         case 'failover':
-            return `Main: ${config.service || 'N/A'}, Fallback: ${config.fallback || 'N/A'}`;
+            return `Main: ${serviceConfigObj.service || 'N/A'}, Fallback: ${serviceConfigObj.fallback || 'N/A'}`;
         default: return `Type: ${service.type}`;
     }
   };
 
-  // Config Updates
   const handleUpdateConfig = async (configType, data) => {
     if (isDisabled) return;
     clearError();
+    // For clearing, ensure data contains empty/default values
+    // e.g., for tls: data = { tls_domains: "" }
+    // e.g., for tcp (disabled): data = { tcp_enabled: false, tcp_entrypoints: "", tcp_sni_rule: "" }
+    // e.g., for headers: data = { custom_headers: {} }
     const success = await updateResourceConfig(id, configType, data);
     if (success) {
-      closeModal();
+      closeModal(); // Close modal on successful save
     } else {
+      // Error should be set in context, alert is for immediate user feedback
       alert(`Failed to update ${configType} configuration. ${resourceError || 'Check console for details.'}`);
     }
   };
@@ -338,27 +311,21 @@ const ResourceDetail = ({ id, navigateTo }) => {
     await handleUpdateConfig('priority', { router_priority: routerPriority });
   };
 
-  // Header Modal Helpers
-  const addHeader = () => {
+  const addHeader = () => { // Used by HeadersConfigModal internally
     if (!headerInput.key.trim()) {
       alert('Header name cannot be empty.');
       return;
     }
-    setConfig(prev => ({
-      ...prev,
-      customHeaders: { ...prev.customHeaders, [headerInput.key.trim()]: headerInput.value },
-    }));
-    setHeaderInput({ key: '', value: '' });
+    const newHeaders = { ...config.customHeaders, [headerInput.key.trim()]: headerInput.value };
+    setConfig(prev => ({ ...prev, customHeaders: newHeaders }));
+    setHeaderInput({ key: '', value: '' }); // Reset for next input
   };
 
-  const removeHeader = (keyToRemove) => {
-    setConfig(prev => {
-      const { [keyToRemove]: _, ...remainingHeaders } = prev.customHeaders;
-      return { ...prev, customHeaders: remainingHeaders };
-    });
+  const removeHeader = (keyToRemove) => { // Used by HeadersConfigModal internally
+    const { [keyToRemove]: _, ...remainingHeaders } = config.customHeaders;
+    setConfig(prev => ({ ...prev, customHeaders: remainingHeaders }));
   };
 
-  // Deletion
   const confirmDeleteResource = () => {
     clearError();
     setShowDeleteModal(true);
@@ -367,16 +334,13 @@ const ResourceDetail = ({ id, navigateTo }) => {
   const handleDeleteResourceConfirmed = async () => {
     const success = await deleteResource(id);
     if (success) navigateTo('resources');
-    // Error handled by context otherwise
     setShowDeleteModal(false);
   };
 
   const cancelDeleteResource = () => {
     setShowDeleteModal(false);
   };
-
-  // --- Modal Rendering ---
-  // Define the renderModal function within the component scope
+  
   const renderConfigModal = () => {
     if (!modal.isOpen) return null;
 
@@ -384,7 +348,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
       case 'http':
         return (
           <HTTPConfigModal
-            initialEntrypoints={config.entrypoints} // Pass initial value
+            entrypoints={config.entrypoints} // Pass current value from local state
             onSave={(data) => handleUpdateConfig('http', data)}
             onClose={closeModal}
             isDisabled={isDisabled}
@@ -394,8 +358,8 @@ const ResourceDetail = ({ id, navigateTo }) => {
         return (
           <TLSConfigModal
             resource={selectedResource}
-            initialTlsDomains={config.tlsDomains} // Pass initial value
-            onSave={(data) => handleUpdateConfig('tls', data)}
+            tlsDomains={config.tlsDomains} // Pass current value
+            onSave={(data) => handleUpdateConfig('tls', data)} // data will be { tls_domains: "..." } or { tls_domains: "" }
             onClose={closeModal}
             isDisabled={isDisabled}
           />
@@ -404,11 +368,11 @@ const ResourceDetail = ({ id, navigateTo }) => {
         return (
           <TCPConfigModal
             resource={selectedResource}
-            initialTcpEnabled={config.tcpEnabled}      // Pass initial values
-            initialTcpEntrypoints={config.tcpEntrypoints}
-            initialTcpSNIRule={config.tcpSNIRule}
-            resourceHost={selectedResource.host}
-            onSave={(data) => handleUpdateConfig('tcp', data)}
+            tcpEnabled={config.tcpEnabled}      
+            tcpEntrypoints={config.tcpEntrypoints}
+            tcpSNIRule={config.tcpSNIRule}
+            resourceHost={selectedResource.host} // Pass host for default SNI rule
+            onSave={(data) => handleUpdateConfig('tcp', data)} // data will include tcp_enabled, and empty strings for others if disabled
             onClose={closeModal}
             isDisabled={isDisabled}
           />
@@ -416,30 +380,21 @@ const ResourceDetail = ({ id, navigateTo }) => {
       case 'headers':
         return (
           <HeadersConfigModal
-            initialCustomHeaders={config.customHeaders} // Pass initial value
-            headerKey={headerInput.key}                  // Manage input state locally or pass down
-            setHeaderKey={(key) => setHeaderInput(prev => ({ ...prev, key }))}
-            headerValue={headerInput.value}
-            setHeaderValue={(value) => setHeaderInput(prev => ({ ...prev, value }))}
-            addHeader={addHeader}                       // Pass add/remove handlers
-            removeHeader={removeHeader}
-            // onSave will be triggered by the form submit inside the modal
-            onSave={(data) => handleUpdateConfig('headers', data)}
+            customHeaders={config.customHeaders} // Pass current value
+            // setParentCustomHeaders is optional, modal can manage its state for adding/removing
+            // and then call onSave with the final state.
+            onSave={(data) => handleUpdateConfig('headers', data)} // data will be { custom_headers: {...} } or { custom_headers: {} }
             onClose={closeModal}
             isDisabled={isDisabled}
           />
         );
-      // Middleware modal is rendered separately below using ModalWrapper
       default:
         return null;
     }
   };
 
-
-  // --- Main Render ---
   return (
     <div className="space-y-6">
-      {/* Header and Disabled Warning */}
       <div className="mb-6 flex items-center flex-wrap gap-2">
            <button
              onClick={() => navigateTo('resources')}
@@ -460,10 +415,8 @@ const ResourceDetail = ({ id, navigateTo }) => {
 
       {isDisabled && (
           <div className="p-4 rounded-md bg-red-50 dark:bg-red-900 border border-red-300 dark:border-red-600">
-              {/* ... disabled warning content ... */}
                <div className="flex">
                  <div className="flex-shrink-0">
-                   {/* Error Icon */}
                    <svg className="h-5 w-5 text-red-500 dark:text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                      <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 15.5a1 1 0 100-2 1 1 0 000 2zm-1.1-4.062l.25-4.5a.85.85 0 111.7 0l.25 4.5a.85.85 0 11-1.7 0z" clipRule="evenodd" />
                    </svg>
@@ -485,7 +438,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
           </div>
       )}
 
-      {/* Inline Error Display */}
        {error && !modal.isOpen && (
             <ErrorMessage
                 message={error}
@@ -493,7 +445,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
             />
         )}
 
-      {/* Resource Details Card */}
       <div className="card p-6">
         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Resource Details</h2>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -529,7 +480,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
          </div>
       </div>
 
-      {/* Router Configuration Card */}
        <div className="card p-6">
          <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Router Configuration</h2>
          <div className="flex flex-wrap gap-3 mb-6">
@@ -541,7 +491,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
          <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600">
              <h3 className="font-medium mb-3 text-gray-700 dark:text-gray-300">Current Settings</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                 {/* Details */}
                  <div><strong className="text-gray-500 dark:text-gray-400">HTTP Entrypoints:</strong> <span className="font-medium text-gray-900 dark:text-gray-100">{config.entrypoints || 'websecure'}</span></div>
                  <div><strong className="text-gray-500 dark:text-gray-400">TLS SANs:</strong> <span className="font-medium text-gray-900 dark:text-gray-100">{config.tlsDomains || 'None'}</span></div>
                  <div><strong className="text-gray-500 dark:text-gray-400">TCP SNI Routing:</strong> <span className={`font-medium ${config.tcpEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{config.tcpEnabled ? 'Enabled' : 'Disabled'}</span></div>
@@ -556,29 +505,28 @@ const ResourceDetail = ({ id, navigateTo }) => {
                          </ul>
                      </div>
                  )}
+                 {Object.keys(config.customHeaders || {}).length === 0 && (
+                     <div className="md:col-span-2"><strong className="text-gray-500 dark:text-gray-400">Custom Headers:</strong> <span className="font-medium text-gray-900 dark:text-gray-100">None</span></div>
+                 )}
              </div>
          </div>
        </div>
 
-
-      {/* Service Configuration Card */}
        <div className="card p-6">
-         {/* ... Service config content ... */}
           <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Service Configuration</h2>
              <div className="mb-4">
-                 {servicesLoading && !resourceService && !servicesError ? ( // Show loading only if no service AND no error
+                 {servicesLoading && !resourceService && !servicesError ? ( 
                      <div className="text-center py-4 text-gray-500 dark:text-gray-400"><LoadingSpinner size="sm" message="Loading service info..." /></div>
-                 ) : servicesError ? ( // Show service-specific error here
+                 ) : servicesError ? ( 
                       <ErrorMessage message={servicesError} onDismiss={() => setServicesError(null)} />
                  ) : resourceService ? (
                      <div className="border dark:border-gray-600 rounded p-4 bg-gray-50 dark:bg-gray-700">
-                         {/* ... details of assigned service ... */}
                           <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                              <div className="flex-1">
                                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{resourceService.name}</h3>
                                  <div className="flex items-center gap-2 mt-1">
                                      <span className="badge badge-info bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">{resourceService.type}</span>
-                                     <span className="text-xs font-mono text-gray-500 dark:text-gray-400">({resourceService.id}@file)</span>
+                                     <span className="text-xs font-mono text-gray-500 dark:text-gray-400">({resourceService.id})</span>
                                  </div>
                                  <div className="mt-2 text-sm text-gray-600 dark:text-gray-300 break-words">
                                      {renderServiceSummary(resourceService)}
@@ -595,7 +543,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                      </div>
                  ) : (
                      <div className="text-center py-4 text-gray-500 dark:text-gray-400 border dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700">
-                         <p>Using default service: <code className="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-1 rounded">{selectedResource.service_id}@http</code></p>
+                         <p>Using default service: <code className="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-1 rounded">{selectedResource.service_id}</code></p>
                          <p className="text-xs mt-1">Assign a custom service to override routing behavior.</p>
                      </div>
                  )}
@@ -609,10 +557,8 @@ const ResourceDetail = ({ id, navigateTo }) => {
              </button>
        </div>
 
-      {/* Router Priority Card */}
       <div className="card p-6">
         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Router Priority</h2>
-        {/* ... Priority content ... */}
           <div className="mb-4">
             <p className="text-sm text-gray-700 dark:text-gray-300">
               Control router evaluation order. Higher numbers are checked first (default 100).
@@ -630,7 +576,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
               onChange={(e) => setRouterPriority(parseInt(e.target.value) || 100)}
               className="form-input w-24 text-sm"
               min="1"
-              max="1000" // Adjust max as needed
+              max="1000" 
               disabled={isDisabled}
             />
             <button
@@ -643,13 +589,11 @@ const ResourceDetail = ({ id, navigateTo }) => {
           </div>
       </div>
 
-      {/* Attached Middlewares Card */}
       <div className="card p-6">
-        {/* ... Middlewares content ... */}
          <div className="flex justify-between items-center mb-4">
            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Attached Middlewares</h2>
            <button
-             onClick={() => openConfigModal('middlewares')} // Use openConfigModal
+             onClick={() => openConfigModal('middlewares')} 
              disabled={isDisabled || availableMiddlewares.length === 0}
              className="btn btn-primary text-sm"
              title={availableMiddlewares.length === 0 ? "All available middlewares are assigned" : "Assign middlewares"}
@@ -673,7 +617,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                </thead>
                <tbody>
                  {assignedMiddlewares.map(middleware => {
-                   const middlewareDetails = middlewares.find(m => m.id === middleware.id) || {
+                   const middlewareDetails = (middlewares || []).find(m => m.id === middleware.id) || {
                      id: middleware.id, name: middleware.name || middleware.id, type: 'unknown',
                    };
                    return (
@@ -700,12 +644,8 @@ const ResourceDetail = ({ id, navigateTo }) => {
          )}
       </div>
 
-      {/* --- Modals --- */}
+      {renderConfigModal()}
 
-      {/* Render configuration modals */}
-      {renderConfigModal()} {/* Call the defined render function */}
-
-      {/* Middleware Assignment Modal */}
       <ModalWrapper
           title={`Assign Middlewares to ${selectedResource.host}`}
           show={modal.isOpen && modal.type === 'middlewares'}
@@ -731,7 +671,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                                   id="middleware-select-add"
                                   multiple
                                   value={selectedMiddlewaresToAdd}
-                                  onChange={handleMiddlewareSelectionChange} // Corrected handler
+                                  onChange={handleMiddlewareSelectionChange}
                                   className="form-input"
                                   size={Math.min(8, availableMiddlewares.length || 1)}
                                   disabled={isDisabled}
@@ -750,7 +690,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                                   id="middleware-priority-add"
                                   type="number"
                                   value={middlewarePriority}
-                                  onChange={(e) => setMiddlewarePriority(e.target.value)} // Corrected handler
+                                  onChange={(e) => setMiddlewarePriority(e.target.value)}
                                   className="form-input w-full"
                                   min="1"
                                   max="1000"
@@ -775,11 +715,9 @@ const ResourceDetail = ({ id, navigateTo }) => {
           </form>
       </ModalWrapper>
 
-
-      {/* Service Selection Modal */}
       {showServiceModal && (
         <ServiceSelectModal
-          services={services}
+          services={services || []} // Ensure services is an array
           currentServiceId={resourceService?.id}
           onSelect={handleAssignService}
           onClose={() => setShowServiceModal(false)}
@@ -787,7 +725,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
         />
       )}
 
-      {/* Delete Resource Confirmation Modal */}
       <ConfirmationModal
         show={showDeleteModal}
         title="Confirm Resource Deletion"
@@ -801,7 +738,6 @@ const ResourceDetail = ({ id, navigateTo }) => {
         onCancel={cancelDeleteResource}
       />
 
-      {/* Remove Middleware Confirmation Modal */}
       <ConfirmationModal
         show={showRemoveMiddlewareModal}
         title="Confirm Middleware Removal"
@@ -813,12 +749,11 @@ const ResourceDetail = ({ id, navigateTo }) => {
         onCancel={cancelRemoveMiddleware}
       />
 
-      {/* Remove Service Confirmation Modal */}
       <ConfirmationModal
         show={showRemoveServiceModal}
-        title="Confirm Service Removal"
+        title="Confirm Service Assignment Removal"
         message="Remove custom service assignment?"
-        details="The resource will use its default service."
+        details="The resource will revert to its default service routing."
         confirmText="Remove Assignment"
         cancelText="Cancel"
         onConfirm={handleRemoveServiceConfirmed}
