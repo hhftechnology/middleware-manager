@@ -159,7 +159,7 @@ services:
       - PORT=3456
       - ACTIVE_DATA_SOURCE=pangolin # Set to 'pangolin' or 'traefik'
       # Path to Traefik's main static config file *inside this container* (due to volume mount)
-      - TRAEFIK_STATIC_CONFIG_PATH=/etc/traefik/traefik.yml
+      - TRAEFIK_STATIC_CONFIG_PATH=/etc/traefik/traefik_config.yml
       - PLUGINS_JSON_URL=https://raw.githubusercontent.com/hhftechnology/middleware-manager/traefik-int/plugin/plugins.json
       # - DEBUG=true # Optional for development
     ports:
