@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - dev
+      - traefik-int
     paths:
       - 'Dockerfile'
       - 'go.mod'
@@ -53,8 +53,8 @@ jobs:
         id: docker_tags
         run: |
           TAGS=""
-          if [[ "${{ github.ref_type }}" == "branch" && "${{ github.ref_name }}" == "dev" ]]; then
-            TAGS="${{ env.DOCKERHUB_IMAGE_NAME }}:dev"
+          if [[ "${{ github.ref_type }}" == "branch" && "${{ github.ref_name }}" == "traefik-int" ]]; then
+            TAGS="${{ env.DOCKERHUB_IMAGE_NAME }}:traefik-int"
           fi
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Docker tags: $TAGS"
