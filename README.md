@@ -399,7 +399,7 @@ cd ui
 # If node_modules is missing: npm install (or yarn install)
 npm start # or yarn start
 ```
-
+[![Stargazers over time](https://chart.yhype.me/github/repository-star/v1/278929867.svg)](https://yhype.me?utm_source=github&utm_medium=middleware-manager&utm_content=chart-repository-star-cumulative)
 ## License
 
 MIT License
