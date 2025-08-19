@@ -389,6 +389,87 @@ func (db *DB) CleanupDuplicateResources(opts CleanupOptions) error {
     })
 }
 
+// CleanupOrphanedRelationships removes relationships where the referenced resource or service no longer exists
+func (db *DB) CleanupOrphanedRelationships(opts CleanupOptions) error {
+    if opts.LogLevel >= 1 {
+        log.Println("Starting cleanup of orphaned relationships...")
+    }
+    
+    var orphanedCount int
+    
+    return db.WithTransaction(func(tx *sql.Tx) error {
+        // Clean up resource_services relationships where resource doesn't exist
+        result, err := tx.Exec(`
+            DELETE FROM resource_services 
+            WHERE resource_id NOT IN (SELECT id FROM resources)
+        `)
+        if err != nil {
+            return fmt.Errorf("failed to clean orphaned resource_services (missing resources): %w", err)
+        }
+        if affected, _ := result.RowsAffected(); affected > 0 {
+            orphanedCount += int(affected)
+            if opts.LogLevel >= 1 {
+                log.Printf("Removed %d resource_services relationships with missing resources", affected)
+            }
+        }
+        
+        // Clean up resource_services relationships where service doesn't exist
+        result, err = tx.Exec(`
+            DELETE FROM resource_services 
+            WHERE service_id NOT IN (SELECT id FROM services)
+        `)
+        if err != nil {
+            return fmt.Errorf("failed to clean orphaned resource_services (missing services): %w", err)
+        }
+        if affected, _ := result.RowsAffected(); affected > 0 {
+            orphanedCount += int(affected)
+            if opts.LogLevel >= 1 {
+                log.Printf("Removed %d resource_services relationships with missing services", affected)
+            }
+        }
+        
+        // Clean up resource_middlewares relationships where resource doesn't exist
+        result, err = tx.Exec(`
+            DELETE FROM resource_middlewares 
+            WHERE resource_id NOT IN (SELECT id FROM resources)
+        `)
+        if err != nil {
+            return fmt.Errorf("failed to clean orphaned resource_middlewares (missing resources): %w", err)
+        }
+        if affected, _ := result.RowsAffected(); affected > 0 {
+            orphanedCount += int(affected)
+            if opts.LogLevel >= 1 {
+                log.Printf("Removed %d resource_middlewares relationships with missing resources", affected)
+            }
+        }
+        
+        // Clean up resource_middlewares relationships where middleware doesn't exist  
+        result, err = tx.Exec(`
+            DELETE FROM resource_middlewares 
+            WHERE middleware_id NOT IN (SELECT id FROM middlewares)
+        `)
+        if err != nil {
+            return fmt.Errorf("failed to clean orphaned resource_middlewares (missing middlewares): %w", err)
+        }
+        if affected, _ := result.RowsAffected(); affected > 0 {
+            orphanedCount += int(affected)
+            if opts.LogLevel >= 1 {
+                log.Printf("Removed %d resource_middlewares relationships with missing middlewares", affected)
+            }
+        }
+        
+        if opts.LogLevel >= 1 {
+            if orphanedCount == 0 {
+                log.Println("No orphaned relationships found")
+            } else {
+                log.Printf("Cleaned up %d total orphaned relationships", orphanedCount)
+            }
+        }
+        
+        return nil
+    })
+}
+
 // PerformFullCleanup runs a comprehensive cleanup of the database
 func (db *DB) PerformFullCleanup(opts CleanupOptions) error {
     // First clean up services
@@ -399,6 +480,11 @@ func (db *DB) PerformFullCleanup(opts CleanupOptions) error {
     // Then clean up resources
     if err := db.CleanupDuplicateResources(opts); err != nil {
         return fmt.Errorf("resource cleanup failed: %w", err)
+    }
+    
+    // Finally clean up orphaned relationships
+    if err := db.CleanupOrphanedRelationships(opts); err != nil {
+        return fmt.Errorf("relationship cleanup failed: %w", err)
     }
     
     return nil
