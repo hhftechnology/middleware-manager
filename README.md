@@ -2,6 +2,10 @@
     <h1 align="center"><a href="https://github.com/hhftechnology/middleware-manager-traefik">Traefik/Pangolin Middleware Manager</a></h1>
 </div>
 
+[![Docker](https://img.shields.io/docker/pulls/hhftechnology/middleware-manager?style=flat-square)](https://hub.docker.com/r/hhftechnology/middleware-manager)
+![Stars](https://img.shields.io/github/stars/hhftechnology/middleware-manager?style=flat-square)
+[![Discord](https://img.shields.io/discord/994247717368909884?logo=discord&style=flat-square)](https://discord.gg/HDCt9MjyMJ)
+
 <h3 align="center">Comprehensive Middleware, Router, and Service Management for Traefik</h3>
 
 <div align="center">
