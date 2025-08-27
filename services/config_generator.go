@@ -86,17 +86,17 @@ func (cg *ConfigGenerator) Start(interval time.Duration) {
 		log.Printf("Initial config generation failed: %v", err)
 	}
 
-	for {
-		select {
-		case <-ticker.C:
-			if err := cg.generateConfig(); err != nil {
-				log.Printf("Config generation failed: %v", err)
-			}
-		case <-cg.stopChan:
-			log.Println("Config generator stopped")
-			return
-		}
-	}
+    for {
+        select {
+        case <-ticker.C:
+            if err := cg.generateConfigWithRetry(); err != nil { // Use retry version
+                log.Printf("Config generation failed: %v", err)
+            }
+        case <-cg.stopChan:
+            log.Println("Config generator stopped")
+            return
+        }
+    }
 }
 // Add this helper function at the top of the file with other utility functions
 func normalizeServiceID(id string) string {
@@ -117,6 +117,32 @@ func (cg *ConfigGenerator) Stop() {
 	}
 	close(cg.stopChan)
 	cg.isRunning = false
+}
+
+func (cg *ConfigGenerator) generateConfigWithRetry() error {
+    maxRetries := 3
+    baseDelay := 1 * time.Second
+    
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        err := cg.generateConfig()
+        if err == nil {
+            return nil
+        }
+        
+        // Check if it's a database locked error
+        if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+            if attempt < maxRetries-1 {
+                delay := baseDelay * time.Duration(1<<attempt) // Exponential backoff
+                log.Printf("⚠️  Database locked on attempt %d, retrying in %v", attempt+1, delay)
+                time.Sleep(delay)
+                continue
+            }
+        }
+        
+        return err
+    }
+    
+    return fmt.Errorf("config generation failed after %d attempts", maxRetries)
 }
 
 // generateConfig generates Traefik configuration files

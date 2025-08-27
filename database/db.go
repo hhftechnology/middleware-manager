@@ -19,6 +19,26 @@ type DB struct {
 	*sql.DB
 }
 
+// EnableWALMode configures the SQLite connection for WAL mode and reasonable defaults.
+func (db *DB) EnableWALMode() error {
+	// Set busy timeout to avoid "database is locked" errors under contention.
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		return fmt.Errorf("failed to set busy_timeout: %w", err)
+	}
+
+	// Enable WAL journal mode.
+	if _, err := db.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		return fmt.Errorf("failed to set journal_mode=WAL: %w", err)
+	}
+
+	// Use NORMAL synchronous mode for better performance while keeping reasonable durability.
+	if _, err := db.Exec("PRAGMA synchronous = NORMAL"); err != nil {
+		return fmt.Errorf("failed to set synchronous=NORMAL: %w", err)
+	}
+
+	return nil
+}
+
 // TraefikConfig represents the structure of the Traefik configuration
 type TraefikConfig struct {
 	HTTP struct {
@@ -35,6 +55,27 @@ type TraefikConfig struct {
 	UDP struct {
 		Services map[string]interface{} `yaml:"services,omitempty"`
 	} `yaml:"udp,omitempty"`
+}
+
+func NewDB(dbPath string) (*DB, error) {
+    db, err := sql.Open("sqlite3", dbPath)
+    if err != nil {
+        return nil, err
+    }
+    
+    dbWrapper := &DB{db}
+    
+    // Enable WAL mode and configure for concurrency
+    if err := dbWrapper.EnableWALMode(); err != nil {
+        log.Printf("Warning: Failed to enable WAL mode: %v", err)
+    }
+    
+    // Run migrations
+    if err := runMigrations(db); err != nil {
+        return nil, err
+    }
+    
+    return dbWrapper, nil
 }
 
 // InitDB initializes the database connection

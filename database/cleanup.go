@@ -6,6 +6,8 @@ import (
     "log"
     "strings"
     "time"
+    "context"
+    "sync"
     
     "github.com/hhftechnology/middleware-manager/util"
 )
@@ -30,7 +32,17 @@ func DefaultCleanupOptions() CleanupOptions {
     }
 }
 
-// CleanupDuplicateServices removes service duplication from the database
+// Add this function locally if util package doesn't exist
+func normalizeID(id string) string {
+    // Extract the base name (everything before the first @)
+    baseName := id
+    if idx := strings.Index(id, "@"); idx > 0 {
+        baseName = id[:idx]
+    }
+    return baseName
+}
+
+// CleanupDuplicateServices - CORRECTED VERSION
 func (db *DB) CleanupDuplicateServices(opts CleanupOptions) error {
     if opts.LogLevel >= 1 {
         log.Println("Starting cleanup of duplicate services...")
@@ -49,10 +61,9 @@ func (db *DB) CleanupDuplicateServices(opts CleanupOptions) error {
         Config string
     }
     uniqueServices := make(map[string]serviceInfo)
-    
     var servicesToDelete []string
     
-    // Process each service
+    // Process each service - COMPLETE the duplicate detection logic
     for rows.Next() {
         var id, name, typ, configStr string
         if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
@@ -60,7 +71,7 @@ func (db *DB) CleanupDuplicateServices(opts CleanupOptions) error {
         }
         
         // Get normalized ID
-        normalizedID := util.NormalizeID(id)
+        normalizedID := normalizeID(id) // Use local function instead of util.NormalizeID
         
         // If we've already seen this normalized ID, check which one to keep
         if existing, found := uniqueServices[normalizedID]; found {
@@ -114,14 +125,14 @@ func (db *DB) CleanupDuplicateServices(opts CleanupOptions) error {
     if err := rows.Err(); err != nil {
         return fmt.Errorf("error iterating services: %w", err)
     }
-    
+
     if len(servicesToDelete) == 0 {
         if opts.LogLevel >= 1 {
             log.Println("No duplicate services found.")
         }
         return nil
     }
-    
+
     if opts.DryRun {
         log.Printf("DRY RUN: Would delete %d duplicate services", len(servicesToDelete))
         for _, id := range servicesToDelete {
@@ -129,30 +140,120 @@ func (db *DB) CleanupDuplicateServices(opts CleanupOptions) error {
         }
         return nil
     }
+
+    // Use timeout transaction to prevent indefinite locks
+    ctx := context.Background()
+    timeout := 30 * time.Second
     
-    // Delete duplicates in a transaction
-    return db.WithTransaction(func(tx *sql.Tx) error {
-        for _, id := range servicesToDelete {
-            if opts.LogLevel >= 1 {
-                log.Printf("Deleting duplicate service: %s", id)
+    return db.WithTimeoutTransaction(ctx, timeout, func(tx *sql.Tx) error {
+        // Process in smaller batches to reduce lock time
+        batchSize := opts.MaxDeleteBatch
+        if batchSize <= 0 {
+            batchSize = 50 // Default batch size
+        }
+        
+        for i := 0; i < len(servicesToDelete); i += batchSize {
+            end := i + batchSize
+            if end > len(servicesToDelete) {
+                end = len(servicesToDelete)
             }
             
-            // First remove any resource_service references
-            if _, err := tx.Exec("DELETE FROM resource_services WHERE service_id = ?", id); err != nil {
-                return fmt.Errorf("failed to delete resource_service references for %s: %w", id, err)
-            }
+            batch := servicesToDelete[i:end]
             
-            // Then delete the service
-            if _, err := tx.Exec("DELETE FROM services WHERE id = ?", id); err != nil {
-                return fmt.Errorf("failed to delete service %s: %w", id, err)
+            // Use batch DELETE with IN clause for better performance
+            if len(batch) > 1 {
+                placeholders := strings.Repeat("?,", len(batch)-1) + "?"
+                args := make([]interface{}, len(batch))
+                for i, id := range batch {
+                    args[i] = id
+                }
+                
+                // First remove relationships in batch
+                _, err := tx.Exec(
+                    fmt.Sprintf("DELETE FROM resource_services WHERE service_id IN (%s)", placeholders),
+                    args...,
+                )
+                if err != nil {
+                    return fmt.Errorf("failed to delete service relationships: %w", err)
+                }
+                
+                // Then delete services in batch
+                _, err = tx.Exec(
+                    fmt.Sprintf("DELETE FROM services WHERE id IN (%s)", placeholders),
+                    args...,
+                )
+                if err != nil {
+                    return fmt.Errorf("failed to delete services: %w", err)
+                }
+                
+                if opts.LogLevel >= 1 {
+                    log.Printf("Deleted batch of %d services", len(batch))
+                }
+            } else {
+                // Single item - original logic
+                id := batch[0]
+                if _, err := tx.Exec("DELETE FROM resource_services WHERE service_id = ?", id); err != nil {
+                    return fmt.Errorf("failed to delete resource_service references for %s: %w", id, err)
+                }
+                if _, err := tx.Exec("DELETE FROM services WHERE id = ?", id); err != nil {
+                    return fmt.Errorf("failed to delete service %s: %w", id, err)
+                }
             }
         }
         
-        if opts.LogLevel >= 1 {
-            log.Printf("Cleanup complete. Removed %d duplicate services", len(servicesToDelete))
-        }
         return nil
     })
+}
+
+// CleanupManager - CORRECTED VERSION with proper DB reference
+type CleanupManager struct {
+    db               *DB       // This should match your actual DB type
+    cleanupMutex     sync.Mutex
+    isCleanupRunning bool
+}
+
+func NewCleanupManager(database *DB) *CleanupManager {
+    return &CleanupManager{
+        db:               database,
+        cleanupMutex:     sync.Mutex{},
+        isCleanupRunning: false,
+    }
+}
+
+func (cm *CleanupManager) PerformFullCleanup(opts CleanupOptions) error {
+    cm.cleanupMutex.Lock()
+    defer cm.cleanupMutex.Unlock()
+    
+    if cm.isCleanupRunning {
+        return fmt.Errorf("cleanup already in progress")
+    }
+    
+    cm.isCleanupRunning = true
+    defer func() {
+        cm.isCleanupRunning = false
+    }()
+    
+    // Add warning log
+    if opts.LogLevel >= 1 {
+        log.Println("⚠️  Database cleanup starting - this may cause brief service interruptions")
+    }
+    
+    // First clean up services
+    if err := cm.db.CleanupDuplicateServices(opts); err != nil {
+        return fmt.Errorf("service cleanup failed: %w", err)
+    }
+    
+    // Then clean up resources
+    if err := cm.db.CleanupDuplicateResources(opts); err != nil {
+        return fmt.Errorf("resource cleanup failed: %w", err)
+    }
+    
+    // Finally clean up orphaned relationships
+    if err := cm.db.CleanupOrphanedRelationships(opts); err != nil {
+        return fmt.Errorf("relationship cleanup failed: %w", err)
+    }
+    
+    return nil
 }
 
 // CleanupDuplicateResources removes resource duplication from the database
@@ -402,4 +503,69 @@ func (db *DB) PerformFullCleanup(opts CleanupOptions) error {
     }
     
     return nil
+}
+
+// CleanupOrphanedRelationships removes relationship rows that reference missing resources, services or middlewares.
+func (db *DB) CleanupOrphanedRelationships(opts CleanupOptions) error {
+    if opts.LogLevel >= 1 {
+        log.Println("Starting cleanup of orphaned relationships...")
+    }
+
+    queries := []struct {
+        desc string
+        qry  string
+    }{
+        {"orphaned resource_services by missing service", "SELECT COUNT(*) FROM resource_services rs LEFT JOIN services s ON rs.service_id = s.id WHERE s.id IS NULL"},
+        {"orphaned resource_services by missing resource", "SELECT COUNT(*) FROM resource_services rs LEFT JOIN resources r ON rs.resource_id = r.id WHERE r.id IS NULL"},
+        {"orphaned resource_middlewares by missing middleware", "SELECT COUNT(*) FROM resource_middlewares rm LEFT JOIN middlewares m ON rm.middleware_id = m.id WHERE m.id IS NULL"},
+        {"orphaned resource_middlewares by missing resource", "SELECT COUNT(*) FROM resource_middlewares rm LEFT JOIN resources r ON rm.resource_id = r.id WHERE r.id IS NULL"},
+    }
+
+    // Dry run: just report counts
+    if opts.DryRun {
+        for _, q := range queries {
+            var count int64
+            if err := db.QueryRow(q.qry).Scan(&count); err != nil {
+                // Non-fatal: log and continue
+                if opts.LogLevel >= 0 {
+                    log.Printf("DRY RUN: failed to count %s: %v", q.desc, err)
+                }
+                continue
+            }
+            log.Printf("DRY RUN: %s: %d", q.desc, count)
+        }
+        return nil
+    }
+
+    // Execute deletes in a transaction
+    return db.WithTransaction(func(tx *sql.Tx) error {
+        delQueries := []struct {
+            desc string
+            qry  string
+        }{
+            {"delete resource_services with missing service", "DELETE FROM resource_services WHERE service_id NOT IN (SELECT id FROM services)"},
+            {"delete resource_services with missing resource", "DELETE FROM resource_services WHERE resource_id NOT IN (SELECT id FROM resources)"},
+            {"delete resource_middlewares with missing middleware", "DELETE FROM resource_middlewares WHERE middleware_id NOT IN (SELECT id FROM middlewares)"},
+            {"delete resource_middlewares with missing resource", "DELETE FROM resource_middlewares WHERE resource_id NOT IN (SELECT id FROM resources)"},
+        }
+
+        for _, dq := range delQueries {
+            res, err := tx.Exec(dq.qry)
+            if err != nil {
+                return fmt.Errorf("failed to %s: %w", dq.desc, err)
+            }
+            if opts.LogLevel >= 1 {
+                if n, err := res.RowsAffected(); err == nil {
+                    log.Printf("Deleted %d rows: %s", n, dq.desc)
+                } else {
+                    log.Printf("Deleted rows (unknown count): %s", dq.desc)
+                }
+            }
+        }
+
+        if opts.LogLevel >= 1 {
+            log.Println("Orphaned relationship cleanup complete.")
+        }
+        return nil
+    })
 }
