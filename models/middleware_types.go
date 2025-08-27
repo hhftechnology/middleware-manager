@@ -8,6 +8,32 @@ import (
 type MiddlewareProcessor interface {
 	Process(config map[string]interface{}) map[string]interface{}
 }
+type BufferingProcessor struct{}
+
+// Process implements special handling for buffering middleware
+func (p *BufferingProcessor) Process(config map[string]interface{}) map[string]interface{} {
+	// Convert byte size fields from float64 to int
+	byteFields := []string{
+		"maxRequestBodyBytes", 
+		"memRequestBodyBytes", 
+		"maxResponseBodyBytes", 
+		"memResponseBodyBytes",
+	}
+	
+	for _, field := range byteFields {
+		if val, ok := config[field].(float64); ok {
+			// Convert to int if it's a whole number
+			if val == float64(int64(val)) {
+				config[field] = int64(val)
+			} else {
+				config[field] = val
+			}
+		}
+	}
+	
+	// Process other buffering configuration values with general processor
+	return preserveTraefikValues(config).(map[string]interface{})
+}
 
 // Registry of middleware processors
 var middlewareProcessors = map[string]MiddlewareProcessor{
@@ -27,6 +53,7 @@ var middlewareProcessors = map[string]MiddlewareProcessor{
 	"inFlightReq":     &RateLimitProcessor{},
 	"ipWhiteList":     &IPFilterProcessor{},
 	"ipAllowList":     &IPFilterProcessor{},
+	"buffering":       &BufferingProcessor{}, // ADD THIS LINE
 	// Add more middleware types as needed
 }
 
