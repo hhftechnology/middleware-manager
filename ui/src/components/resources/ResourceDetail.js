@@ -62,8 +62,8 @@ const ResourceDetail = ({ id, navigateTo }) => {
   // --- State Management ---
   const [modal, setModal] = useState({ isOpen: false, type: null });
   const [selectedMiddlewaresToAdd, setSelectedMiddlewaresToAdd] = useState([]);
-  const [middlewarePriority, setMiddlewarePriority] = useState(100);
-  const [routerPriority, setRouterPriority] = useState(100);
+  const [middlewarePriority, setMiddlewarePriority] = useState(200);
+  const [routerPriority, setRouterPriority] = useState(200);
   const [resourceService, setResourceService] = useState(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [headerInput, setHeaderInput] = useState({ key: '', value: '' });
@@ -133,7 +133,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
           tcpSNIRule: selectedResource.tcp_sni_rule || '',
           customHeaders: parsedHeaders || {}, // Ensure it's an object
         });
-        setRouterPriority(selectedResource.router_priority || 100);
+        setRouterPriority(selectedResource.router_priority || 200);
       } catch (error) {
         console.error("Error updating local state from resource:", error);
         setResourceError(`Error processing resource data: ${error.message}`);
@@ -195,14 +195,14 @@ const ResourceDetail = ({ id, navigateTo }) => {
 
     const middlewaresToAdd = selectedMiddlewaresToAdd.map(middlewareId => ({
       middleware_id: middlewareId,
-      priority: parseInt(middlewarePriority, 10) || 100,
+      priority: parseInt(middlewarePriority, 10) || 200,
     }));
 
     const success = await assignMultipleMiddlewares(id, middlewaresToAdd);
     if (success) {
       closeModal();
       setSelectedMiddlewaresToAdd([]);
-      setMiddlewarePriority(100);
+      setMiddlewarePriority(200);
     } else {
       alert(`Failed to assign middlewares. ${resourceError || 'Check console for details.'}`);
     }
@@ -561,7 +561,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Router Priority</h2>
           <div className="mb-4">
             <p className="text-sm text-gray-700 dark:text-gray-300">
-              Control router evaluation order. Higher numbers are checked first (default 100).
+              Control router evaluation order. Higher numbers are checked first (default 200).
             </p>
              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                Useful for overlapping rules or specific overrides.
@@ -573,7 +573,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
               id="router-priority-input"
               type="number"
               value={routerPriority}
-              onChange={(e) => setRouterPriority(parseInt(e.target.value) || 100)}
+              onChange={(e) => setRouterPriority(parseInt(e.target.value) || 200)}
               className="form-input w-24 text-sm"
               min="1"
               max="1000" 
@@ -697,7 +697,7 @@ const ResourceDetail = ({ id, navigateTo }) => {
                                   required
                                   disabled={isDisabled}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Higher priority runs first (1-1000). Default: 100.</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Higher priority runs first (1-1000). Default: 200.</p>
                           </div>
                       </>
                   )}

@@ -369,13 +369,13 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
             if routerPriority_db.Valid {
                 data.Info.RouterPriority = int(routerPriority_db.Int64)
             } else {
-                data.Info.RouterPriority = 100 // Default
+                data.Info.RouterPriority = 200 // Default
             }
             data.CustomServiceID = customServiceID_db
         }
 
         if middlewareID_db.Valid {
-            mwPriority := 100 
+            mwPriority := 200 
             if middlewarePriority_db.Valid {
                 mwPriority = int(middlewarePriority_db.Int64)
             }
@@ -585,7 +585,7 @@ func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
             continue
         }
 
-        priority := 100
+        priority := 200
         if routerPriority.Valid {
             priority = int(routerPriority.Int64)
         }
