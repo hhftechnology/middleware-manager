@@ -552,7 +552,7 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
             rsc.custom_service_id
         FROM resources r
         LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
-        LEFT JOIN resource_service_custom rsc ON r.id = rsc.resource_id
+        LEFT JOIN resource_services rs ON r.id = rs.resource_id
         ORDER BY r.id, rm.priority DESC`
 
     rows, err := cg.db.Query(query)
@@ -728,8 +728,8 @@ func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
             r.id, r.host, r.service_id, r.entrypoints, r.source_type, r.router_priority,
             rsc.custom_service_id
         FROM resources r
-        LEFT JOIN resource_service_custom rsc ON r.id = rsc.resource_id
-        WHERE r.protocol = 'tcp'
+        LEFT JOIN resource_services rs ON r.id = rs.resource_id
+        WHERE r.tcp_enabled = 1
         ORDER BY r.id`
 
     rows, err := cg.db.Query(query)
