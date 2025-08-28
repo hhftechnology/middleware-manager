@@ -427,7 +427,6 @@ type MiddlewareWithPriority struct {
     Priority int
 }
 
-// Rest of the existing methods remain the same...
 func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
     rows, err := cg.db.Query("SELECT id, name, type, config FROM middlewares")
     if err != nil {
@@ -499,7 +498,6 @@ func (cg *ConfigGenerator) processServices(config *TraefikConfig) error {
     return rows.Err()
 }
 
-// Additional helper functions and existing methods...
 func stringSliceContains(slice []string, str string) bool {
     for _, s := range slice {
         if s == str {
@@ -545,11 +543,12 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 
     resourceDataMap := make(map[string]ResourceData)
 
+    // FIXED QUERY: Use correct table alias 'rs' consistently
     query := `
         SELECT DISTINCT 
             r.id, r.host, r.service_id, r.entrypoints, r.tls_domains, r.custom_headers, r.source_type, r.router_priority,
             rm.middleware_id, rm.priority as middleware_priority,
-            rsc.custom_service_id
+            rs.service_id as custom_service_id
         FROM resources r
         LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
         LEFT JOIN resource_services rs ON r.id = rs.resource_id
@@ -723,10 +722,11 @@ func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
         activeDSConfig = models.DataSourceConfig{Type: "pangolin"}
     }
 
+    // FIXED QUERY: Use correct table alias 'rs' consistently  
     query := `
         SELECT DISTINCT 
             r.id, r.host, r.service_id, r.entrypoints, r.source_type, r.router_priority,
-            rsc.custom_service_id
+            rs.service_id as custom_service_id
         FROM resources r
         LEFT JOIN resource_services rs ON r.id = rs.resource_id
         WHERE r.tcp_enabled = 1
