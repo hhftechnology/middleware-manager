@@ -15,20 +15,19 @@ import (
 	"net/http"
 
 	"github.com/hhftechnology/middleware-manager/database"
-	"github.com/hhftechnology/middleware-manager/models" // Correct import for your models
+	"github.com/hhftechnology/middleware-manager/models"
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigGenerator generates Traefik configuration files
+// ConfigGenerator generates separate Traefik configuration files
 type ConfigGenerator struct {
 	db            *database.DB
 	confDir       string
-	configManager *ConfigManager // To access active data source
+	configManager *ConfigManager
 	stopChan      chan struct{}
 	isRunning     bool
 	mutex         sync.Mutex
-	lastConfig    []byte
-	// lastConfigHash string // This was commented out in your original struct, uncomment if needed
+	lastConfigs   map[string][]byte // Track individual file configs
 }
 
 // TraefikConfig represents the structure of the Traefik configuration
@@ -49,10 +48,37 @@ type TraefikConfig struct {
 	} `yaml:"udp,omitempty"`
 }
 
-// Add this simple helper function at the top of config_generator.go
+// Separate config structures for individual files
+type MiddlewareConfig struct {
+	HTTP struct {
+		Middlewares map[string]interface{} `yaml:"middlewares"`
+	} `yaml:"http"`
+}
+
+type RouterConfig struct {
+	HTTP struct {
+		Routers map[string]interface{} `yaml:"routers"`
+	} `yaml:"http,omitempty"`
+	TCP struct {
+		Routers map[string]interface{} `yaml:"routers,omitempty"`
+	} `yaml:"tcp,omitempty"`
+}
+
+type ServiceConfig struct {
+	HTTP struct {
+		Services map[string]interface{} `yaml:"services"`
+	} `yaml:"http,omitempty"`
+	TCP struct {
+		Services map[string]interface{} `yaml:"services,omitempty"`
+	} `yaml:"tcp,omitempty"`
+	UDP struct {
+		Services map[string]interface{} `yaml:"services,omitempty"`
+	} `yaml:"udp,omitempty"`
+}
+
 func shouldLog() bool {
     logLevel := strings.ToLower(os.Getenv("LOG_LEVEL"))
-    return logLevel == "debug" || logLevel == ""  // Only log in debug mode or if not set
+    return logLevel == "debug" || logLevel == ""
 }
 
 func shouldLogInfo() bool {
@@ -68,8 +94,7 @@ func NewConfigGenerator(db *database.DB, confDir string, configManager *ConfigMa
 		configManager: configManager,
 		stopChan:      make(chan struct{}),
 		isRunning:     false,
-		lastConfig:    nil,
-		// lastConfigHash: "", // ensure this matches your struct
+		lastConfigs:   make(map[string][]byte),
 	}
 }
 
@@ -100,7 +125,7 @@ func (cg *ConfigGenerator) Start(interval time.Duration) {
     for {
         select {
         case <-ticker.C:
-            if err := cg.generateConfigWithRetry(); err != nil { // Use retry version
+            if err := cg.generateConfigWithRetry(); err != nil {
                 log.Printf("Config generation failed: %v", err)
             }
         case <-cg.stopChan:
@@ -109,15 +134,15 @@ func (cg *ConfigGenerator) Start(interval time.Duration) {
         }
     }
 }
-// Add this helper function at the top of the file with other utility functions
+
 func normalizeServiceID(id string) string {
-    // Extract the base name (everything before the first @)
     baseName := id
     if idx := strings.Index(id, "@"); idx > 0 {
         baseName = id[:idx]
     }
     return baseName
 }
+
 // Stop stops the config generator
 func (cg *ConfigGenerator) Stop() {
 	cg.mutex.Lock()
@@ -140,10 +165,9 @@ func (cg *ConfigGenerator) generateConfigWithRetry() error {
             return nil
         }
         
-        // Check if it's a database locked error
         if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
             if attempt < maxRetries-1 {
-                delay := baseDelay * time.Duration(1<<attempt) // Exponential backoff
+                delay := baseDelay * time.Duration(1<<attempt)
                 log.Printf("⚠️  Database locked on attempt %d, retrying in %v", attempt+1, delay)
                 time.Sleep(delay)
                 continue
@@ -156,75 +180,264 @@ func (cg *ConfigGenerator) generateConfigWithRetry() error {
     return fmt.Errorf("config generation failed after %d attempts", maxRetries)
 }
 
-// generateConfig generates Traefik configuration files
+// generateConfig generates separate Traefik configuration files
 func (cg *ConfigGenerator) generateConfig() error {
-	    if shouldLog() {
-        log.Println("Generating Traefik configuration...")
+    if shouldLog() {
+        log.Println("Generating Traefik configuration files...")
     }
 
-	config := TraefikConfig{}
-	config.HTTP.Middlewares = make(map[string]interface{})
-	config.HTTP.Routers = make(map[string]interface{})
-	config.HTTP.Services = make(map[string]interface{})
-	config.TCP.Routers = make(map[string]interface{})
-	config.TCP.Services = make(map[string]interface{})
-	config.UDP.Services = make(map[string]interface{})
+    config := TraefikConfig{}
+    config.HTTP.Middlewares = make(map[string]interface{})
+    config.HTTP.Routers = make(map[string]interface{})
+    config.HTTP.Services = make(map[string]interface{})
+    config.TCP.Routers = make(map[string]interface{})
+    config.TCP.Services = make(map[string]interface{})
+    config.UDP.Services = make(map[string]interface{})
 
+    if err := cg.processMiddlewares(&config); err != nil {
+        return fmt.Errorf("failed to process middlewares: %w", err)
+    }
+    if err := cg.processServices(&config); err != nil {
+        return fmt.Errorf("failed to process services: %w", err)
+    }
+    if err := cg.processResourcesWithServices(&config); err != nil {
+        return fmt.Errorf("failed to process HTTP resources with services: %w", err)
+    }
+    if err := cg.processTCPRouters(&config); err != nil {
+        return fmt.Errorf("failed to process TCP resources: %w", err)
+    }
 
-	if err := cg.processMiddlewares(&config); err != nil {
-		return fmt.Errorf("failed to process middlewares: %w", err)
-	}
-	if err := cg.processServices(&config); err != nil {
-		return fmt.Errorf("failed to process services: %w", err)
-	}
-	if err := cg.processResourcesWithServices(&config); err != nil {
-		return fmt.Errorf("failed to process HTTP resources with services: %w", err)
-	}
-	if err := cg.processTCPRouters(&config); err != nil {
-		return fmt.Errorf("failed to process TCP resources: %w", err)
-	}
+    // Write separate files
+    if err := cg.writeSeparateConfigFiles(&config); err != nil {
+        return fmt.Errorf("failed to write separate config files: %w", err)
+    }
 
-	processedConfig := preserveTraefikValues(config)
+    return nil
+}
 
-	yamlNode := &yaml.Node{}
-	err := yamlNode.Encode(processedConfig)
-	if err != nil {
-		return fmt.Errorf("failed to encode config to YAML node: %w", err)
-	}
-	preserveStringsInYamlNode(yamlNode)
-	yamlData, err := yaml.Marshal(yamlNode)
-	if err != nil {
-		return fmt.Errorf("failed to marshal YAML node: %w", err)
-	}
+// writeSeparateConfigFiles writes individual configuration files
+func (cg *ConfigGenerator) writeSeparateConfigFiles(config *TraefikConfig) error {
+    var errCount int
+    
+    // 1. Write individual middleware files
+    if err := cg.writeMiddlewareFiles(config); err != nil {
+        log.Printf("Failed to write middleware files: %v", err)
+        errCount++
+    }
 
-    if cg.hasConfigurationChanged(yamlData) {
-        if err := cg.writeConfigToFile(yamlData); err != nil {
-            return fmt.Errorf("failed to write config to file: %w", err)
+    // 2. Write router files
+    if err := cg.writeRouterFiles(config); err != nil {
+        log.Printf("Failed to write router files: %v", err)
+        errCount++
+    }
+
+    // 3. Write service files
+    if err := cg.writeServiceFiles(config); err != nil {
+        log.Printf("Failed to write service files: %v", err)
+        errCount++
+    }
+
+    if errCount > 0 {
+        return fmt.Errorf("failed to write %d file types", errCount)
+    }
+
+    return nil
+}
+
+// writeMiddlewareFiles writes individual middleware files
+func (cg *ConfigGenerator) writeMiddlewareFiles(config *TraefikConfig) error {
+    middlewareDir := filepath.Join(cg.confDir, "middlewares")
+    if err := os.MkdirAll(middlewareDir, 0755); err != nil {
+        return fmt.Errorf("failed to create middlewares directory: %w", err)
+    }
+
+    // Remove old middleware files first
+    if err := cg.cleanupDirectory(middlewareDir, ".yml"); err != nil {
+        log.Printf("Warning: failed to cleanup middleware directory: %v", err)
+    }
+
+    for middlewareID, middlewareConfig := range config.HTTP.Middlewares {
+        middlewareFile := MiddlewareConfig{}
+        middlewareFile.HTTP.Middlewares = make(map[string]interface{})
+        middlewareFile.HTTP.Middlewares[middlewareID] = middlewareConfig
+
+        processedConfig := preserveTraefikValues(middlewareFile)
+
+        yamlNode := &yaml.Node{}
+        if err := yamlNode.Encode(processedConfig); err != nil {
+            log.Printf("Failed to encode middleware %s to YAML: %v", middlewareID, err)
+            continue
         }
-        // Keep this - user wants to know when config actually changes
-        log.Printf("Generated new Traefik configuration at %s", filepath.Join(cg.confDir, "resource-overrides.yml"))
-    } else {
-        // REPLACE: log.Println("Configuration unchanged, skipping file write")  
-        if shouldLog() {
-            log.Println("Configuration unchanged, skipping file write")
+        preserveStringsInYamlNode(yamlNode)
+        
+        yamlData, err := yaml.Marshal(yamlNode)
+        if err != nil {
+            log.Printf("Failed to marshal middleware %s: %v", middlewareID, err)
+            continue
+        }
+
+        filename := fmt.Sprintf("%s.yml", middlewareID)
+        filepath := filepath.Join(middlewareDir, filename)
+        
+        if cg.hasFileChanged(filename, yamlData) {
+            if err := cg.writeFileAtomic(filepath, yamlData); err != nil {
+                log.Printf("Failed to write middleware file %s: %v", filename, err)
+                continue
+            }
+            if shouldLogInfo() {
+                log.Printf("Generated middleware file: %s", filename)
+            }
         }
     }
 
     return nil
 }
 
+// writeRouterFiles writes router configuration files
+func (cg *ConfigGenerator) writeRouterFiles(config *TraefikConfig) error {
+    // HTTP Routers
+    if len(config.HTTP.Routers) > 0 {
+        httpRouterFile := RouterConfig{}
+        httpRouterFile.HTTP.Routers = config.HTTP.Routers
+        
+        if err := cg.writeConfigFile("http-routers.yml", httpRouterFile); err != nil {
+            return fmt.Errorf("failed to write HTTP routers: %w", err)
+        }
+    }
 
+    // TCP Routers
+    if len(config.TCP.Routers) > 0 {
+        tcpRouterFile := RouterConfig{}
+        tcpRouterFile.TCP.Routers = config.TCP.Routers
+        
+        if err := cg.writeConfigFile("tcp-routers.yml", tcpRouterFile); err != nil {
+            return fmt.Errorf("failed to write TCP routers: %w", err)
+        }
+    }
+
+    return nil
+}
+
+// writeServiceFiles writes service configuration files
+func (cg *ConfigGenerator) writeServiceFiles(config *TraefikConfig) error {
+    // HTTP Services
+    if len(config.HTTP.Services) > 0 {
+        httpServiceFile := ServiceConfig{}
+        httpServiceFile.HTTP.Services = config.HTTP.Services
+        
+        if err := cg.writeConfigFile("http-services.yml", httpServiceFile); err != nil {
+            return fmt.Errorf("failed to write HTTP services: %w", err)
+        }
+    }
+
+    // TCP Services
+    if len(config.TCP.Services) > 0 {
+        tcpServiceFile := ServiceConfig{}
+        tcpServiceFile.TCP.Services = config.TCP.Services
+        
+        if err := cg.writeConfigFile("tcp-services.yml", tcpServiceFile); err != nil {
+            return fmt.Errorf("failed to write TCP services: %w", err)
+        }
+    }
+
+    // UDP Services
+    if len(config.UDP.Services) > 0 {
+        udpServiceFile := ServiceConfig{}
+        udpServiceFile.UDP.Services = config.UDP.Services
+        
+        if err := cg.writeConfigFile("udp-services.yml", udpServiceFile); err != nil {
+            return fmt.Errorf("failed to write UDP services: %w", err)
+        }
+    }
+
+    return nil
+}
+
+// writeConfigFile writes a configuration file with change detection
+func (cg *ConfigGenerator) writeConfigFile(filename string, configData interface{}) error {
+    processedConfig := preserveTraefikValues(configData)
+
+    yamlNode := &yaml.Node{}
+    if err := yamlNode.Encode(processedConfig); err != nil {
+        return fmt.Errorf("failed to encode %s to YAML: %w", filename, err)
+    }
+    preserveStringsInYamlNode(yamlNode)
+    
+    yamlData, err := yaml.Marshal(yamlNode)
+    if err != nil {
+        return fmt.Errorf("failed to marshal %s: %w", filename, err)
+    }
+
+    filepath := filepath.Join(cg.confDir, filename)
+    
+    if cg.hasFileChanged(filename, yamlData) {
+        if err := cg.writeFileAtomic(filepath, yamlData); err != nil {
+            return fmt.Errorf("failed to write %s: %w", filename, err)
+        }
+        if shouldLogInfo() {
+            log.Printf("Generated configuration file: %s", filename)
+        }
+    }
+
+    return nil
+}
+
+// hasFileChanged checks if a specific file's content has changed
+func (cg *ConfigGenerator) hasFileChanged(filename string, newConfig []byte) bool {
+    lastConfig, exists := cg.lastConfigs[filename]
+    if !exists || len(lastConfig) != len(newConfig) || string(lastConfig) != string(newConfig) {
+        cg.lastConfigs[filename] = make([]byte, len(newConfig))
+        copy(cg.lastConfigs[filename], newConfig)
+        return true
+    }
+    return false
+}
+
+// writeFileAtomic writes a file atomically using a temporary file
+func (cg *ConfigGenerator) writeFileAtomic(filepath string, data []byte) error {
+    tempFile := filepath + ".tmp"
+    if err := os.WriteFile(tempFile, data, 0644); err != nil {
+        return fmt.Errorf("failed to write temp file: %w", err)
+    }
+    return os.Rename(tempFile, filepath)
+}
+
+// cleanupDirectory removes old files with the specified extension from a directory
+func (cg *ConfigGenerator) cleanupDirectory(dir, ext string) error {
+    entries, err := os.ReadDir(dir)
+    if err != nil {
+        return err
+    }
+
+    for _, entry := range entries {
+        if !entry.IsDir() && strings.HasSuffix(entry.Name(), ext) {
+            filepath := filepath.Join(dir, entry.Name())
+            if err := os.Remove(filepath); err != nil {
+                log.Printf("Warning: failed to remove old file %s: %v", entry.Name(), err)
+            }
+        }
+    }
+    
+    return nil
+}
+
+// MiddlewareWithPriority represents a middleware with its priority value
+type MiddlewareWithPriority struct {
+    ID       string
+    Priority int
+}
+
+// Rest of the existing methods remain the same...
 func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
-	rows, err := cg.db.Query("SELECT id, name, type, config FROM middlewares")
-	if err != nil {
-		return fmt.Errorf("failed to fetch middlewares: %w", err)
-	}
-	defer rows.Close()
+    rows, err := cg.db.Query("SELECT id, name, type, config FROM middlewares")
+    if err != nil {
+        return fmt.Errorf("failed to fetch middlewares: %w", err)
+    }
+    defer rows.Close()
 
     for rows.Next() {
         var id, name, typ, configStr string
         if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-            // REPLACE: log.Printf("Failed to scan middleware: %v", err)
             if shouldLog() {
                 log.Printf("Failed to scan middleware: %v", err)
             }
@@ -232,21 +445,19 @@ func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
         }
         var middlewareConfig map[string]interface{}
         if err := json.Unmarshal([]byte(configStr), &middlewareConfig); err != nil {
-            // REPLACE: log.Printf("Failed to parse middleware config for %s: %v", name, err)
             if shouldLog() {
                 log.Printf("Failed to parse middleware config for %s: %v", name, err)
             }
             continue
         }
-		
-		// Use the centralized processing logic from models package
-		middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
+        
+        middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
 
-		config.HTTP.Middlewares[id] = map[string]interface{}{
-			typ: middlewareConfig,
-		}
-	}
-	return rows.Err()
+        config.HTTP.Middlewares[id] = map[string]interface{}{
+            typ: middlewareConfig,
+        }
+    }
+    return rows.Err()
 }
 
 func (cg *ConfigGenerator) processServices(config *TraefikConfig) error {
@@ -259,96 +470,116 @@ func (cg *ConfigGenerator) processServices(config *TraefikConfig) error {
     for rows.Next() {
         var id, name, typ, configStr string
         if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-            // REPLACE: log.Printf("Failed to scan service row: %v", err)
             if shouldLog() {
-                log.Printf("Failed to scan service row: %v", err)
+                log.Printf("Failed to scan service: %v", err)
             }
             continue
         }
+        
         var serviceConfig map[string]interface{}
         if err := json.Unmarshal([]byte(configStr), &serviceConfig); err != nil {
-            // REPLACE: log.Printf("Failed to parse service config for %s: %v", name, err)
             if shouldLog() {
                 log.Printf("Failed to parse service config for %s: %v", name, err)
             }
             continue
         }
-		
-		// Use the centralized processing logic from models package
-		serviceConfig = models.ProcessServiceConfig(typ, serviceConfig)
 
-		protocol := determineServiceProtocol(typ, serviceConfig)
-		serviceEntry := map[string]interface{}{typ: serviceConfig}
-
-		switch protocol {
-		case "http":
-			config.HTTP.Services[id] = serviceEntry
-		case "tcp":
-			config.TCP.Services[id] = serviceEntry
-		case "udp":
-			config.UDP.Services[id] = serviceEntry
-		}
-	}
-	return rows.Err()
+        serviceConfig = models.ProcessServiceConfig(typ, serviceConfig)
+        
+        protocol := determineServiceProtocol(typ, serviceConfig)
+        switch protocol {
+        case "tcp":
+            config.TCP.Services[id] = serviceConfig
+        case "udp":
+            config.UDP.Services[id] = serviceConfig
+        default: // http
+            config.HTTP.Services[id] = serviceConfig
+        }
+    }
+    return rows.Err()
 }
 
-// In services/config_generator.go
-
-// processResourcesWithServices processes resources with their assigned services
-// Helper function to extract the base name without provider suffixes
-func extractBaseName(id string) string {
-    // If the ID contains @ character, extract the part before it
-    if idx := strings.Index(id, "@"); idx > 0 {
-        return id[:idx]
+// Additional helper functions and existing methods...
+func stringSliceContains(slice []string, str string) bool {
+    for _, s := range slice {
+        if s == str {
+            return true
+        }
     }
-    return id
+    return false
+}
+
+func determineServiceProtocol(serviceType string, config map[string]interface{}) string {
+    if serviceType == string(models.LoadBalancerType) {
+        if servers, ok := config["servers"].([]interface{}); ok {
+            for _, s := range servers {
+                if serverMap, ok := s.(map[string]interface{}); ok {
+                    if _, hasAddress := serverMap["address"]; hasAddress {
+                        return "tcp" 
+                    }
+                    if _, hasURL := serverMap["url"]; hasURL {
+                        return "http"
+                    }
+                }
+            }
+        }
+    }
+    return "http"
 }
 
 // processResourcesWithServices processes resources with their assigned services
 func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) error {
     activeDSConfig, err := cg.configManager.GetActiveDataSourceConfig()
     if err != nil {
-                if shouldLog() {
+        if shouldLog() {
             log.Printf("Warning: Could not get active data source config in ConfigGenerator: %v. Defaulting to Pangolin logic.", err)
         }
-        activeDSConfig.Type = models.PangolinAPI
+        activeDSConfig = models.DataSourceConfig{Type: "pangolin"}
     }
 
-    query := `
-        SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
-               r.custom_headers, r.router_priority, r.source_type, 
-               rm.middleware_id, rm.priority,
-               rs.service_id as custom_service_id
-        FROM resources r
-        LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
-        LEFT JOIN resource_services rs ON r.id = rs.resource_id
-        WHERE r.status = 'active'
-        ORDER BY r.id, rm.priority DESC
-    `
-    rows, err := cg.db.Query(query)
-    if err != nil {
-        return fmt.Errorf("failed to fetch resources for HTTP routers: %w", err)
-    }
-    defer rows.Close()
-
-    type resourceProcessedData struct {
+    type ResourceData struct {
         Info            models.Resource
         Middlewares     []MiddlewareWithPriority
         CustomServiceID sql.NullString
     }
-    resourceDataMap := make(map[string]resourceProcessedData)
+
+    resourceDataMap := make(map[string]ResourceData)
+
+    query := `
+        SELECT DISTINCT 
+            r.id, r.host, r.service_id, r.entrypoints, r.tls_domains, r.custom_headers, r.source_type, r.router_priority,
+            rm.middleware_id, rm.priority as middleware_priority,
+            rsc.custom_service_id
+        FROM resources r
+        LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
+        LEFT JOIN resource_service_custom rsc ON r.id = rsc.resource_id
+        ORDER BY r.id, rm.priority DESC`
+
+    rows, err := cg.db.Query(query)
+    if err != nil {
+        return fmt.Errorf("failed to query resources with middlewares: %w", err)
+    }
+    defer rows.Close()
 
     for rows.Next() {
-        var rID_db, host_db, serviceID_db, entrypoints_db, tlsDomains_db, customHeadersStr_db, sourceType_db string
-        var routerPriority_db sql.NullInt64
-        var middlewareID_db sql.NullString
-        var middlewarePriority_db sql.NullInt64
-        var customServiceID_db sql.NullString
+        var (
+            rID_db                  string
+            host_db                 string
+            serviceID_db            string
+            entrypoints_db          string
+            tlsDomains_db           string
+            customHeadersStr_db     string
+            sourceType_db           string
+            routerPriority_db       sql.NullInt64
+            middlewareID_db         sql.NullString
+            middlewarePriority_db   sql.NullInt64
+            customServiceID_db      sql.NullString
+        )
 
         err := rows.Scan(
-            &rID_db, &host_db, &serviceID_db, &entrypoints_db, &tlsDomains_db,
-            &customHeadersStr_db, &routerPriority_db, &sourceType_db,
-            &middlewareID_db, &middlewarePriority_db, &customServiceID_db,
+            &rID_db, &host_db, &serviceID_db, &entrypoints_db, &tlsDomains_db, 
+            &customHeadersStr_db, &sourceType_db, &routerPriority_db, &middlewareID_db, 
+            &middlewarePriority_db, &customServiceID_db,
         )
         if err != nil {
             log.Printf("Failed to scan resource data for HTTP router: %v", err)
@@ -369,7 +600,7 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
             if routerPriority_db.Valid {
                 data.Info.RouterPriority = int(routerPriority_db.Int64)
             } else {
-                data.Info.RouterPriority = 200 // Default
+                data.Info.RouterPriority = 200
             }
             data.CustomServiceID = customServiceID_db
         }
@@ -417,7 +648,7 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
                 }
                 customHeadersMiddlewareID = fmt.Sprintf("%s@file", middlewareName)
             } else if err != nil {
-                log.Printf("Failed to parse custom headers for resource %s: %v. Headers: %s", info.ID, err, info.CustomHeaders)
+                log.Printf("Failed to parse custom headers for resource %s: %v.", info.ID, err)
             }
         }
 
@@ -426,55 +657,30 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
             finalMiddlewares = append(finalMiddlewares, customHeadersMiddlewareID)
         }
         for _, mw := range assignedMiddlewares {
-            // Use extractBaseName here too for middleware IDs if needed
-            middlewareID := extractBaseName(mw.ID)
-            finalMiddlewares = append(finalMiddlewares, fmt.Sprintf("%s@file", middlewareID))
+            finalMiddlewares = append(finalMiddlewares, fmt.Sprintf("%s@file", mw.ID))
         }
-        
-        // Only add the badger middleware when using Pangolin data source
-        if activeDSConfig.Type == models.PangolinAPI {
-            isBadgerPresent := false
-            for _, m := range finalMiddlewares {
-                if m == "badger@http" {
-                    isBadgerPresent = true
-                    break
-                }
-            }
-            if !isBadgerPresent {
-                finalMiddlewares = append(finalMiddlewares, "badger@http")
-            }
-        }
-        
-// Find the section where serviceReference is set
-var serviceReference string
-if mapValueDataEntry.CustomServiceID.Valid && mapValueDataEntry.CustomServiceID.String != "" {
-    // Extract base name without any suffixes
-    baseName := normalizeServiceID(mapValueDataEntry.CustomServiceID.String)
-    // Always add the file provider for custom services
-    serviceReference = fmt.Sprintf("%s@file", baseName)
-} else {
-    // For Docker environments when using Traefik API, prefer docker provider
-    providerSuffix := "docker"
-    
-    // If not using Traefik API as data source, use http provider
-    if activeDSConfig.Type != models.TraefikAPI {
-        providerSuffix = "http"
-    }
-    
-    // Extract base name without any suffixes
-    baseName := normalizeServiceID(info.ServiceID)
-    // Add the appropriate provider suffix
-    serviceReference = fmt.Sprintf("%s@%s", baseName, providerSuffix)
-}
-        
-        log.Printf("Resource %s (HTTP): Router service set to %s. (SourceType: %s, ActiveDS: %s, CustomSvc: %s)",
-            info.ID,
-            serviceReference,
-            info.SourceType,
-            activeDSConfig.Type,
-            mapValueDataEntry.CustomServiceID.String)
 
-        // Make sure we don't have duplicated suffixes in router ID
+        var serviceReference string
+        if mapValueDataEntry.CustomServiceID.Valid && mapValueDataEntry.CustomServiceID.String != "" {
+            serviceReference = fmt.Sprintf("%s@file", mapValueDataEntry.CustomServiceID.String)
+        } else {
+            switch activeDSConfig.Type {
+            case "traefik":
+                serviceReference = cg.fetchTraefikServiceReference(info.ServiceID)
+            default:
+                serviceReference = fmt.Sprintf("%s@file", info.ServiceID)
+            }
+        }
+
+        if shouldLog() {
+            log.Printf("Processing resource %s -> service %s (SourceType: %s, ActiveDS: %s, CustomSvc: %s)",
+                info.ID,
+                serviceReference,
+                info.SourceType,
+                activeDSConfig.Type,
+                mapValueDataEntry.CustomServiceID.String)
+        }
+
         routerIDBase := extractBaseName(info.ID)
         routerIDForTraefik := fmt.Sprintf("%s-auth", routerIDBase) 
         
@@ -507,80 +713,44 @@ if mapValueDataEntry.CustomServiceID.Valid && mapValueDataEntry.CustomServiceID.
     return nil
 }
 
-// Add to the imports if needed:
-// import "encoding/json"
-
-// Helper to fetch service names from Traefik API
-func (cg *ConfigGenerator) fetchTraefikServiceNames() map[string]string {
-    serviceMap := make(map[string]string)
-    client := &http.Client{Timeout: 5 * time.Second}
-    
-    // Get Traefik API URL from data source config
-    dsConfig, err := cg.configManager.GetActiveDataSourceConfig()
-    if err != nil {
-        log.Printf("Warning: Failed to get active data source config: %v", err)
-        return serviceMap
-    }
-    
-    apiURL := dsConfig.URL
-    
-    // Fetch HTTP services
-    resp, err := client.Get(apiURL + "/api/http/services")
-    if err != nil {
-        log.Printf("Warning: Failed to fetch services from Traefik API: %v", err)
-        return serviceMap
-    }
-    defer resp.Body.Close()
-    
-    if resp.StatusCode != http.StatusOK {
-        log.Printf("Warning: Traefik API returned status %d", resp.StatusCode)
-        return serviceMap
-    }
-    
-    var services []struct {
-        Name string `json:"name"`
-    }
-    
-    if err := json.NewDecoder(resp.Body).Decode(&services); err != nil {
-        log.Printf("Warning: Failed to decode Traefik API response: %v", err)
-        return serviceMap
-    }
-    
-    // Build a map of base name -> full name with provider
-    for _, svc := range services {
-        baseName := normalizeServiceID(svc.Name)
-        serviceMap[baseName] = svc.Name
-    }
-    
-    return serviceMap
-}
-
-// processTCPRouters processes TCP router resources
+// processTCPRouters processes TCP routers
 func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
     activeDSConfig, err := cg.configManager.GetActiveDataSourceConfig()
     if err != nil {
-        log.Printf("Warning: Could not get active data source config for TCP routers: %v. Defaulting to Pangolin logic.", err)
-        activeDSConfig.Type = models.PangolinAPI
+        if shouldLog() {
+            log.Printf("Warning: Could not get active data source config: %v", err)
+        }
+        activeDSConfig = models.DataSourceConfig{Type: "pangolin"}
     }
-    
+
     query := `
-        SELECT r.id, r.host, r.service_id, r.tcp_entrypoints, r.tcp_sni_rule, r.router_priority, r.source_type,
-               rs.service_id as custom_service_id
+        SELECT DISTINCT 
+            r.id, r.host, r.service_id, r.entrypoints, r.source_type, r.router_priority,
+            rsc.custom_service_id
         FROM resources r
-        LEFT JOIN resource_services rs ON r.id = rs.resource_id
-        WHERE r.status = 'active' AND r.tcp_enabled = 1
-    `
+        LEFT JOIN resource_service_custom rsc ON r.id = rsc.resource_id
+        WHERE r.protocol = 'tcp'
+        ORDER BY r.id`
+
     rows, err := cg.db.Query(query)
     if err != nil {
-        return fmt.Errorf("failed to fetch TCP resources: %w", err)
+        return fmt.Errorf("failed to query TCP resources: %w", err)
     }
     defer rows.Close()
 
     for rows.Next() {
-        var id, host, serviceID, tcpEntrypointsStr, tcpSNIRule, sourceType string
-        var routerPriority sql.NullInt64
-        var customServiceID sql.NullString
-        if err := rows.Scan(&id, &host, &serviceID, &tcpEntrypointsStr, &tcpSNIRule, &routerPriority, &sourceType, &customServiceID); err != nil {
+        var (
+            id                  string
+            host                string
+            serviceID           string
+            entrypoints         string
+            sourceType          string
+            routerPriority      sql.NullInt64
+            customServiceID     sql.NullString
+        )
+
+        err := rows.Scan(&id, &host, &serviceID, &entrypoints, &sourceType, &routerPriority, &customServiceID)
+        if err != nil {
             log.Printf("Failed to scan TCP resource: %v", err)
             continue
         }
@@ -590,189 +760,177 @@ func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
             priority = int(routerPriority.Int64)
         }
 
-        entrypoints := strings.Split(strings.TrimSpace(tcpEntrypointsStr), ",")
-        if len(entrypoints) == 0 || entrypoints[0] == "" {
-            entrypoints = []string{"tcp"} // Default TCP entrypoint
-        }
-        
-        rule := tcpSNIRule
-        if rule == "" { // Default SNI rule if not specified
-            rule = fmt.Sprintf("HostSNI(`%s`)", host)
+        var tcpServiceReference string
+        if customServiceID.Valid && customServiceID.String != "" {
+            tcpServiceReference = fmt.Sprintf("%s@file", customServiceID.String)
+        } else {
+            switch activeDSConfig.Type {
+            case "traefik":
+                tcpServiceReference = cg.fetchTraefikServiceReference(serviceID)
+            default:
+                tcpServiceReference = fmt.Sprintf("%s@file", serviceID)
+            }
         }
 
-		var tcpServiceReference string
-		if customServiceID.Valid && customServiceID.String != "" {
-			// Extract base name without any suffixes
-			baseName := normalizeServiceID(customServiceID.String)
-			// Always add the file provider for custom services
-			tcpServiceReference = fmt.Sprintf("%s@file", baseName)
-		} else {
-			// Default provider suffix
-			providerSuffix := "http"
-			
-			// If using Traefik API, consider using docker for appropriate sources
-			if activeDSConfig.Type == models.TraefikAPI {
-				if models.DataSourceType(sourceType) == models.TraefikAPI {
-					providerSuffix = "docker"
-				}
-			}
-			
-			// Extract base name without any suffixes
-			baseName := normalizeServiceID(serviceID)
-			// Add the appropriate provider suffix
-			tcpServiceReference = fmt.Sprintf("%s@%s", baseName, providerSuffix)
-		}
-        log.Printf("Resource %s (TCP): Router service set to %s. (SourceType: %s, ActiveDS: %s, CustomSvc: %s)", 
-            id, tcpServiceReference, sourceType, activeDSConfig.Type, customServiceID.String)
+        rule := fmt.Sprintf("HostSNI(`%s`)", host)
+        entrypointsList := strings.Split(strings.TrimSpace(entrypoints), ",")
+        if len(entrypointsList) == 0 || (len(entrypointsList) == 1 && entrypointsList[0] == "") {
+            entrypointsList = []string{"tcpsecure"}
+        }
+
+        if shouldLog() {
+            log.Printf("Processing TCP resource %s -> service %s (SourceType: %s, ActiveDS: %s, CustomSvc: %s)", 
+                id, tcpServiceReference, sourceType, activeDSConfig.Type, customServiceID.String)
+        }
         
-        // Make sure we don't have duplicated suffixes in router ID
         routerIDBase := extractBaseName(id)
         tcpRouterID := fmt.Sprintf("%s-tcp", routerIDBase)
         
         config.TCP.Routers[tcpRouterID] = map[string]interface{}{
             "rule":        rule,
             "service":     tcpServiceReference,
-            "entryPoints": entrypoints,
+            "entryPoints": entrypointsList,
             "priority":    priority,
-            "tls":         map[string]interface{}{}, // TCP routers with SNI usually involve TLS
+            "tls":         map[string]interface{}{},
         }
     }
     return rows.Err()
 }
 
-
-// --- Helper functions (isNumeric, preserveStringsInYamlNode, preserveTraefikValues, etc.) ---
-// These should be mostly the same as previously provided, ensure `models.ProcessMiddlewareConfig`
-// and `models.ProcessServiceConfig` are used where appropriate for type-specific logic.
-
-func (cg *ConfigGenerator) hasConfigurationChanged(newConfig []byte) bool {
-	if cg.lastConfig == nil || len(cg.lastConfig) != len(newConfig) || string(cg.lastConfig) != string(newConfig) {
-		cg.lastConfig = make([]byte, len(newConfig))
-		copy(cg.lastConfig, newConfig)
-		return true
-	}
-	return false
+// fetchTraefikServiceReference fetches service reference from Traefik API
+func (cg *ConfigGenerator) fetchTraefikServiceReference(serviceID string) string {
+    serviceMap := cg.fetchTraefikServiceNames()
+    if serviceName, exists := serviceMap[serviceID]; exists {
+        return serviceName
+    }
+    return fmt.Sprintf("%s@file", serviceID)
 }
 
-func (cg *ConfigGenerator) writeConfigToFile(yamlData []byte) error {
-	configFile := filepath.Join(cg.confDir, "resource-overrides.yml")
-	tempFile := configFile + ".tmp"
-	if err := os.WriteFile(tempFile, yamlData, 0644); err != nil {
-		return fmt.Errorf("failed to write temp config file: %w", err)
-	}
-	return os.Rename(tempFile, configFile)
-}
+// fetchTraefikServiceNames fetches service names from Traefik API
+func (cg *ConfigGenerator) fetchTraefikServiceNames() map[string]string {
+    serviceMap := make(map[string]string)
+    client := &http.Client{Timeout: 5 * time.Second}
+    
+    dsConfig, err := cg.configManager.GetActiveDataSourceConfig()
+    if err != nil {
+        log.Printf("Warning: Failed to get active data source config: %v", err)
+        return serviceMap
+    }
+    
+    apiURL := dsConfig.URL
+    
+    resp, err := client.Get(apiURL + "/api/http/services")
+    if err != nil {
+        log.Printf("Warning: Failed to fetch Traefik services: %v", err)
+        return serviceMap
+    }
+    defer resp.Body.Close()
 
-// MiddlewareWithPriority represents a middleware with its priority value
-type MiddlewareWithPriority struct {
-	ID       string
-	Priority int
-}
+    if resp.StatusCode != http.StatusOK {
+        log.Printf("Warning: Traefik API returned status %d", resp.StatusCode)
+        return serviceMap
+    }
 
-func stringSliceContains(slice []string, str string) bool {
-	for _, s := range slice {
-		if s == str {
-			return true
-		}
-	}
-	return false
-}
+    var services []interface{}
+    if err := json.NewDecoder(resp.Body).Decode(&services); err != nil {
+        log.Printf("Warning: Failed to decode Traefik services: %v", err)
+        return serviceMap
+    }
 
-func determineServiceProtocol(serviceType string, config map[string]interface{}) string {
-	if serviceType == string(models.LoadBalancerType) {
-		if servers, ok := config["servers"].([]interface{}); ok {
-			for _, s := range servers {
-				if serverMap, ok := s.(map[string]interface{}); ok {
-					if _, hasAddress := serverMap["address"]; hasAddress {
-						// Could be TCP or UDP. Default to TCP.
-						// UDP services might need more specific markers or be handled by a separate UDP services map in TraefikConfig
-						return "tcp" 
-					}
-					if _, hasURL := serverMap["url"]; hasURL {
-						return "http"
-					}
-				}
-			}
-		}
-	}
-	// For weighted, mirroring, failover, they reference other services.
-	// The protocol is typically determined by the nature of those referenced services.
-	// For simplicity here, assume HTTP if not explicitly a loadbalancer with address.
-	return "http"
-}
-
-
-func preserveStringsInYamlNode(node *yaml.Node) {
-	if node == nil { return }
-	switch node.Kind {
-	case yaml.DocumentNode, yaml.SequenceNode:
-		for i := range node.Content {
-			preserveStringsInYamlNode(node.Content[i])
-		}
-	case yaml.MappingNode:
-		for i := 0; i < len(node.Content); i += 2 {
-			keyNode := node.Content[i]
-			valueNode := node.Content[i+1]
-			if (keyNode.Value == "Server" || keyNode.Value == "X-Powered-By" || strings.HasPrefix(keyNode.Value, "X-")) &&
-				valueNode.Kind == yaml.ScalarNode && valueNode.Value == "" {
-				valueNode.Style = yaml.DoubleQuotedStyle
-			}
-			if containsSpecialStringField(keyNode.Value) && valueNode.Kind == yaml.ScalarNode {
-				valueNode.Style = yaml.DoubleQuotedStyle
-			}
-			preserveStringsInYamlNode(keyNode)   // Recursive call for key (though keys are usually simple strings)
-			preserveStringsInYamlNode(valueNode) // Recursive call for value
-		}
-	case yaml.ScalarNode:
-		if node.Value == "" {
-			node.Style = yaml.DoubleQuotedStyle
-		} else if isNumericString(node.Value) && len(node.Value) > 5 { // Example condition for large numbers
-            node.Tag = "!!str" // Force as string if it's a long number that might get scientific notation
+    for _, s := range services {
+        if serviceObj, ok := s.(map[string]interface{}); ok {
+            if name, ok := serviceObj["name"].(string); ok {
+                normalizedID := normalizeServiceID(name)
+                serviceMap[normalizedID] = name
+            }
         }
-	}
+    }
+
+    return serviceMap
 }
 
+// extractBaseName extracts the base name without provider suffixes
+func extractBaseName(id string) string {
+    if idx := strings.Index(id, "@"); idx > 0 {
+        return id[:idx]
+    }
+    return id
+}
+
+// preserveTraefikValues preserves Traefik configuration values
+func preserveTraefikValues(data interface{}) interface{} {
+    switch v := data.(type) {
+    case map[string]interface{}:
+        result := make(map[string]interface{})
+        for key, value := range v {
+            result[key] = preserveTraefikValues(value)
+        }
+        return result
+    case []interface{}:
+        result := make([]interface{}, len(v))
+        for i, item := range v {
+            result[i] = preserveTraefikValues(item)
+        }
+        return result
+    default:
+        return v
+    }
+}
+
+// preserveStringsInYamlNode preserves string formatting in YAML nodes
+func preserveStringsInYamlNode(node *yaml.Node) {
+    if node == nil { 
+        return 
+    }
+    
+    switch node.Kind {
+    case yaml.DocumentNode, yaml.SequenceNode:
+        for i := range node.Content {
+            preserveStringsInYamlNode(node.Content[i])
+        }
+    case yaml.MappingNode:
+        for i := 0; i < len(node.Content); i += 2 {
+            keyNode := node.Content[i]
+            valueNode := node.Content[i+1]
+            if (keyNode.Value == "Server" || keyNode.Value == "X-Powered-By" || strings.HasPrefix(keyNode.Value, "X-")) &&
+                valueNode.Kind == yaml.ScalarNode && valueNode.Value == "" {
+                valueNode.Style = yaml.DoubleQuotedStyle
+            }
+            if containsSpecialStringField(keyNode.Value) && valueNode.Kind == yaml.ScalarNode {
+                valueNode.Style = yaml.DoubleQuotedStyle
+            }
+            preserveStringsInYamlNode(keyNode)
+            preserveStringsInYamlNode(valueNode)
+        }
+    case yaml.ScalarNode:
+        if node.Value == "" {
+            node.Style = yaml.DoubleQuotedStyle
+        } else if isNumericString(node.Value) && len(node.Value) > 5 {
+            node.Tag = "!!str"
+        }
+    }
+}
+
+// isNumericString checks if a string is numeric
 func isNumericString(s string) bool {
     _, err := strconv.ParseFloat(s, 64)
     return err == nil
 }
 
+// containsSpecialStringField checks for special string fields
 func containsSpecialStringField(fieldName string) bool {
-	specialFields := []string{
-		"key", "token", "secret", "apiKey", "Key", "Token", "Secret", "Password", "Pass", "User", "Users",
-		"regex", "replacement", "Regex", "Path", "path", "scheme", "url", "address",
-		"prefix", "prefixes", "expression", "rule", "certResolver", "address", "authResponseHeaders",
-		"customRequestHeaders", "customResponseHeaders", "customFrameOptionsValue", "contentSecurityPolicy",
-		"referrerPolicy", "permissionsPolicy", "stsSeconds", "excludedIPs", "sourceRange",
-		"query", "service", "fallback", "flushInterval", "interval", "timeout", // Some of these are durations but might be passed as strings
-	}
-	for _, field := range specialFields {
-		if strings.EqualFold(fieldName, field) || strings.Contains(strings.ToLower(fieldName), strings.ToLower(field)) {
-			return true
-		}
-	}
-	return false
-}
-
-func preserveTraefikValues(data interface{}) interface{} {
-	// This function is now more about structural integrity than type coercion,
-	// as specific type processing is handled by models.ProcessMiddlewareConfig and models.ProcessServiceConfig.
-	// It can still be useful for deeply nested generic maps or arrays if they occur outside of those.
-	if data == nil {
-		return nil
-	}
-	switch v := data.(type) {
-	case map[string]interface{}:
-		for key, val := range v {
-			v[key] = preserveTraefikValues(val)
-		}
-		return v
-	case []interface{}:
-		for i, item := range v {
-			v[i] = preserveTraefikValues(item)
-		}
-		return v
-	default:
-		return v // Primitives (string, int, bool, float64) are returned as is.
-	}
+    specialFields := []string{
+        "key", "token", "secret", "apiKey", "Key", "Token", "Secret", "Password", "Pass", "User", "Users",
+        "regex", "replacement", "Regex", "Path", "path", "scheme", "url", "address",
+        "prefix", "prefixes", "expression", "rule", "certResolver", "address", "authResponseHeaders",
+        "customRequestHeaders", "customResponseHeaders", "customFrameOptionsValue", "contentSecurityPolicy",
+        "referrerPolicy", "permissionsPolicy", "stsSeconds", "excludedIPs", "sourceRange",
+        "query", "service", "fallback", "flushInterval", "interval", "timeout",
+    }
+    for _, field := range specialFields {
+        if strings.EqualFold(fieldName, field) || strings.Contains(strings.ToLower(fieldName), strings.ToLower(field)) {
+            return true
+        }
+    }
+    return false
 }
