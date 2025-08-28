@@ -95,7 +95,7 @@ func (f *PangolinFetcher) FetchResources(ctx context.Context) (*models.ResourceC
             Status:         "active",
             SourceType:     string(models.PangolinAPI),
             Entrypoints:    strings.Join(router.EntryPoints, ","),
-            RouterPriority: 100, // Default
+            RouterPriority: 200, // Default
         }
         
         resources.Resources = append(resources.Resources, resource)

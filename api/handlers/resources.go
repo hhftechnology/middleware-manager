@@ -55,7 +55,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		}
 		
 		// Use default priority if null
-		priority := 100 // Default value
+		priority := 200 // Default value
 		if routerPriority.Valid {
 			priority = int(routerPriority.Int64)
 		}
@@ -133,7 +133,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
     }
     
     // Use default priority if null
-    priority := 100 // Default value
+    priority := 200 // Default value
     if routerPriority.Valid {
         priority = int(routerPriority.Int64)
     }
@@ -268,9 +268,9 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 		return
 	}
 
-	// Default priority is 100 if not specified
+	// Default priority is 200 if not specified
 	if input.Priority <= 0 {
-		input.Priority = 100
+		input.Priority = 200
 	}
 
 	// Verify resource exists
@@ -428,9 +428,9 @@ func (h *ResourceHandler) AssignMultipleMiddlewares(c *gin.Context) {
     log.Printf("Assigning %d middlewares to resource %s", len(input.Middlewares), resourceID)
     
     for _, mw := range input.Middlewares {
-        // Default priority is 100 if not specified
+        // Default priority is 200 if not specified
         if mw.Priority <= 0 {
-            mw.Priority = 100
+            mw.Priority = 200
         }
 
         // Verify middleware exists

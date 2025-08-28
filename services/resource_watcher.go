@@ -333,7 +333,7 @@ func (rw *ResourceWatcher) createNewResource(resource models.Resource, normalize
     
     // Use default router priority if not set
     if resource.RouterPriority == 0 {
-        resource.RouterPriority = 100 // Default priority
+        resource.RouterPriority = 200 // Default priority
     }
     
     // Use a transaction for the insert

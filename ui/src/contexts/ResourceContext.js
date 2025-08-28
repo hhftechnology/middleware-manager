@@ -92,7 +92,7 @@ export const ResourceProvider = ({ children }) => {
    * @param {number} priority - Priority level
    * @returns {Promise<boolean>} - Success status
    */
-  const assignMiddleware = useCallback(async (resourceId, middlewareId, priority = 100) => {
+  const assignMiddleware = useCallback(async (resourceId, middlewareId, priority = 200) => {
     try {
       setLoading(true);
       setError(null);

@@ -207,7 +207,7 @@ export const MiddlewareUtils = {
         return {
           id,
           name,
-          priority: parseInt(priority, 10) || 100,
+          priority: parseInt(priority, 10) || 200,
         };
       });
   },

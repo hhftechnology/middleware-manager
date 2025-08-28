@@ -49,6 +49,17 @@ type TraefikConfig struct {
 	} `yaml:"udp,omitempty"`
 }
 
+// Add this simple helper function at the top of config_generator.go
+func shouldLog() bool {
+    logLevel := strings.ToLower(os.Getenv("LOG_LEVEL"))
+    return logLevel == "debug" || logLevel == ""  // Only log in debug mode or if not set
+}
+
+func shouldLogInfo() bool {
+    logLevel := strings.ToLower(os.Getenv("LOG_LEVEL"))
+    return logLevel == "debug" || logLevel == "info" || logLevel == ""
+}
+
 // NewConfigGenerator creates a new config generator
 func NewConfigGenerator(db *database.DB, confDir string, configManager *ConfigManager) *ConfigGenerator {
 	return &ConfigGenerator{
@@ -86,17 +97,17 @@ func (cg *ConfigGenerator) Start(interval time.Duration) {
 		log.Printf("Initial config generation failed: %v", err)
 	}
 
-	for {
-		select {
-		case <-ticker.C:
-			if err := cg.generateConfig(); err != nil {
-				log.Printf("Config generation failed: %v", err)
-			}
-		case <-cg.stopChan:
-			log.Println("Config generator stopped")
-			return
-		}
-	}
+    for {
+        select {
+        case <-ticker.C:
+            if err := cg.generateConfigWithRetry(); err != nil { // Use retry version
+                log.Printf("Config generation failed: %v", err)
+            }
+        case <-cg.stopChan:
+            log.Println("Config generator stopped")
+            return
+        }
+    }
 }
 // Add this helper function at the top of the file with other utility functions
 func normalizeServiceID(id string) string {
@@ -119,9 +130,37 @@ func (cg *ConfigGenerator) Stop() {
 	cg.isRunning = false
 }
 
+func (cg *ConfigGenerator) generateConfigWithRetry() error {
+    maxRetries := 3
+    baseDelay := 1 * time.Second
+    
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        err := cg.generateConfig()
+        if err == nil {
+            return nil
+        }
+        
+        // Check if it's a database locked error
+        if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+            if attempt < maxRetries-1 {
+                delay := baseDelay * time.Duration(1<<attempt) // Exponential backoff
+                log.Printf("⚠️  Database locked on attempt %d, retrying in %v", attempt+1, delay)
+                time.Sleep(delay)
+                continue
+            }
+        }
+        
+        return err
+    }
+    
+    return fmt.Errorf("config generation failed after %d attempts", maxRetries)
+}
+
 // generateConfig generates Traefik configuration files
 func (cg *ConfigGenerator) generateConfig() error {
-	log.Println("Generating Traefik configuration...")
+	    if shouldLog() {
+        log.Println("Generating Traefik configuration...")
+    }
 
 	config := TraefikConfig{}
 	config.HTTP.Middlewares = make(map[string]interface{})
@@ -158,17 +197,22 @@ func (cg *ConfigGenerator) generateConfig() error {
 		return fmt.Errorf("failed to marshal YAML node: %w", err)
 	}
 
-	if cg.hasConfigurationChanged(yamlData) {
-		if err := cg.writeConfigToFile(yamlData); err != nil {
-			return fmt.Errorf("failed to write config to file: %w", err)
-		}
-		log.Printf("Generated new Traefik configuration at %s", filepath.Join(cg.confDir, "resource-overrides.yml"))
-	} else {
-		log.Println("Configuration unchanged, skipping file write")
-	}
+    if cg.hasConfigurationChanged(yamlData) {
+        if err := cg.writeConfigToFile(yamlData); err != nil {
+            return fmt.Errorf("failed to write config to file: %w", err)
+        }
+        // Keep this - user wants to know when config actually changes
+        log.Printf("Generated new Traefik configuration at %s", filepath.Join(cg.confDir, "resource-overrides.yml"))
+    } else {
+        // REPLACE: log.Println("Configuration unchanged, skipping file write")  
+        if shouldLog() {
+            log.Println("Configuration unchanged, skipping file write")
+        }
+    }
 
-	return nil
+    return nil
 }
+
 
 func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
 	rows, err := cg.db.Query("SELECT id, name, type, config FROM middlewares")
@@ -177,17 +221,23 @@ func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		var id, name, typ, configStr string
-		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-			log.Printf("Failed to scan middleware: %v", err)
-			continue
-		}
-		var middlewareConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(configStr), &middlewareConfig); err != nil {
-			log.Printf("Failed to parse middleware config for %s: %v", name, err)
-			continue
-		}
+    for rows.Next() {
+        var id, name, typ, configStr string
+        if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
+            // REPLACE: log.Printf("Failed to scan middleware: %v", err)
+            if shouldLog() {
+                log.Printf("Failed to scan middleware: %v", err)
+            }
+            continue
+        }
+        var middlewareConfig map[string]interface{}
+        if err := json.Unmarshal([]byte(configStr), &middlewareConfig); err != nil {
+            // REPLACE: log.Printf("Failed to parse middleware config for %s: %v", name, err)
+            if shouldLog() {
+                log.Printf("Failed to parse middleware config for %s: %v", name, err)
+            }
+            continue
+        }
 		
 		// Use the centralized processing logic from models package
 		middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
@@ -200,23 +250,29 @@ func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
 }
 
 func (cg *ConfigGenerator) processServices(config *TraefikConfig) error {
-	rows, err := cg.db.Query("SELECT id, name, type, config FROM services")
-	if err != nil {
-		return fmt.Errorf("failed to fetch services: %w", err)
-	}
-	defer rows.Close()
+    rows, err := cg.db.Query("SELECT id, name, type, config FROM services")
+    if err != nil {
+        return fmt.Errorf("failed to fetch services: %w", err)
+    }
+    defer rows.Close()
 
-	for rows.Next() {
-		var id, name, typ, configStr string
-		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-			log.Printf("Failed to scan service row: %v", err)
-			continue
-		}
-		var serviceConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(configStr), &serviceConfig); err != nil {
-			log.Printf("Failed to parse service config for %s: %v", name, err)
-			continue
-		}
+    for rows.Next() {
+        var id, name, typ, configStr string
+        if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
+            // REPLACE: log.Printf("Failed to scan service row: %v", err)
+            if shouldLog() {
+                log.Printf("Failed to scan service row: %v", err)
+            }
+            continue
+        }
+        var serviceConfig map[string]interface{}
+        if err := json.Unmarshal([]byte(configStr), &serviceConfig); err != nil {
+            // REPLACE: log.Printf("Failed to parse service config for %s: %v", name, err)
+            if shouldLog() {
+                log.Printf("Failed to parse service config for %s: %v", name, err)
+            }
+            continue
+        }
 		
 		// Use the centralized processing logic from models package
 		serviceConfig = models.ProcessServiceConfig(typ, serviceConfig)
@@ -252,7 +308,9 @@ func extractBaseName(id string) string {
 func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) error {
     activeDSConfig, err := cg.configManager.GetActiveDataSourceConfig()
     if err != nil {
-        log.Printf("Warning: Could not get active data source config in ConfigGenerator: %v. Defaulting to Pangolin logic.", err)
+                if shouldLog() {
+            log.Printf("Warning: Could not get active data source config in ConfigGenerator: %v. Defaulting to Pangolin logic.", err)
+        }
         activeDSConfig.Type = models.PangolinAPI
     }
 
@@ -311,13 +369,13 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
             if routerPriority_db.Valid {
                 data.Info.RouterPriority = int(routerPriority_db.Int64)
             } else {
-                data.Info.RouterPriority = 100 // Default
+                data.Info.RouterPriority = 200 // Default
             }
             data.CustomServiceID = customServiceID_db
         }
 
         if middlewareID_db.Valid {
-            mwPriority := 100 
+            mwPriority := 200 
             if middlewarePriority_db.Valid {
                 mwPriority = int(middlewarePriority_db.Int64)
             }
@@ -527,7 +585,7 @@ func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
             continue
         }
 
-        priority := 100
+        priority := 200
         if routerPriority.Valid {
             priority = int(routerPriority.Int64)
         }

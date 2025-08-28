@@ -104,7 +104,7 @@ const PluginCard = ({ plugin }) => {
             <div className="flex-shrink-0 flex flex-col items-end space-y-1"> {/* Badge and Stars container */}
               {isActuallyInstalled && (
                 <span className="badge badge-success text-xs whitespace-nowrap py-0.5 px-1.5">
-                  Installed {plugin.installedVersion && `(v${plugin.installedVersion})`}
+                  Installed {plugin.installedVersion && `(${plugin.installedVersion})`}
                 </span>
               )}
               {plugin.stars !== undefined && ( // Show stars always if available, or conditionally if space is an issue
