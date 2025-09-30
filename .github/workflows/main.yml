@@ -3,9 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
-      - master
-      - dev
+      - traefik-int
     paths:
       - 'Dockerfile'
       - 'go.mod'
