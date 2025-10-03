@@ -305,6 +305,7 @@ func extractBaseName(id string) string {
 }
 
 // processResourcesWithServices processes resources with their assigned services
+// processResourcesWithServices processes resources with their assigned services
 func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) error {
     activeDSConfig, err := cg.configManager.GetActiveDataSourceConfig()
     if err != nil {
@@ -445,27 +446,22 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
             }
         }
         
-// Find the section where serviceReference is set
-var serviceReference string
-if mapValueDataEntry.CustomServiceID.Valid && mapValueDataEntry.CustomServiceID.String != "" {
-    // Extract base name without any suffixes
-    baseName := normalizeServiceID(mapValueDataEntry.CustomServiceID.String)
-    // Always add the file provider for custom services
-    serviceReference = fmt.Sprintf("%s@file", baseName)
-} else {
-    // For Docker environments when using Traefik API, prefer docker provider
-    providerSuffix := "docker"
-    
-    // If not using Traefik API as data source, use http provider
-    if activeDSConfig.Type != models.TraefikAPI {
-        providerSuffix = "http"
-    }
-    
-    // Extract base name without any suffixes
-    baseName := normalizeServiceID(info.ServiceID)
-    // Add the appropriate provider suffix
-    serviceReference = fmt.Sprintf("%s@%s", baseName, providerSuffix)
-}
+        var serviceReference string
+        if mapValueDataEntry.CustomServiceID.Valid && mapValueDataEntry.CustomServiceID.String != "" {
+            baseName := normalizeServiceID(mapValueDataEntry.CustomServiceID.String)
+            serviceReference = fmt.Sprintf("%s@file", baseName)
+        } else {
+            if strings.Contains(info.ServiceID, "@") {
+                serviceReference = info.ServiceID
+            } else {
+                providerSuffix := "docker"
+                if activeDSConfig.Type != models.TraefikAPI {
+                    providerSuffix = "http"
+                }
+                baseName := normalizeServiceID(info.ServiceID)
+                serviceReference = fmt.Sprintf("%s@%s", baseName, providerSuffix)
+            }
+        }
         
         log.Printf("Resource %s (HTTP): Router service set to %s. (SourceType: %s, ActiveDS: %s, CustomSvc: %s)",
             info.ID,
@@ -474,9 +470,13 @@ if mapValueDataEntry.CustomServiceID.Valid && mapValueDataEntry.CustomServiceID.
             activeDSConfig.Type,
             mapValueDataEntry.CustomServiceID.String)
 
-        // Make sure we don't have duplicated suffixes in router ID
         routerIDBase := extractBaseName(info.ID)
-        routerIDForTraefik := fmt.Sprintf("%s-auth", routerIDBase) 
+        var routerIDForTraefik string
+        if strings.HasSuffix(routerIDBase, "-auth") {
+            routerIDForTraefik = routerIDBase
+        } else {
+            routerIDForTraefik = fmt.Sprintf("%s-auth", routerIDBase)
+        }
         
         routerConfig := map[string]interface{}{
             "rule":        fmt.Sprintf("Host(`%s`)", info.Host),
