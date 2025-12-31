@@ -22,8 +22,32 @@ func NewMiddlewareHandler(db *sql.DB) *MiddlewareHandler {
 }
 
 // GetMiddlewares returns all middleware configurations
+// Supports pagination via ?page=N&page_size=M query parameters
 func (h *MiddlewareHandler) GetMiddlewares(c *gin.Context) {
-	rows, err := h.DB.Query("SELECT id, name, type, config FROM middlewares")
+	usePagination := IsPaginationRequested(c)
+	params := GetPaginationParams(c)
+
+	var total int
+	if usePagination {
+		err := h.DB.QueryRow("SELECT COUNT(*) FROM middlewares").Scan(&total)
+		if err != nil {
+			log.Printf("Error counting middlewares: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to count middlewares")
+			return
+		}
+	}
+
+	query := "SELECT id, name, type, config FROM middlewares ORDER BY name"
+	var rows *sql.Rows
+	var err error
+
+	if usePagination {
+		query += " LIMIT ? OFFSET ?"
+		rows, err = h.DB.Query(query, params.PageSize, params.Offset)
+	} else {
+		rows, err = h.DB.Query(query)
+	}
+
 	if err != nil {
 		log.Printf("Error fetching middlewares: %v", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch middlewares")
@@ -59,7 +83,11 @@ func (h *MiddlewareHandler) GetMiddlewares(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, middlewares)
+	if usePagination {
+		c.JSON(http.StatusOK, NewPaginatedResponse(middlewares, total, params))
+	} else {
+		c.JSON(http.StatusOK, middlewares)
+	}
 }
 
 // CreateMiddleware creates a new middleware configuration

@@ -2,13 +2,12 @@ package config
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"fmt"
 
 	"github.com/hhftechnology/middleware-manager/database"
 	"gopkg.in/yaml.v3"
@@ -56,7 +55,7 @@ func LoadDefaultTemplates(db *database.DB) error {
 	}
 	
 	// Read the templates file
-	data, err := ioutil.ReadFile(templatesFile)
+	data, err := os.ReadFile(templatesFile)
 	if err != nil {
 		return err
 	}
@@ -928,7 +927,7 @@ func SaveTemplateFile(templatesDir string) error {
 	}
 	
 	// Write to file
-	return ioutil.WriteFile(templatesFile, data, 0644)
+	return os.WriteFile(templatesFile, data, 0644)
 }
 
 // preserveStringsInYamlNode ensures that string values, especially empty strings,

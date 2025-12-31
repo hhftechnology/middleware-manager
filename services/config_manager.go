@@ -4,7 +4,6 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "io/ioutil"
     "log"
     "net/http"
     "os"
@@ -12,7 +11,7 @@ import (
     "strings"
     "sync"
     "time"
-    
+
     "github.com/hhftechnology/middleware-manager/models"
 )
 
@@ -63,7 +62,7 @@ func (cm *ConfigManager) loadConfig() error {
     }
     
     // Read config file
-    data, err := ioutil.ReadFile(cm.configPath)
+    data, err := os.ReadFile(cm.configPath)
     if err != nil {
         return fmt.Errorf("failed to read config file: %w", err)
     }
@@ -151,7 +150,7 @@ func (cm *ConfigManager) saveConfig() error {
     }
     
     // Write config file
-    if err := ioutil.WriteFile(cm.configPath, data, 0644); err != nil {
+    if err := os.WriteFile(cm.configPath, data, 0644); err != nil {
         return fmt.Errorf("failed to write config file: %w", err)
     }
     

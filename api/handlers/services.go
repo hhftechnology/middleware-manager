@@ -23,8 +23,32 @@ func NewServiceHandler(db *sql.DB) *ServiceHandler {
 }
 
 // GetServices returns all service configurations
+// Supports pagination via ?page=N&page_size=M query parameters
 func (h *ServiceHandler) GetServices(c *gin.Context) {
-	rows, err := h.DB.Query("SELECT id, name, type, config FROM services")
+	usePagination := IsPaginationRequested(c)
+	params := GetPaginationParams(c)
+
+	var total int
+	if usePagination {
+		err := h.DB.QueryRow("SELECT COUNT(*) FROM services").Scan(&total)
+		if err != nil {
+			log.Printf("Error counting services: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to count services")
+			return
+		}
+	}
+
+	query := "SELECT id, name, type, config FROM services ORDER BY name"
+	var rows *sql.Rows
+	var err error
+
+	if usePagination {
+		query += " LIMIT ? OFFSET ?"
+		rows, err = h.DB.Query(query, params.PageSize, params.Offset)
+	} else {
+		rows, err = h.DB.Query(query)
+	}
+
 	if err != nil {
 		log.Printf("Error fetching services: %v", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch services")
@@ -60,7 +84,11 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, services)
+	if usePagination {
+		c.JSON(http.StatusOK, NewPaginatedResponse(services, total, params))
+	} else {
+		c.JSON(http.StatusOK, services)
+	}
 }
 
 // CreateService creates a new service configuration

@@ -23,12 +23,11 @@ import (
 type ConfigGenerator struct {
 	db            *database.DB
 	confDir       string
-	configManager *ConfigManager // To access active data source
+	configManager *ConfigManager
 	stopChan      chan struct{}
 	isRunning     bool
 	mutex         sync.Mutex
 	lastConfig    []byte
-	// lastConfigHash string // This was commented out in your original struct, uncomment if needed
 }
 
 // TraefikConfig represents the structure of the Traefik configuration
@@ -69,7 +68,6 @@ func NewConfigGenerator(db *database.DB, confDir string, configManager *ConfigMa
 		stopChan:      make(chan struct{}),
 		isRunning:     false,
 		lastConfig:    nil,
-		// lastConfigHash: "", // ensure this matches your struct
 	}
 }
 

@@ -20,10 +20,26 @@ func NewResourceHandler(db *sql.DB) *ResourceHandler {
 }
 
 // GetResources returns all resources and their assigned middlewares
-// GetResources returns all resources and their assigned middlewares
+// Supports pagination via ?page=N&page_size=M query parameters
 func (h *ResourceHandler) GetResources(c *gin.Context) {
-	rows, err := h.DB.Query(`
-		SELECT r.id, r.host, r.service_id, r.org_id, r.site_id, r.status, 
+	// Check if pagination is requested
+	usePagination := IsPaginationRequested(c)
+	params := GetPaginationParams(c)
+
+	var total int
+	if usePagination {
+		// Get total count for pagination
+		err := h.DB.QueryRow("SELECT COUNT(*) FROM resources").Scan(&total)
+		if err != nil {
+			log.Printf("Error counting resources: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to count resources")
+			return
+		}
+	}
+
+	// Build query with optional pagination
+	query := `
+		SELECT r.id, r.host, r.service_id, r.org_id, r.site_id, r.status,
 		       r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
 		       r.custom_headers, r.router_priority, r.source_type,
 		       GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
@@ -31,7 +47,19 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
 		LEFT JOIN middlewares m ON rm.middleware_id = m.id
 		GROUP BY r.id
-	`)
+		ORDER BY r.id
+	`
+
+	var rows *sql.Rows
+	var err error
+
+	if usePagination {
+		query += " LIMIT ? OFFSET ?"
+		rows, err = h.DB.Query(query, params.PageSize, params.Offset)
+	} else {
+		rows, err = h.DB.Query(query)
+	}
+
 	if err != nil {
 		log.Printf("Error fetching resources: %v", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch resources")
@@ -45,21 +73,19 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		var tcpEnabled int
 		var routerPriority sql.NullInt64
 		var middlewares sql.NullString
-		
-		// Fixed scan operation to match the exact order and number of columns in the query
-		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status, 
-				&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule, 
-				&customHeaders, &routerPriority, &sourceType, &middlewares); err != nil {
+
+		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status,
+			&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
+			&customHeaders, &routerPriority, &sourceType, &middlewares); err != nil {
 			log.Printf("Error scanning resource row: %v", err)
 			continue
 		}
-		
-		// Use default priority if null
-		priority := 200 // Default value
+
+		priority := 200
 		if routerPriority.Valid {
 			priority = int(routerPriority.Int64)
 		}
-		
+
 		resource := map[string]interface{}{
 			"id":              id,
 			"host":            host,
@@ -74,15 +100,15 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 			"tcp_sni_rule":    tcpSNIRule,
 			"custom_headers":  customHeaders,
 			"router_priority": priority,
-			"source_type":     sourceType, // Make sure this is included in the returned resource
+			"source_type":     sourceType,
 		}
-		
+
 		if middlewares.Valid {
 			resource["middlewares"] = middlewares.String
 		} else {
 			resource["middlewares"] = ""
 		}
-		
+
 		resources = append(resources, resource)
 	}
 
@@ -92,7 +118,12 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, resources)
+	// Return paginated or regular response
+	if usePagination {
+		c.JSON(http.StatusOK, NewPaginatedResponse(resources, total, params))
+	} else {
+		c.JSON(http.StatusOK, resources)
+	}
 }
 
 // GetResource returns a specific resource

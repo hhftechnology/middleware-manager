@@ -4,12 +4,12 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "log"
     "net/http"
     "strings"
     "time"
-    
+
     "github.com/hhftechnology/middleware-manager/models"
 )
 
@@ -55,7 +55,7 @@ func (f *PangolinFetcher) FetchResources(ctx context.Context) (*models.ResourceC
     }
     
     // Process response
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }

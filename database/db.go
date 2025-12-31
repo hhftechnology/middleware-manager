@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -137,7 +136,7 @@ func runMigrations(db *sql.DB) error {
 	}
 
 	// Read migrations file
-	migrations, err := ioutil.ReadFile(migrationsFile)
+	migrations, err := os.ReadFile(migrationsFile)
 	if err != nil {
 		return fmt.Errorf("failed to read migrations file: %w", err)
 	}
@@ -194,7 +193,7 @@ func runServiceMigrations(db *DB) error {
 		}
 		
 		// Read migrations file
-		migrations, err := ioutil.ReadFile(migrationsFile)
+		migrations, err := os.ReadFile(migrationsFile)
 		if err != nil {
 			return fmt.Errorf("failed to read service migrations file: %w", err)
 		}

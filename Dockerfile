@@ -1,42 +1,19 @@
-# Build UI stage
+# Build UI stage (Vite + TypeScript + Shadcn UI)
 FROM node:18-alpine AS ui-builder
 
 WORKDIR /app
 
-# Copy package manifests first from host's ui/src
-COPY ui/src/package.json ui/src/package-lock.json* ./
+# Copy package manifests for ui
+COPY ui/package.json ui/package-lock.json* ./
 
 # Install dependencies
 RUN npm install
 
-# Create the target directories for source and public files within the container
-RUN mkdir src public
+# Copy all ui source files
+COPY ui/ ./
 
-# Copy contents of host's ui/public into container's /app/public
-COPY ui/public/ ./public/
-
-# Copy *specific* source files and directories from host's ui/src into container's /app/src
-COPY ui/src/styles ./src/styles
-COPY ui/src/components ./src/components
-COPY ui/src/contexts ./src/contexts
-COPY ui/src/services ./src/services
-COPY ui/src/App.js ./src/App.js
-COPY ui/src/index.js ./src/index.js
-
-
-# Verify structure
-RUN echo "--- Contents of /app/public ---"
-RUN ls -la public
-RUN echo "--- Contents of /app/src ---"
-RUN ls -la src
-
-# Build the UI (runs in /app, expects ./src, ./public relative to package.json)
+# Build the UI
 RUN npm run build
-
-# Verify build output
-RUN echo "--- Contents of build ---"
-RUN ls -la build/
-
 
 # Build Go stage
 FROM golang:1.19-alpine AS go-builder
@@ -69,11 +46,11 @@ WORKDIR /app
 COPY --from=go-builder /app/middleware-manager /app/middleware-manager
 
 # Copy UI build files from UI builder stage
-# The build output is in /app/build in the ui-builder stage
-COPY --from=ui-builder /app/build /app/ui/build
+COPY --from=ui-builder /app/dist /app/ui/dist
 
 # Copy configuration files
 COPY --from=go-builder /app/config/templates.yaml /app/config/templates.yaml
+COPY --from=go-builder /app/config/templates_services.yaml /app/config/templates_services.yaml
 
 # Copy database migrations file
 COPY --from=go-builder /app/database/migrations.sql /app/database/migrations.sql

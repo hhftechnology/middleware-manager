@@ -195,11 +195,11 @@ func (s *Server) setupRoutes(uiPath string) {
 				}
 	}
 
-	// Serve the React app
+	// Serve the React app (Vite build output)
 	uiPathToUse := uiPath
 	if uiPathToUse == "" {
 		// Default UI path
-		uiPathToUse = "/app/ui/build"
+		uiPathToUse = "/app/ui/dist"
 	}
 	
 	// Check if UI path exists and is a directory

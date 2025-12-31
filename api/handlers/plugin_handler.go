@@ -4,18 +4,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil" // TODO: Replace ioutil with io and os packages for Go 1.16+ (Standard library evolution)
+	"io"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath" // For path cleaning
+	"path/filepath"
 	"strings"
-	"time" // Imported for backup file naming
-	"io" // For file copying
-
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3" // For YAML manipulation
+	"gopkg.in/yaml.v3"
 )
 
 // Plugin struct remains the same
@@ -65,13 +63,13 @@ func (h *PluginHandler) GetPlugins(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		LogError("fetching plugins JSON status", fmt.Errorf("received status code %d. Body: %s", resp.StatusCode, string(bodyBytes)))
 		ResponseWithError(c, http.StatusServiceUnavailable, fmt.Sprintf("Failed to fetch plugins list: External source returned status %d.", resp.StatusCode))
 		return
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		LogError("reading plugins JSON response body", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to read plugins list data from the external source.")
@@ -121,7 +119,7 @@ type InstallPluginBody struct {
 
 // readTraefikStaticConfig is a helper to read and unmarshal the static config
 func (h *PluginHandler) readTraefikStaticConfig(filePath string) (map[string]interface{}, error) {
-	yamlFile, err := ioutil.ReadFile(filePath) // TODO: Replace ioutil with os.ReadFile
+	yamlFile, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err // Error will be handled by the caller
 	}
@@ -148,7 +146,7 @@ func (h *PluginHandler) writeTraefikStaticConfig(filePath string, config map[str
 	}
 
 	tempFile := filePath + ".tmp"
-	if err := ioutil.WriteFile(tempFile, updatedYaml, 0644); err != nil { // TODO: Replace ioutil with os.WriteFile
+	if err := os.WriteFile(tempFile, updatedYaml, 0644); err != nil {
 		_ = os.Remove(tempFile)
 		return fmt.Errorf("failed to write updated Traefik configuration to a temporary file: %w", err)
 	}

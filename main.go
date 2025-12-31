@@ -234,7 +234,7 @@ func loadConfiguration(debug bool) Configuration {
 		TraefikConfDir:          getEnv("TRAEFIK_CONF_DIR", "/conf"),
 		DBPath:                  getEnv("DB_PATH", "/data/middleware.db"),
 		Port:                    getEnv("PORT", "3456"),
-		UIPath:                  getEnv("UI_PATH", "/app/ui/build"),
+		UIPath:                  getEnv("UI_PATH", "/app/ui/dist"),
 		ConfigDir:               getEnv("CONFIG_DIR", "/app/config"),
 		ActiveDataSource:        getEnv("ACTIVE_DATA_SOURCE", "pangolin"),
 		CheckInterval:           checkInterval,

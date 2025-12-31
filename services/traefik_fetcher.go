@@ -4,12 +4,12 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "log"
     "net/http"
     "strings"
     "time"
-    
+
     "github.com/hhftechnology/middleware-manager/models"
 )
 
@@ -104,7 +104,7 @@ func (f *TraefikFetcher) fetchResourcesFromURL(ctx context.Context, baseURL stri
     }
     
     // Read and parse response body
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
@@ -217,7 +217,7 @@ func (f *TraefikFetcher) fetchTLSDomains(ctx context.Context, baseURL string) (m
     }
     
     // Read and parse response body
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read TLS domains response: %w", err)
     }
@@ -278,7 +278,7 @@ func (f *TraefikFetcher) fetchTCPRouters(ctx context.Context, baseURL string) ([
     }
     
     // Read and parse response body
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read TCP routers response: %w", err)
     }

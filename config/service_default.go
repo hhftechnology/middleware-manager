@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -54,7 +53,7 @@ func LoadDefaultServiceTemplates(db *database.DB) error {
 	}
 	
 	// Read the templates file
-	data, err := ioutil.ReadFile(templatesFile)
+	data, err := os.ReadFile(templatesFile)
 	if err != nil {
 		return err
 	}
@@ -528,5 +527,5 @@ func SaveTemplateServicesFile(templatesDir string) error {
 	}
 	
 	// Write to file
-	return ioutil.WriteFile(templatesFile, data, 0644)
+	return os.WriteFile(templatesFile, data, 0644)
 }
