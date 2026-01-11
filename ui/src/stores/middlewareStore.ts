@@ -25,7 +25,7 @@ interface MiddlewareState {
   clearSelectedMiddleware: () => void
 }
 
-export const useMiddlewareStore = create<MiddlewareState>((set, get) => ({
+export const useMiddlewareStore = create<MiddlewareState>((set) => ({
   // Initial state
   middlewares: [],
   selectedMiddleware: null,

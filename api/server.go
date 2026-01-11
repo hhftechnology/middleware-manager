@@ -19,18 +19,18 @@ import (
 
 // Server represents the API server
 type Server struct {
-	db                *sql.DB
-	router            *gin.Engine
-	srv               *http.Server
-	middlewareHandler *handlers.MiddlewareHandler
-	resourceHandler   *handlers.ResourceHandler
-	configHandler     *handlers.ConfigHandler
-	dataSourceHandler *handlers.DataSourceHandler
-	serviceHandler    *handlers.ServiceHandler
-	pluginHandler     *handlers.PluginHandler // New handler
-	configManager     *services.ConfigManager
-	traefikStaticConfigPath string                 // New
-	pluginsJSONURL          string                 // New
+	db                      *sql.DB
+	router                  *gin.Engine
+	srv                     *http.Server
+	middlewareHandler       *handlers.MiddlewareHandler
+	resourceHandler         *handlers.ResourceHandler
+	configHandler           *handlers.ConfigHandler
+	dataSourceHandler       *handlers.DataSourceHandler
+	serviceHandler          *handlers.ServiceHandler
+	pluginHandler           *handlers.PluginHandler
+	traefikHandler          *handlers.TraefikHandler
+	configManager           *services.ConfigManager
+	traefikStaticConfigPath string
 }
 
 // ServerConfig contains configuration options for the server
@@ -43,7 +43,7 @@ type ServerConfig struct {
 }
 
 // NewServer creates a new API server
-func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigManager, traefikStaticConfigPath string, pluginsJSONURL string) *Server {
+func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigManager, traefikStaticConfigPath string) *Server {
 	// Set gin mode based on debug flag
 	if !config.Debug {
 		gin.SetMode(gin.ReleaseMode)
@@ -86,22 +86,24 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	configHandler := handlers.NewConfigHandler(db)
 	dataSourceHandler := handlers.NewDataSourceHandler(configManager)
 	serviceHandler := handlers.NewServiceHandler(db)
-	// Initialize PluginHandler, passing the path to traefik.yml and the plugins.json URL
-	pluginHandler := handlers.NewPluginHandler(db, traefikStaticConfigPath, pluginsJSONURL)
+	// Initialize PluginHandler with ConfigManager for Traefik API access
+	pluginHandler := handlers.NewPluginHandler(db, traefikStaticConfigPath, configManager)
+	// Initialize TraefikHandler for direct Traefik API access
+	traefikHandler := handlers.NewTraefikHandler(db, configManager)
 
 	// Setup server with all handlers
 	server := &Server{
-		db:                db,
-		router:            router,
-		middlewareHandler: middlewareHandler,
-		resourceHandler:   resourceHandler,
-		configHandler:     configHandler,
-		dataSourceHandler: dataSourceHandler,
-		serviceHandler:    serviceHandler,
-		pluginHandler:     pluginHandler, // Add to server struct
-		configManager:     configManager,
-		traefikStaticConfigPath: traefikStaticConfigPath, // Store the path
-		pluginsJSONURL:          pluginsJSONURL,          // Store the URL
+		db:                      db,
+		router:                  router,
+		middlewareHandler:       middlewareHandler,
+		resourceHandler:         resourceHandler,
+		configHandler:           configHandler,
+		dataSourceHandler:       dataSourceHandler,
+		serviceHandler:          serviceHandler,
+		pluginHandler:           pluginHandler,
+		traefikHandler:          traefikHandler,
+		configManager:           configManager,
+		traefikStaticConfigPath: traefikStaticConfigPath,
 		srv: &http.Server{
 			Addr:              ":" + config.Port,
 			Handler:           router,
@@ -183,16 +185,29 @@ func (s *Server) setupRoutes(uiPath string) {
 			datasource.POST("/:name/test", s.dataSourceHandler.TestDataSourceConnection)
 		}
 
-		// Plugin Hub Routes
+		// Plugin Hub Routes - fetches plugins from Traefik API
 		pluginsGroup := api.Group("/plugins")
-				{
-					pluginsGroup.GET("", s.pluginHandler.GetPlugins) // Endpoint to list plugins
-					pluginsGroup.POST("/install", s.pluginHandler.InstallPlugin) // Endpoint to install a plugin
-					pluginsGroup.DELETE("/remove", s.pluginHandler.RemovePlugin) // New Remove Endpoint
-					pluginsGroup.GET("/configpath", s.pluginHandler.GetTraefikStaticConfigPath) // Endpoint to get current path
-					pluginsGroup.PUT("/configpath", s.pluginHandler.UpdateTraefikStaticConfigPath) // Endpoint to update path
-		
-				}
+		{
+			pluginsGroup.GET("", s.pluginHandler.GetPlugins)
+			pluginsGroup.GET("/:name/usage", s.pluginHandler.GetPluginUsage)
+			pluginsGroup.POST("/install", s.pluginHandler.InstallPlugin)
+			pluginsGroup.DELETE("/remove", s.pluginHandler.RemovePlugin)
+			pluginsGroup.GET("/configpath", s.pluginHandler.GetTraefikStaticConfigPath)
+			pluginsGroup.PUT("/configpath", s.pluginHandler.UpdateTraefikStaticConfigPath)
+		}
+
+		// Traefik API Routes - direct access to Traefik data
+		// Following Mantrae pattern for comprehensive Traefik API access
+		traefik := api.Group("/traefik")
+		{
+			traefik.GET("/overview", s.traefikHandler.GetOverview)
+			traefik.GET("/version", s.traefikHandler.GetVersion)
+			traefik.GET("/entrypoints", s.traefikHandler.GetEntrypoints)
+			traefik.GET("/routers", s.traefikHandler.GetRouters)
+			traefik.GET("/services", s.traefikHandler.GetServices)
+			traefik.GET("/middlewares", s.traefikHandler.GetMiddlewares)
+			traefik.GET("/data", s.traefikHandler.GetFullData)
+		}
 	}
 
 	// Serve the React app (Vite build output)

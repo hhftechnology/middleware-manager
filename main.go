@@ -18,21 +18,6 @@ import (
 	"github.com/hhftechnology/middleware-manager/services"
 )
 
-// Plugin represents the structure of a plugin in the JSON file
-type Plugin struct {
-	DisplayName string `json:"displayName"`
-	Type        string `json:"type"`
-	IconPath    string `json:"iconPath"`
-	Import      string `json:"import"`
-	Summary     string `json:"summary"`
-	Author      string `json:"author,omitempty"`
-	Version     string `json:"version,omitempty"`
-	TestedWith  string `json:"tested_with,omitempty"`
-	Stars       int    `json:"stars,omitempty"`
-	Homepage    string `json:"homepage,omitempty"`
-	Docs        string `json:"docs,omitempty"`
-}
-
 // Configuration represents the application configuration
 type Configuration struct {
 	PangolinAPIURL          string
@@ -50,7 +35,6 @@ type Configuration struct {
 	CORSOrigin              string
 	ActiveDataSource        string
 	TraefikStaticConfigPath string
-	PluginsJSONURL          string
 }
 
 // DiscoverTraefikAPI attempts to discover the Traefik API by trying common URLs
@@ -161,7 +145,7 @@ func main() {
         CORSOrigin: cfg.CORSOrigin,
     }
 
-    server := api.NewServer(db.DB, serverConfig, configManager, cfg.TraefikStaticConfigPath, cfg.PluginsJSONURL)
+    server := api.NewServer(db.DB, serverConfig, configManager, cfg.TraefikStaticConfigPath)
     go func() {
         if err := server.Start(); err != nil {
             log.Printf("Server error: %v", err)
@@ -244,7 +228,6 @@ func loadConfiguration(debug bool) Configuration {
 		AllowCORS:               allowCORS,
 		CORSOrigin:              getEnv("CORS_ORIGIN", ""),
 		TraefikStaticConfigPath: getEnv("TRAEFIK_STATIC_CONFIG_PATH", "/etc/traefik/traefik.yml"),
-		PluginsJSONURL:          getEnv("PLUGINS_JSON_URL", "https://raw.githubusercontent.com/hhftechnology/middleware-manager/traefik-int/plugin/plugins.json"),
 	}
 }
 

@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useAppStore } from '@/stores/appStore'
 import { Header } from '@/components/common/Header'
 import { Dashboard } from '@/components/dashboard/Dashboard'
@@ -10,18 +9,12 @@ import { ServicesList } from '@/components/services/ServicesList'
 import { ServiceForm } from '@/components/services/ServiceForm'
 import { PluginHub } from '@/components/plugins/PluginHub'
 import { DataSourceSettings } from '@/components/settings/DataSourceSettings'
+import { ThemeProvider } from '@/components/theme-provider'
+import { ErrorBoundary } from '@/components/error-boundary'
+import { Toaster, TooltipProvider } from '@/components/ui'
 
-function App() {
-  const { page, isDarkMode, showSettings } = useAppStore()
-
-  // Apply dark mode class to document
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }, [isDarkMode])
+function AppContent() {
+  const { page, showSettings } = useAppStore()
 
   const renderPage = () => {
     switch (page) {
@@ -50,10 +43,23 @@ function App() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-6">
-        {renderPage()}
+        <ErrorBoundary>
+          {renderPage()}
+        </ErrorBoundary>
       </main>
       {showSettings && <DataSourceSettings />}
+      <Toaster />
     </div>
+  )
+}
+
+function App() {
+  return (
+    <ThemeProvider defaultTheme="system" storageKey="middleware-manager-theme">
+      <TooltipProvider>
+        <AppContent />
+      </TooltipProvider>
+    </ThemeProvider>
   )
 }
 

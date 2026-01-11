@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { DarkModeToggle } from './DarkModeToggle'
+import { ThemeToggle } from '@/components/theme-toggle'
 import {
   LayoutDashboard,
   Globe,
@@ -75,7 +75,7 @@ export function Header() {
 
         {/* Right side actions */}
         <div className="flex items-center space-x-2">
-          <DarkModeToggle />
+          <ThemeToggle />
 
           <Button
             variant="ghost"

@@ -30,7 +30,6 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  Save,
   Server,
   Layers,
   Settings,
@@ -48,11 +47,6 @@ export function ResourceDetail() {
     removeMiddleware,
     assignService,
     removeService,
-    updateHTTPConfig,
-    updateTLSConfig,
-    updateTCPConfig,
-    updateHeadersConfig,
-    updateRouterPriority,
     clearError,
   } = useResourceStore()
 

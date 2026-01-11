@@ -16,28 +16,31 @@ COPY ui/ ./
 RUN npm run build
 
 # Build Go stage
-FROM golang:1.19-alpine AS go-builder
+FROM golang:1.21-alpine AS go-builder
 
-# Install build dependencies for Go
+# Install build dependencies for Go with CGO
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /app
 
-# Copy go.mod and go.sum files
+# Copy go.mod and go.sum files first for better layer caching
 COPY go.mod go.sum ./
 
-# Download Go dependencies
+# Download Go dependencies (this layer is cached if go.mod/go.sum don't change)
 RUN go mod download
 
 # Copy the Go source code
 COPY . .
 
-# Build the Go application
-RUN CGO_ENABLED=1 GOOS=linux go build -o middleware-manager .
+# Ensure go.sum is up to date and build the application
+# Using CGO for SQLite support
+RUN go mod tidy && \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o middleware-manager .
 
-# Final stage
-FROM alpine:3.16
+# Final stage - minimal runtime image
+FROM alpine:3.18
 
+# Install runtime dependencies
 RUN apk add --no-cache ca-certificates sqlite curl tzdata
 
 WORKDIR /app
@@ -68,6 +71,10 @@ ENV PANGOLIN_API_URL=http://pangolin:3001/api/v1 \
 
 # Expose the port
 EXPOSE 3456
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3456/health || exit 1
 
 # Run the application
 CMD ["/app/middleware-manager"]

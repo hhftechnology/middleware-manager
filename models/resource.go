@@ -48,8 +48,9 @@ type PangolinResource struct {
 // PangolinTraefikConfig represents the Traefik configuration from Pangolin API
 type PangolinTraefikConfig struct {
 	HTTP struct {
-		Routers  map[string]PangolinRouter  `json:"routers"`
-		Services map[string]PangolinService `json:"services"`
+		Routers     map[string]PangolinRouter         `json:"routers"`
+		Services    map[string]PangolinService        `json:"services"`
+		Middlewares map[string]map[string]interface{} `json:"middlewares"`
 	} `json:"http"`
 }
 

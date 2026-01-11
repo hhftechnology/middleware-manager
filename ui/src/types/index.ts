@@ -48,11 +48,35 @@ export { DATA_SOURCE_TYPE_LABELS } from './datasource'
 // Plugin types
 export type {
   Plugin,
+  PluginUsage,
   PluginInstallRequest,
   PluginRemoveRequest,
   PluginConfigPathResponse,
   PluginConfigPathRequest,
 } from './plugin'
+
+// Traefik API types
+export type {
+  TraefikOverview,
+  TraefikVersion,
+  TraefikFeatures,
+  TraefikEntrypoint,
+  ProtocolOverview,
+  StatusCount,
+  HTTPRouter,
+  TCPRouter,
+  UDPRouter,
+  HTTPService,
+  TCPService,
+  UDPService,
+  HTTPMiddleware,
+  TCPMiddleware,
+  FullTraefikData,
+  AllRoutersResponse,
+  AllServicesResponse,
+  AllMiddlewaresResponse,
+  ProtocolType,
+} from './traefik'
 
 // Common types
 export interface ApiError {

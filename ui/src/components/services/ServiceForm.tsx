@@ -77,10 +77,10 @@ export function ServiceForm() {
     }
   }, [selectedService, isEditing])
 
-  const handleTypeChange = (newType: ServiceType) => {
-    setType(newType)
+  const handleTypeChange = (newType: string) => {
+    setType(newType as ServiceType)
     if (!isEditing) {
-      setConfigJson(JSON.stringify(DEFAULT_CONFIGS[newType], null, 2))
+      setConfigJson(JSON.stringify(DEFAULT_CONFIGS[newType as ServiceType], null, 2))
     }
   }
 

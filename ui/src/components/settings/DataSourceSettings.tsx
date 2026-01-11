@@ -39,7 +39,6 @@ export function DataSourceSettings() {
     setActiveDataSource,
     updateDataSource,
     testConnection,
-    clearError,
     clearTestResult,
   } = useDataSourceStore()
 

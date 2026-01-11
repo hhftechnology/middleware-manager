@@ -25,7 +25,7 @@ interface ServiceState {
   clearSelectedService: () => void
 }
 
-export const useServiceStore = create<ServiceState>((set, get) => ({
+export const useServiceStore = create<ServiceState>((set) => ({
   // Initial state
   services: [],
   selectedService: null,
