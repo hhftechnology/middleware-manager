@@ -53,6 +53,7 @@ export type {
   PluginRemoveRequest,
   PluginConfigPathResponse,
   PluginConfigPathRequest,
+  CataloguePlugin,
 } from './plugin'
 
 // Traefik API types

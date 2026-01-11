@@ -189,6 +189,7 @@ func (s *Server) setupRoutes(uiPath string) {
 		pluginsGroup := api.Group("/plugins")
 		{
 			pluginsGroup.GET("", s.pluginHandler.GetPlugins)
+			pluginsGroup.GET("/catalogue", s.pluginHandler.GetPluginCatalogue) // Fetch from plugins.traefik.io
 			pluginsGroup.GET("/:name/usage", s.pluginHandler.GetPluginUsage)
 			pluginsGroup.POST("/install", s.pluginHandler.InstallPlugin)
 			pluginsGroup.DELETE("/remove", s.pluginHandler.RemovePlugin)

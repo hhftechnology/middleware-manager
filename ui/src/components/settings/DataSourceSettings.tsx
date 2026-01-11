@@ -131,7 +131,7 @@ export function DataSourceSettings() {
                 </Alert>
               )}
 
-              {dataSources.map((source) => (
+              {(Array.isArray(dataSources) ? dataSources : []).map((source) => (
                 <div
                   key={source.name}
                   className="border rounded-lg p-4 space-y-3"

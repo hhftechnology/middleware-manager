@@ -539,3 +539,50 @@ func copyFile(src, dst string) error {
 func LogInfo(message string) {
 	log.Println("INFO:", message)
 }
+
+// GetPluginCatalogue fetches the full plugin catalogue from plugins.traefik.io
+func (h *PluginHandler) GetPluginCatalogue(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+
+	plugins, err := services.FetchPluginCatalogue(ctx)
+	if err != nil {
+		log.Printf("Error fetching plugin catalogue: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch plugin catalogue: %v", err))
+		return
+	}
+
+	// Also get installed plugins to mark them
+	installedPlugins, _ := h.getLocalInstalledPlugins()
+
+	// Mark installed plugins in the catalogue
+	result := make([]map[string]interface{}, len(plugins))
+	for i, plugin := range plugins {
+		entry := map[string]interface{}{
+			"id":            plugin.ID,
+			"name":          plugin.Name,
+			"displayName":   plugin.DisplayName,
+			"author":        plugin.Author,
+			"type":          plugin.Type,
+			"import":        plugin.Import,
+			"summary":       plugin.Summary,
+			"iconUrl":       plugin.IconURL,
+			"bannerUrl":     plugin.BannerURL,
+			"latestVersion": plugin.LatestVersion,
+			"versions":      plugin.Versions,
+			"stars":         plugin.Stars,
+			"snippet":       plugin.Snippet,
+			"isInstalled":   false,
+		}
+
+		// Check if plugin is installed by looking up the module name in local plugins
+		pluginKey := getPluginKey(plugin.Import)
+		if _, installed := installedPlugins[pluginKey]; installed {
+			entry["isInstalled"] = true
+		}
+
+		result[i] = entry
+	}
+
+	c.JSON(http.StatusOK, result)
+}

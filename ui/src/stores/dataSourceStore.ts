@@ -40,12 +40,15 @@ export const useDataSourceStore = create<DataSourceState>((set) => ({
   fetchDataSources: async () => {
     set({ loading: true, error: null })
     try {
-      const dataSources = await dataSourceApi.getAll()
+      const result = await dataSourceApi.getAll()
+      // Ensure we always have an array
+      const dataSources = Array.isArray(result) ? result : []
       set({ dataSources, loading: false })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load data sources',
         loading: false,
+        dataSources: [], // Reset to empty array on error
       })
     }
   },

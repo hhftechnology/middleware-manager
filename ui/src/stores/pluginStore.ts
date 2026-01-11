@@ -1,15 +1,18 @@
 import { create } from 'zustand'
 import { pluginApi } from '@/services/api'
-import type { Plugin, PluginUsage } from '@/types'
+import type { Plugin, PluginUsage, CataloguePlugin } from '@/types'
 
 interface PluginState {
   // Data
   plugins: Plugin[]
+  cataloguePlugins: CataloguePlugin[]
   configPath: string
   selectedPlugin: Plugin | null
+  selectedCataloguePlugin: CataloguePlugin | null
 
   // Loading states
   loading: boolean
+  loadingCatalogue: boolean
   installing: boolean
   removing: boolean
 
@@ -18,21 +21,26 @@ interface PluginState {
 
   // Actions
   fetchPlugins: () => Promise<void>
+  fetchCatalogue: () => Promise<void>
   fetchConfigPath: () => Promise<void>
   fetchPluginUsage: (name: string) => Promise<PluginUsage | null>
   installPlugin: (moduleName: string, version?: string) => Promise<boolean>
   removePlugin: (moduleName: string) => Promise<boolean>
   updateConfigPath: (path: string) => Promise<boolean>
   selectPlugin: (plugin: Plugin | null) => void
+  selectCataloguePlugin: (plugin: CataloguePlugin | null) => void
   clearError: () => void
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
   // Initial state
   plugins: [],
+  cataloguePlugins: [],
   configPath: '/etc/traefik/traefik.yml',
   selectedPlugin: null,
+  selectedCataloguePlugin: null,
   loading: false,
+  loadingCatalogue: false,
   installing: false,
   removing: false,
   error: null,
@@ -47,6 +55,20 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       set({
         error: err instanceof Error ? err.message : 'Failed to load plugins from Traefik API',
         loading: false,
+      })
+    }
+  },
+
+  // Fetch plugin catalogue from plugins.traefik.io
+  fetchCatalogue: async () => {
+    set({ loadingCatalogue: true, error: null })
+    try {
+      const cataloguePlugins = await pluginApi.getCatalogue()
+      set({ cataloguePlugins: Array.isArray(cataloguePlugins) ? cataloguePlugins : [], loadingCatalogue: false })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to load plugin catalogue from plugins.traefik.io',
+        loadingCatalogue: false,
       })
     }
   },
@@ -148,6 +170,11 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   // Select a plugin for viewing details
   selectPlugin: (plugin) => {
     set({ selectedPlugin: plugin })
+  },
+
+  // Select a catalogue plugin for viewing details
+  selectCataloguePlugin: (plugin) => {
+    set({ selectedCataloguePlugin: plugin })
   },
 
   // Clear error

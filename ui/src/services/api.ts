@@ -5,6 +5,7 @@ import type {
   DataSourceConfig,
   DataSourceInfo,
   Plugin,
+  CataloguePlugin,
   CreateMiddlewareRequest,
   UpdateMiddlewareRequest,
   CreateServiceRequest,
@@ -217,9 +218,27 @@ export const serviceApi = {
     }),
 }
 
+// Data Source API response types (backend format)
+interface DataSourcesResponse {
+  active_source: string
+  sources: Record<string, { type: string; url: string; basicAuth?: { username: string; password: string } }>
+}
+
 // Data Source API
 export const dataSourceApi = {
-  getAll: () => request<DataSourceInfo[]>(`${API_BASE}/datasource`),
+  getAll: async (): Promise<DataSourceInfo[]> => {
+    const response = await request<DataSourcesResponse>(`${API_BASE}/datasource`)
+    // Transform backend response to array format
+    if (!response.sources) {
+      return []
+    }
+    return Object.entries(response.sources).map(([name, config]) => ({
+      name,
+      type: config.type as DataSourceInfo['type'],
+      url: config.url,
+      isActive: name === response.active_source,
+    }))
+  },
 
   getActive: () => request<DataSourceConfig>(`${API_BASE}/datasource/active`),
 
@@ -244,6 +263,9 @@ export const dataSourceApi = {
 // Plugin API - fetches plugins from Traefik API
 export const pluginApi = {
   getAll: () => request<Plugin[]>(`${API_BASE}/plugins`),
+
+  // Fetch the full plugin catalogue from plugins.traefik.io
+  getCatalogue: () => request<CataloguePlugin[]>(`${API_BASE}/plugins/catalogue`),
 
   getUsage: (name: string) =>
     request<{ name: string; usageCount: number; usedBy: string[]; status: string }>(

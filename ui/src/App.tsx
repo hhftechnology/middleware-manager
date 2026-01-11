@@ -1,5 +1,6 @@
 import { useAppStore } from '@/stores/appStore'
 import { Header } from '@/components/common/Header'
+import { Footer } from '@/components/common/Footer'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { ResourcesList } from '@/components/resources/ResourcesList'
 import { ResourceDetail } from '@/components/resources/ResourceDetail'
@@ -40,13 +41,14 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-6 flex-1">
         <ErrorBoundary>
           {renderPage()}
         </ErrorBoundary>
       </main>
+      <Footer />
       {showSettings && <DataSourceSettings />}
       <Toaster />
     </div>

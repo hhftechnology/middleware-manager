@@ -1,4 +1,5 @@
 export { Header } from './Header'
+export { Footer } from './Footer'
 export { DarkModeToggle } from './DarkModeToggle'
 export { ErrorMessage, InlineError } from './ErrorMessage'
 export { ConfirmationModal, useConfirmation } from './ConfirmationModal'

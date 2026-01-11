@@ -33,6 +33,7 @@ import {
   Server,
   Layers,
   Settings,
+  Pencil,
 } from 'lucide-react'
 import { parseJSON } from '@/lib/utils'
 
@@ -233,13 +234,24 @@ export function ResourceDetail() {
                   <p className="font-medium">{selectedResource.service_id}</p>
                   <p className="text-sm text-muted-foreground">Currently assigned</p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRemoveService}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigateTo('service-form', selectedResource.service_id)}
+                    title="Edit service"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveService}
+                    title="Remove service"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="flex gap-2">

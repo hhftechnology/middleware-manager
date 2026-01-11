@@ -63,3 +63,25 @@ export interface PluginConfigPathResponse {
 export interface PluginConfigPathRequest {
   path: string
 }
+
+// CataloguePlugin represents a plugin from the Traefik plugin catalogue (plugins.traefik.io)
+export interface CataloguePlugin {
+  id: string
+  name: string
+  displayName: string
+  author: string
+  type: string
+  import: string
+  summary: string
+  iconUrl?: string
+  bannerUrl?: string
+  latestVersion: string
+  versions?: string[]
+  stars: number
+  snippet?: {
+    yaml?: string
+    toml?: string
+    kubernetes?: string
+  }
+  isInstalled: boolean
+}

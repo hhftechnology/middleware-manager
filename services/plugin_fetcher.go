@@ -357,3 +357,104 @@ func (f *PluginFetcher) InvalidateCache() {
 	f.cachedPlugins = nil
 	f.cachedPluginsMu.Unlock()
 }
+
+// CataloguePlugin represents a plugin from the Traefik plugin catalogue
+type CataloguePlugin struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	DisplayName  string   `json:"displayName"`
+	Author       string   `json:"author"`
+	Type         string   `json:"type"`
+	Import       string   `json:"import"`
+	Summary      string   `json:"summary"`
+	IconURL      string   `json:"iconUrl,omitempty"`
+	BannerURL    string   `json:"bannerUrl,omitempty"`
+	Readme       string   `json:"readme,omitempty"`
+	LatestVersion string  `json:"latestVersion"`
+	Versions     []string `json:"versions,omitempty"`
+	Stars        int      `json:"stars"`
+	Snippet      struct {
+		YAML       string `json:"yaml,omitempty"`
+		TOML       string `json:"toml,omitempty"`
+		Kubernetes string `json:"kubernetes,omitempty"`
+	} `json:"snippet,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+}
+
+// CatalogueResponse represents the response from plugins.traefik.io
+type CatalogueResponse struct {
+	Plugins []CataloguePlugin `json:"plugins"`
+}
+
+// FetchPluginCatalogue fetches the full plugin catalogue from plugins.traefik.io
+func FetchPluginCatalogue(ctx context.Context) ([]CataloguePlugin, error) {
+	client := GetHTTPClient()
+
+	// Fetch the plugins page which contains embedded JSON data
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://plugins.traefik.io/plugins", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "MiddlewareManager/1.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch plugin catalogue: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("plugin catalogue returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024)) // 50MB limit for full page
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Parse the __NEXT_DATA__ JSON from the HTML
+	plugins, err := parseNextDataPlugins(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse plugin data: %w", err)
+	}
+
+	log.Printf("Fetched %d plugins from Traefik plugin catalogue", len(plugins))
+	return plugins, nil
+}
+
+// parseNextDataPlugins extracts plugin data from Next.js __NEXT_DATA__ script tag
+func parseNextDataPlugins(html string) ([]CataloguePlugin, error) {
+	// Find the __NEXT_DATA__ script tag
+	startMarker := `<script id="__NEXT_DATA__" type="application/json">`
+	endMarker := `</script>`
+
+	startIdx := strings.Index(html, startMarker)
+	if startIdx == -1 {
+		return nil, fmt.Errorf("__NEXT_DATA__ script not found")
+	}
+	startIdx += len(startMarker)
+
+	endIdx := strings.Index(html[startIdx:], endMarker)
+	if endIdx == -1 {
+		return nil, fmt.Errorf("__NEXT_DATA__ script end not found")
+	}
+
+	jsonData := html[startIdx : startIdx+endIdx]
+
+	// Parse the JSON structure
+	var nextData struct {
+		Props struct {
+			PageProps struct {
+				Plugins []CataloguePlugin `json:"plugins"`
+			} `json:"pageProps"`
+		} `json:"props"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonData), &nextData); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return nextData.Props.PageProps.Plugins, nil
+}
