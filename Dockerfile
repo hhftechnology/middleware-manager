@@ -15,11 +15,14 @@ COPY ui/ ./
 # Build the UI
 RUN npm run build
 
-# Build Go stage
-FROM golang:1.21-alpine AS go-builder
+# Build Go stage - using Debian for glibc compatibility with go-sqlite3
+FROM golang:1.21-bookworm AS go-builder
 
-# Install build dependencies for Go with CGO
-RUN apk add --no-cache gcc musl-dev
+# Install build dependencies for Go with CGO and static linking
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -33,9 +36,11 @@ RUN go mod download
 COPY . .
 
 # Ensure go.sum is up to date and build the application
-# Using CGO for SQLite support
+# Using CGO for SQLite support with static linking for Alpine compatibility
+# The -extldflags '-static' creates a statically linked binary
 RUN go mod tidy && \
-    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o middleware-manager .
+    CGO_ENABLED=1 GOOS=linux \
+    go build -ldflags="-s -w -extldflags '-static'" -o middleware-manager .
 
 # Final stage - minimal runtime image
 FROM alpine:3.18
