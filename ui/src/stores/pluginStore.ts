@@ -19,6 +19,10 @@ interface PluginState {
   // Error state
   error: string | null
 
+  // Restart warning state
+  showRestartWarning: boolean
+  lastInstalledPlugin: string | null
+
   // Actions
   fetchPlugins: () => Promise<void>
   fetchCatalogue: () => Promise<void>
@@ -30,6 +34,7 @@ interface PluginState {
   selectPlugin: (plugin: Plugin | null) => void
   selectCataloguePlugin: (plugin: CataloguePlugin | null) => void
   clearError: () => void
+  dismissRestartWarning: () => void
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
@@ -44,6 +49,8 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   installing: false,
   removing: false,
   error: null,
+  showRestartWarning: false,
+  lastInstalledPlugin: null,
 
   // Fetch all plugins from Traefik API
   fetchPlugins: async () => {
@@ -108,6 +115,9 @@ export const usePluginStore = create<PluginState>((set, get) => ({
             : p
         ),
         installing: false,
+        // Show restart warning after successful installation
+        showRestartWarning: true,
+        lastInstalledPlugin: response.pluginKey || moduleName,
       }))
 
       // Refresh plugins list to get latest state
@@ -179,4 +189,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
 
   // Clear error
   clearError: () => set({ error: null }),
+
+  // Dismiss restart warning
+  dismissRestartWarning: () => set({ showRestartWarning: false, lastInstalledPlugin: null }),
 }))

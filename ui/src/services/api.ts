@@ -166,7 +166,7 @@ export const resourceApi = {
   updateRouterPriority: (resourceId: string, priority: number) =>
     request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/priority`, {
       method: 'PUT',
-      body: JSON.stringify({ priority }),
+      body: JSON.stringify({ router_priority: priority }),
     }),
 }
 

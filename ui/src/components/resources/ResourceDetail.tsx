@@ -34,6 +34,9 @@ import {
   Layers,
   Settings,
   Pencil,
+  Save,
+  X,
+  Loader2,
 } from 'lucide-react'
 import { parseJSON } from '@/lib/utils'
 
@@ -48,6 +51,10 @@ export function ResourceDetail() {
     removeMiddleware,
     assignService,
     removeService,
+    updateHTTPConfig,
+    updateTLSConfig,
+    updateTCPConfig,
+    updateRouterPriority,
     clearError,
   } = useResourceStore()
 
@@ -58,6 +65,15 @@ export function ResourceDetail() {
   const [middlewarePriority, setMiddlewarePriority] = useState('100')
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [removeMiddlewareModal, setRemoveMiddlewareModal] = useState<string | null>(null)
+
+  // Configuration editing state
+  const [isEditingConfig, setIsEditingConfig] = useState(false)
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [editEntrypoints, setEditEntrypoints] = useState('')
+  const [editPriority, setEditPriority] = useState('')
+  const [editTlsDomains, setEditTlsDomains] = useState('')
+  const [editTcpEntrypoints, setEditTcpEntrypoints] = useState('')
+  const [editTcpSniRule, setEditTcpSniRule] = useState('')
 
   useEffect(() => {
     if (resourceId) {
@@ -86,8 +102,16 @@ export function ResourceDetail() {
     )
   }
 
+  // Parse middleware assignments from the format "id:name:priority,id:name:priority,..."
   const assignedMiddlewares = selectedResource.middlewares
-    ? selectedResource.middlewares.split(',').filter(Boolean)
+    ? selectedResource.middlewares.split(',').filter(Boolean).map(mwStr => {
+        const parts = mwStr.split(':')
+        return {
+          id: parts[0] || '',
+          name: parts[1] || 'Unknown',
+          priority: parseInt(parts[2], 10) || 100,
+        }
+      }).sort((a, b) => b.priority - a.priority) // Sort by priority descending (higher priority first)
     : []
 
   const customHeaders = parseJSON<Record<string, string>>(
@@ -125,9 +149,59 @@ export function ResourceDetail() {
     }
   }
 
+  const assignedMiddlewareIds = assignedMiddlewares.map(m => m.id)
   const availableMiddlewares = middlewares.filter(
-    (m) => !assignedMiddlewares.includes(m.id)
+    (m) => !assignedMiddlewareIds.includes(m.id)
   )
+
+  // Start editing configuration
+  const handleStartEditConfig = () => {
+    if (selectedResource) {
+      setEditEntrypoints(selectedResource.entrypoints || 'websecure')
+      setEditPriority(String(selectedResource.router_priority || 200))
+      setEditTlsDomains(selectedResource.tls_domains || '')
+      setEditTcpEntrypoints(selectedResource.tcp_entrypoints || '')
+      setEditTcpSniRule(selectedResource.tcp_sni_rule || '')
+      setIsEditingConfig(true)
+    }
+  }
+
+  // Cancel editing
+  const handleCancelEditConfig = () => {
+    setIsEditingConfig(false)
+  }
+
+  // Save configuration changes
+  const handleSaveConfig = async () => {
+    if (!resourceId) return
+
+    setSavingConfig(true)
+    try {
+      // Update HTTP config (entrypoints)
+      await updateHTTPConfig(resourceId, { entrypoints: editEntrypoints })
+
+      // Update router priority
+      const newPriority = parseInt(editPriority, 10) || 200
+      await updateRouterPriority(resourceId, newPriority)
+
+      // Update TLS config
+      if (editTlsDomains !== selectedResource?.tls_domains) {
+        await updateTLSConfig(resourceId, { tls_domains: editTlsDomains })
+      }
+
+      // Update TCP config if TCP is enabled
+      if (selectedResource?.tcp_enabled) {
+        await updateTCPConfig(resourceId, {
+          tcp_entrypoints: editTcpEntrypoints,
+          tcp_sni_rule: editTcpSniRule,
+        })
+      }
+
+      setIsEditingConfig(false)
+    } finally {
+      setSavingConfig(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -168,50 +242,149 @@ export function ResourceDetail() {
         {/* Configuration Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Configuration
-            </CardTitle>
-            <CardDescription>
-              Router settings and entrypoints
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Configuration
+                </CardTitle>
+                <CardDescription>
+                  Router settings and entrypoints
+                </CardDescription>
+              </div>
+              {!isEditingConfig ? (
+                <Button variant="outline" size="sm" onClick={handleStartEditConfig}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleCancelEditConfig} disabled={savingConfig}>
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSaveConfig} disabled={savingConfig}>
+                    {savingConfig ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-muted-foreground">Entrypoints</Label>
-                <p className="font-medium">{selectedResource.entrypoints || 'websecure'}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Priority</Label>
-                <p className="font-medium">{selectedResource.router_priority || 200}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Service ID</Label>
-                <p className="font-medium">{selectedResource.service_id || 'Not assigned'}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">TLS Domains</Label>
-                <p className="font-medium text-sm">
-                  {selectedResource.tls_domains || 'None'}
-                </p>
-              </div>
-            </div>
-
-            {selectedResource.tcp_enabled && (
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-medium mb-2">TCP Configuration</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <Label className="text-muted-foreground">TCP Entrypoints</Label>
-                    <p>{selectedResource.tcp_entrypoints || 'None'}</p>
+            {isEditingConfig ? (
+              // Edit Mode
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="entrypoints">Entrypoints</Label>
+                    <Input
+                      id="entrypoints"
+                      value={editEntrypoints}
+                      onChange={(e) => setEditEntrypoints(e.target.value)}
+                      placeholder="websecure"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Comma-separated list of entrypoints
+                    </p>
                   </div>
-                  <div>
-                    <Label className="text-muted-foreground">SNI Rule</Label>
-                    <p>{selectedResource.tcp_sni_rule || 'None'}</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Router Priority</Label>
+                    <Input
+                      id="priority"
+                      type="number"
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(e.target.value)}
+                      placeholder="200"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Higher priority routers are evaluated first
+                    </p>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tlsDomains">TLS Domains</Label>
+                  <Input
+                    id="tlsDomains"
+                    value={editTlsDomains}
+                    onChange={(e) => setEditTlsDomains(e.target.value)}
+                    placeholder="example.com, *.example.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Comma-separated list of TLS certificate SANs
+                  </p>
+                </div>
+
+                {selectedResource.tcp_enabled && (
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-medium mb-3">TCP Configuration</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="tcpEntrypoints">TCP Entrypoints</Label>
+                        <Input
+                          id="tcpEntrypoints"
+                          value={editTcpEntrypoints}
+                          onChange={(e) => setEditTcpEntrypoints(e.target.value)}
+                          placeholder="tcpep"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="tcpSniRule">SNI Rule</Label>
+                        <Input
+                          id="tcpSniRule"
+                          value={editTcpSniRule}
+                          onChange={(e) => setEditTcpSniRule(e.target.value)}
+                          placeholder="HostSNI(`example.com`)"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+            ) : (
+              // View Mode
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Entrypoints</Label>
+                    <p className="font-medium">{selectedResource.entrypoints || 'websecure'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Priority</Label>
+                    <p className="font-medium">{selectedResource.router_priority || 200}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Service ID</Label>
+                    <p className="font-medium">{selectedResource.service_id || 'Not assigned'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">TLS Domains</Label>
+                    <p className="font-medium text-sm">
+                      {selectedResource.tls_domains || 'None'}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedResource.tcp_enabled && (
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-medium mb-2">TCP Configuration</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <Label className="text-muted-foreground">TCP Entrypoints</Label>
+                        <p>{selectedResource.tcp_entrypoints || 'None'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">SNI Rule</Label>
+                        <p>{selectedResource.tcp_sni_rule || 'None'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -324,32 +497,62 @@ export function ResourceDetail() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">#</TableHead>
                   <TableHead>Middleware ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Priority</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {assignedMiddlewares.map((mwId) => {
-                  const middleware = middlewares.find((m) => m.id === mwId)
+                {assignedMiddlewares.map((mw, index) => {
+                  // Look up middleware in the full middlewares list for type info
+                  const middlewareInfo = middlewares.find((m) => m.id === mw.id)
                   return (
-                    <TableRow key={mwId}>
-                      <TableCell className="font-mono text-sm">{mwId}</TableCell>
-                      <TableCell>{middleware?.name || 'Unknown'}</TableCell>
+                    <TableRow key={mw.id}>
+                      <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                      <TableCell className="font-mono text-sm">{mw.id}</TableCell>
+                      <TableCell>{mw.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {middleware?.type || 'unknown'}
+                          {middlewareInfo?.type || 'plugin'}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{mw.priority}</Badge>
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setRemoveMiddlewareModal(mwId)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              // Re-assign with edit - prompt for new priority
+                              const newPriority = prompt('Enter new priority (higher = runs first):', String(mw.priority))
+                              if (newPriority && resourceId) {
+                                const priority = parseInt(newPriority, 10)
+                                if (!isNaN(priority)) {
+                                  assignMiddleware(resourceId, {
+                                    middleware_id: mw.id,
+                                    priority: priority,
+                                  })
+                                }
+                              }
+                            }}
+                            title="Edit priority"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setRemoveMiddlewareModal(mw.id)}
+                            title="Remove middleware"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

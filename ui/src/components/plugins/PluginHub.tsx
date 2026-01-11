@@ -6,6 +6,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { PluginCard } from './PluginCard'
 import { CataloguePluginCard } from './CataloguePluginCard'
 import { PageLoader } from '@/components/common/LoadingSpinner'
@@ -20,14 +29,19 @@ import {
   Loader2,
   Power,
   AlertCircle,
+  AlertTriangle,
   Activity,
   Store,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import type { Plugin, CataloguePlugin } from '@/types'
 
 type StatusFilter = 'all' | 'enabled' | 'disabled' | 'error' | 'installed'
 type CatalogueFilter = 'all' | 'installed' | 'not_installed'
+
+const CATALOGUE_PAGE_SIZE = 12
 
 export function PluginHub() {
   const {
@@ -41,6 +55,8 @@ export function PluginHub() {
     installing,
     removing,
     error,
+    showRestartWarning,
+    lastInstalledPlugin,
     fetchPlugins,
     fetchCatalogue,
     fetchConfigPath,
@@ -50,6 +66,7 @@ export function PluginHub() {
     selectPlugin,
     selectCataloguePlugin,
     clearError,
+    dismissRestartWarning,
   } = usePluginStore()
 
   const [activeTab, setActiveTab] = useState<'installed' | 'catalogue'>('installed')
@@ -58,6 +75,7 @@ export function PluginHub() {
   const [catalogueFilter, setCatalogueFilter] = useState<CatalogueFilter>('all')
   const [newConfigPath, setNewConfigPath] = useState(configPath)
   const [savingPath, setSavingPath] = useState(false)
+  const [cataloguePage, setCataloguePage] = useState(1)
 
   useEffect(() => {
     fetchPlugins()
@@ -114,7 +132,7 @@ export function PluginHub() {
     })
   }, [plugins, searchTerm, statusFilter])
 
-  // Filter catalogue plugins
+  // Filter catalogue plugins (full list for pagination)
   const filteredCataloguePlugins = useMemo(() => {
     return cataloguePlugins.filter((plugin) => {
       const matchesSearch =
@@ -136,6 +154,19 @@ export function PluginHub() {
       return matchesSearch && matchesFilter
     })
   }, [cataloguePlugins, searchTerm, catalogueFilter])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCataloguePage(1)
+  }, [searchTerm, catalogueFilter])
+
+  // Paginated catalogue plugins
+  const paginatedCataloguePlugins = useMemo(() => {
+    const startIndex = (cataloguePage - 1) * CATALOGUE_PAGE_SIZE
+    return filteredCataloguePlugins.slice(startIndex, startIndex + CATALOGUE_PAGE_SIZE)
+  }, [filteredCataloguePlugins, cataloguePage])
+
+  const totalCataloguePages = Math.ceil(filteredCataloguePlugins.length / CATALOGUE_PAGE_SIZE)
 
   const handleInstall = async (moduleName: string, version?: string) => {
     await installPlugin(moduleName, version)
@@ -426,16 +457,49 @@ export function PluginHub() {
                   }
                 />
               ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {filteredCataloguePlugins.map((plugin) => (
-                    <CataloguePluginCard
-                      key={plugin.id}
-                      plugin={plugin}
-                      onInstall={handleInstall}
-                      onSelect={handleSelectCataloguePlugin}
-                      installing={installing}
-                    />
-                  ))}
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {paginatedCataloguePlugins.map((plugin) => (
+                      <CataloguePluginCard
+                        key={plugin.id}
+                        plugin={plugin}
+                        onInstall={handleInstall}
+                        onSelect={handleSelectCataloguePlugin}
+                        installing={installing}
+                      />
+                    ))}
+                  </div>
+                  {/* Pagination Controls */}
+                  {totalCataloguePages > 1 && (
+                    <div className="flex items-center justify-between border-t pt-4">
+                      <p className="text-sm text-muted-foreground">
+                        Showing {((cataloguePage - 1) * CATALOGUE_PAGE_SIZE) + 1} to {Math.min(cataloguePage * CATALOGUE_PAGE_SIZE, filteredCataloguePlugins.length)} of {filteredCataloguePlugins.length} plugins
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCataloguePage(p => Math.max(1, p - 1))}
+                          disabled={cataloguePage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
+                        </Button>
+                        <span className="text-sm text-muted-foreground px-2">
+                          Page {cataloguePage} of {totalCataloguePages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCataloguePage(p => Math.min(totalCataloguePages, p + 1))}
+                          disabled={cataloguePage === totalCataloguePages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -574,6 +638,34 @@ export function PluginHub() {
           </CardContent>
         </Card>
       )}
+
+      {/* Restart Traefik Warning Dialog */}
+      <AlertDialog open={showRestartWarning} onOpenChange={(open) => !open && dismissRestartWarning()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <AlertDialogTitle>Traefik Restart Required</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="pt-2">
+              <span className="font-medium text-foreground">{lastInstalledPlugin}</span> has been successfully configured in your Traefik static configuration.
+              <br /><br />
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                The plugin will NOT be activated until you restart Traefik.
+              </span>
+              <br /><br />
+              After restarting Traefik, you can use this plugin by creating a middleware of type "plugin" with the plugin key "{lastInstalledPlugin}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={dismissRestartWarning}>
+              I Understand
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

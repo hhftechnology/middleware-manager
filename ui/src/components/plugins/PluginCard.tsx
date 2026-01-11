@@ -24,13 +24,13 @@ interface PluginCardProps {
 }
 
 // Get status badge variant and icon
-function getStatusBadge(status: Plugin['status']) {
+function getStatusBadge(status: Plugin['status'], isInstalled?: boolean) {
   switch (status) {
     case 'enabled':
       return {
         variant: 'success' as const,
         icon: <Power className="h-3 w-3" />,
-        label: 'Enabled',
+        label: 'Loaded',
       }
     case 'disabled':
       return {
@@ -45,6 +45,14 @@ function getStatusBadge(status: Plugin['status']) {
         label: 'Error',
       }
     case 'not_loaded':
+      // If installed but not loaded, it's a user-configured plugin pending restart
+      if (isInstalled) {
+        return {
+          variant: 'warning' as const,
+          icon: <Activity className="h-3 w-3" />,
+          label: 'User (Restart Required)',
+        }
+      }
       return {
         variant: 'outline' as const,
         icon: <Activity className="h-3 w-3" />,
@@ -54,7 +62,7 @@ function getStatusBadge(status: Plugin['status']) {
       return {
         variant: 'default' as const,
         icon: <Check className="h-3 w-3" />,
-        label: 'Configured',
+        label: 'User',
       }
     default:
       return {
@@ -74,7 +82,7 @@ export function PluginCard({
   removing,
 }: PluginCardProps) {
   const isLoading = installing || removing
-  const statusBadge = getStatusBadge(plugin.status)
+  const statusBadge = getStatusBadge(plugin.status, plugin.isInstalled)
 
   return (
     <Card
