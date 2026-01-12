@@ -109,7 +109,7 @@ export function ResourceDetail() {
         return {
           id: parts[0] || '',
           name: parts[1] || 'Unknown',
-          priority: parseInt(parts[2], 10) || 100,
+          priority: parseInt(parts[2] || '100', 10) || 100,
         }
       }).sort((a, b) => b.priority - a.priority) // Sort by priority descending (higher priority first)
     : []

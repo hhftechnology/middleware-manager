@@ -32,21 +32,21 @@ export interface ResourceService {
 }
 
 export interface HTTPConfig {
-  entrypoints: string[]
+  entrypoints: string  // comma-separated list
 }
 
 export interface TLSConfig {
-  domains: string[]
+  tls_domains: string  // comma-separated list
 }
 
 export interface TCPConfig {
-  enabled: boolean
-  entrypoints: string[]
-  sni_rule: string
+  tcp_enabled?: boolean
+  tcp_entrypoints: string  // comma-separated list
+  tcp_sni_rule: string
 }
 
 export interface HeadersConfig {
-  headers: Record<string, string>
+  custom_headers: Record<string, string>
 }
 
 export interface AssignMiddlewareRequest {
