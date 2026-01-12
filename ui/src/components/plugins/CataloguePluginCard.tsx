@@ -42,7 +42,7 @@ export function CataloguePluginCard({
             </div>
           </div>
           <Badge variant="secondary" className="text-xs">
-            v{plugin.latestVersion}
+            v{plugin.latestVersion.replace(/^v/, '')}
           </Badge>
         </div>
       </CardHeader>

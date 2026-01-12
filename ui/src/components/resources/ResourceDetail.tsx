@@ -23,6 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { ErrorMessage } from '@/components/common/ErrorMessage'
 import { ConfirmationModal } from '@/components/common/ConfirmationModal'
@@ -65,6 +73,10 @@ export function ResourceDetail() {
   const [middlewarePriority, setMiddlewarePriority] = useState('100')
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [removeMiddlewareModal, setRemoveMiddlewareModal] = useState<string | null>(null)
+
+  // Edit priority dialog state
+  const [editPriorityDialog, setEditPriorityDialog] = useState<{ middlewareId: string; currentPriority: number } | null>(null)
+  const [newPriorityValue, setNewPriorityValue] = useState('')
 
   // Configuration editing state
   const [isEditingConfig, setIsEditingConfig] = useState(false)
@@ -528,17 +540,8 @@ export function ResourceDetail() {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              // Re-assign with edit - prompt for new priority
-                              const newPriority = prompt('Enter new priority (higher = runs first):', String(mw.priority))
-                              if (newPriority && resourceId) {
-                                const priority = parseInt(newPriority, 10)
-                                if (!isNaN(priority)) {
-                                  assignMiddleware(resourceId, {
-                                    middleware_id: mw.id,
-                                    priority: priority,
-                                  })
-                                }
-                              }
+                              setEditPriorityDialog({ middlewareId: mw.id, currentPriority: mw.priority })
+                              setNewPriorityValue(String(mw.priority))
                             }}
                             title="Edit priority"
                           >
@@ -607,6 +610,69 @@ export function ResourceDetail() {
         variant="destructive"
         onConfirm={() => removeMiddlewareModal && handleRemoveMiddleware(removeMiddlewareModal)}
       />
+
+      {/* Edit Priority Dialog */}
+      <Dialog
+        open={!!editPriorityDialog}
+        onOpenChange={(open) => !open && setEditPriorityDialog(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Middleware Priority</DialogTitle>
+            <DialogDescription>
+              Higher priority middlewares run first. Enter a new priority value.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="priority-input">Priority</Label>
+            <Input
+              id="priority-input"
+              type="number"
+              value={newPriorityValue}
+              onChange={(e) => setNewPriorityValue(e.target.value)}
+              placeholder="Enter priority (e.g., 100)"
+              className="mt-2"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && editPriorityDialog && resourceId) {
+                  const priority = parseInt(newPriorityValue, 10)
+                  if (!isNaN(priority)) {
+                    assignMiddleware(resourceId, {
+                      middleware_id: editPriorityDialog.middlewareId,
+                      priority: priority,
+                    })
+                    setEditPriorityDialog(null)
+                  }
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditPriorityDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editPriorityDialog && resourceId) {
+                  const priority = parseInt(newPriorityValue, 10)
+                  if (!isNaN(priority)) {
+                    assignMiddleware(resourceId, {
+                      middleware_id: editPriorityDialog.middlewareId,
+                      priority: priority,
+                    })
+                    setEditPriorityDialog(null)
+                  }
+                }
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

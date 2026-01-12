@@ -6,7 +6,6 @@ import {
   Download,
   Trash2,
   Loader2,
-  Check,
   AlertCircle,
   Power,
   PowerOff,
@@ -27,6 +26,14 @@ interface PluginCardProps {
 function getStatusBadge(status: Plugin['status'], isInstalled?: boolean) {
   switch (status) {
     case 'enabled':
+      // If enabled and installed via local config, show as "User" (manually installed and active)
+      if (isInstalled) {
+        return {
+          variant: 'success' as const,
+          icon: <Power className="h-3 w-3" />,
+          label: 'User',
+        }
+      }
       return {
         variant: 'success' as const,
         icon: <Power className="h-3 w-3" />,
@@ -45,7 +52,8 @@ function getStatusBadge(status: Plugin['status'], isInstalled?: boolean) {
         label: 'Error',
       }
     case 'not_loaded':
-      // If installed but not loaded, it's a user-configured plugin pending restart
+    case 'configured':
+      // Plugin is in local config but not yet loaded by Traefik - requires restart
       if (isInstalled) {
         return {
           variant: 'warning' as const,
@@ -57,12 +65,6 @@ function getStatusBadge(status: Plugin['status'], isInstalled?: boolean) {
         variant: 'outline' as const,
         icon: <Activity className="h-3 w-3" />,
         label: 'Not Loaded',
-      }
-    case 'configured':
-      return {
-        variant: 'default' as const,
-        icon: <Check className="h-3 w-3" />,
-        label: 'User',
       }
     default:
       return {
@@ -104,7 +106,7 @@ export function PluginCard({
             </Badge>
             {plugin.version && (
               <Badge variant="outline" className="text-xs">
-                v{plugin.version}
+                v{plugin.version.replace(/^v/, '')}
               </Badge>
             )}
           </div>
@@ -131,7 +133,7 @@ export function PluginCard({
         )}
         {plugin.installedVersion && plugin.installedVersion !== plugin.version && (
           <p className="text-xs text-amber-500 mt-1">
-            Installed: v{plugin.installedVersion}
+            Installed: v{plugin.installedVersion.replace(/^v/, '')}
           </p>
         )}
       </CardContent>

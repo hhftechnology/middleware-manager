@@ -590,7 +590,7 @@ export function PluginHub() {
                     ) : (
                       <Download className="h-4 w-4 mr-2" />
                     )}
-                    Install v{selectedCataloguePlugin.latestVersion}
+                    Install v{selectedCataloguePlugin.latestVersion.replace(/^v/, '')}
                   </Button>
                 )}
                 <Button variant="ghost" size="sm" onClick={() => selectCataloguePlugin(null)}>
