@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useMiddlewareStore } from '@/stores/middlewareStore'
 import { useResourceStore } from '@/stores/resourceStore'
 import { useAppStore } from '@/stores/appStore'
+import { toast } from '@/hooks/use-toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -164,16 +165,38 @@ export function MiddlewaresList() {
 
   const handleDelete = async () => {
     if (middlewareToDelete) {
-      await deleteMiddleware(middlewareToDelete.id)
-      setMiddlewareToDelete(null)
+      const success = await deleteMiddleware(middlewareToDelete.id)
+      if (success) {
+        setMiddlewareToDelete(null)
+      } else {
+        // Get the error from the store
+        const currentError = useMiddlewareStore.getState().error
+        toast({
+          title: 'Cannot delete middleware',
+          description: currentError || 'This middleware may be assigned to one or more resources. Remove it from all resources first.',
+          variant: 'destructive',
+        })
+        setMiddlewareToDelete(null)
+      }
     }
   }
 
   const handleBulkDelete = async () => {
     setBulkDeleting(true)
     const idsToDelete = Array.from(selectedIds)
+    const failedIds: string[] = []
     for (const id of idsToDelete) {
-      await deleteMiddleware(id)
+      const success = await deleteMiddleware(id)
+      if (!success) {
+        failedIds.push(id)
+      }
+    }
+    if (failedIds.length > 0) {
+      toast({
+        title: 'Some middlewares could not be deleted',
+        description: `${failedIds.length} middleware(s) are assigned to resources and cannot be deleted. Remove them from all resources first.`,
+        variant: 'destructive',
+      })
     }
     setSelectedIds(new Set())
     setBulkDeleting(false)

@@ -53,11 +53,8 @@ CREATE TABLE IF NOT EXISTS resource_middlewares (
     FOREIGN KEY (middleware_id) REFERENCES middlewares(id) ON DELETE CASCADE
 );
 
--- Insert default middlewares
-INSERT OR IGNORE INTO middlewares (id, name, type, config) VALUES 
-('authelia', 'Authelia', 'forwardAuth', '{"address":"http://authelia:9091/api/authz/forward-auth","trustForwardHeader":true,"authResponseHeaders":["Remote-User","Remote-Groups","Remote-Name","Remote-Email"]}'),
-('authentik', 'Authentik', 'forwardAuth', '{"address":"http://authentik:9000/outpost.goauthentik.io/auth/traefik","trustForwardHeader":true,"authResponseHeaders":["X-authentik-username","X-authentik-groups","X-authentik-email","X-authentik-name","X-authentik-uid"]}'),
-('basic-auth', 'Basic Auth', 'basicAuth', '{"users":["admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"]}');
+-- Note: Default middlewares are now loaded via Go code (config/defaults.go)
+-- which respects the deleted_templates table to prevent re-creating user-deleted items
 
 -- Services table stores service definitions
 CREATE TABLE IF NOT EXISTS services (
@@ -79,11 +76,8 @@ CREATE TABLE IF NOT EXISTS resource_services (
     FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
 );
 
--- Insert default services
-INSERT OR IGNORE INTO services (id, name, type, config) VALUES
-('simple-lb', 'Simple LoadBalancer', 'loadBalancer', '{"servers":[{"url":"http://localhost:8080"}]}'),
-('weighted-demo', 'Weighted Service Demo', 'weighted', '{"services":[{"name":"service1","weight":3},{"name":"service2","weight":1}]}'),
-('failover-demo', 'Failover Demo', 'failover', '{"service":"main","fallback":"backup"}');
+-- Note: Default services are now loaded via Go code (config/service_default.go)
+-- which respects the deleted_templates table to prevent re-creating user-deleted items
 
 -- Deleted templates table tracks template IDs that users have explicitly deleted
 -- This prevents templates from being re-created on application restart

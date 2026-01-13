@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useServiceStore } from '@/stores/serviceStore'
 import { useAppStore } from '@/stores/appStore'
+import { toast } from '@/hooks/use-toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -144,16 +145,38 @@ export function ServicesList() {
 
   const handleDelete = async () => {
     if (serviceToDelete) {
-      await deleteService(serviceToDelete.id)
-      setServiceToDelete(null)
+      const success = await deleteService(serviceToDelete.id)
+      if (success) {
+        setServiceToDelete(null)
+      } else {
+        // Get the error from the store
+        const currentError = useServiceStore.getState().error
+        toast({
+          title: 'Cannot delete service',
+          description: currentError || 'This service may be assigned to one or more resources. Remove it from all resources first.',
+          variant: 'destructive',
+        })
+        setServiceToDelete(null)
+      }
     }
   }
 
   const handleBulkDelete = async () => {
     setBulkDeleting(true)
     const idsToDelete = Array.from(selectedIds)
+    const failedIds: string[] = []
     for (const id of idsToDelete) {
-      await deleteService(id)
+      const success = await deleteService(id)
+      if (!success) {
+        failedIds.push(id)
+      }
+    }
+    if (failedIds.length > 0) {
+      toast({
+        title: 'Some services could not be deleted',
+        description: `${failedIds.length} service(s) are assigned to resources and cannot be deleted. Remove them from all resources first.`,
+        variant: 'destructive',
+      })
     }
     setSelectedIds(new Set())
     setBulkDeleting(false)
