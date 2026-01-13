@@ -164,7 +164,10 @@ func (h *ServiceHandler) CreateService(c *gin.Context) {
 	if err == nil {
 		log.Printf("Insert affected %d rows", rowsAffected)
 	}
-	
+
+	// Remove from deleted_templates if it was previously deleted (user is re-creating it)
+	_, _ = tx.Exec("DELETE FROM deleted_templates WHERE id = ? AND type = 'service'", id)
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -368,7 +371,7 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 	}()
 	
 	log.Printf("Attempting to delete service %s", id)
-	
+
 	result, txErr := tx.Exec("DELETE FROM services WHERE id = ?", id)
 	if txErr != nil {
 		log.Printf("Error deleting service: %v", txErr)
@@ -382,14 +385,21 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	if rowsAffected == 0 {
 		ResponseWithError(c, http.StatusNotFound, "Service not found")
 		return
 	}
-	
+
+	// Track deletion to prevent template from being re-created on restart
+	_, txErr = tx.Exec("INSERT OR REPLACE INTO deleted_templates (id, type) VALUES (?, 'service')", id)
+	if txErr != nil {
+		log.Printf("Warning: Failed to track deleted template: %v", txErr)
+		// Continue anyway - this is not critical
+	}
+
 	log.Printf("Delete affected %d rows", rowsAffected)
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)

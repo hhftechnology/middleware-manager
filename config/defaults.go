@@ -95,28 +95,36 @@ func LoadDefaultTemplates(db *database.DB) error {
 			// Middleware exists, skip
 			continue
 		}
-		
+
+		// Check if user has explicitly deleted this template - don't re-create it
+		var deleted int
+		err = db.QueryRow("SELECT 1 FROM deleted_templates WHERE id = ? AND type = 'middleware'", middleware.ID).Scan(&deleted)
+		if err == nil {
+			// User deleted this template, skip
+			continue
+		}
+
 		// Convert config to JSON string
 		configJSON, err := json.Marshal(middleware.Config)
 		if err != nil {
 			log.Printf("Failed to marshal config for %s: %v", middleware.Name, err)
 			continue
 		}
-		
+
 		// Insert into database
 		_, err = db.Exec(
 			"INSERT INTO middlewares (id, name, type, config) VALUES (?, ?, ?, ?)",
 			middleware.ID, middleware.Name, middleware.Type, string(configJSON),
 		)
-		
+
 		if err != nil {
 			log.Printf("Failed to insert middleware %s: %v", middleware.Name, err)
 			continue
 		}
-		
+
 		log.Printf("Added default middleware: %s", middleware.Name)
 	}
-	
+
 	return nil
 }
 

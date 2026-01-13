@@ -80,7 +80,16 @@ CREATE TABLE IF NOT EXISTS resource_services (
 );
 
 -- Insert default services
-INSERT OR IGNORE INTO services (id, name, type, config) VALUES 
+INSERT OR IGNORE INTO services (id, name, type, config) VALUES
 ('simple-lb', 'Simple LoadBalancer', 'loadBalancer', '{"servers":[{"url":"http://localhost:8080"}]}'),
 ('weighted-demo', 'Weighted Service Demo', 'weighted', '{"services":[{"name":"service1","weight":3},{"name":"service2","weight":1}]}'),
 ('failover-demo', 'Failover Demo', 'failover', '{"service":"main","fallback":"backup"}');
+
+-- Deleted templates table tracks template IDs that users have explicitly deleted
+-- This prevents templates from being re-created on application restart
+CREATE TABLE IF NOT EXISTS deleted_templates (
+    id TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'middleware' or 'service'
+    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id, type)
+);
