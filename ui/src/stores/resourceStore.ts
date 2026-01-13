@@ -34,6 +34,7 @@ interface ResourceState {
   updateTCPConfig: (resourceId: string, config: TCPConfig) => Promise<boolean>
   updateHeadersConfig: (resourceId: string, config: HeadersConfig) => Promise<boolean>
   updateRouterPriority: (resourceId: string, priority: number) => Promise<boolean>
+  updateMTLSConfig: (resourceId: string, mtlsEnabled: boolean) => Promise<boolean>
   clearError: () => void
   clearSelectedResource: () => void
 }
@@ -226,6 +227,21 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to update router priority',
+      })
+      return false
+    }
+  },
+
+  // Update mTLS config
+  updateMTLSConfig: async (resourceId, mtlsEnabled) => {
+    set({ error: null })
+    try {
+      await resourceApi.updateMTLSConfig(resourceId, mtlsEnabled)
+      await get().fetchResource(resourceId)
+      return true
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to update mTLS config',
       })
       return false
     }

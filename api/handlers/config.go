@@ -387,6 +387,114 @@ func (h *ConfigHandler) UpdateTCPConfig(c *gin.Context) {
     })
 }
 
+// UpdateMTLSConfig updates the mTLS configuration for a resource
+func (h *ConfigHandler) UpdateMTLSConfig(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		MTLSEnabled bool `json:"mtls_enabled"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Don't allow updating disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// If enabling mTLS, check that global mTLS is enabled
+	if input.MTLSEnabled {
+		var globalEnabled int
+		err := h.DB.QueryRow("SELECT enabled FROM mtls_config WHERE id = 1").Scan(&globalEnabled)
+		if err != nil {
+			log.Printf("Error checking global mTLS status: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to check mTLS status")
+			return
+		}
+		if globalEnabled != 1 {
+			ResponseWithError(c, http.StatusBadRequest, "Cannot enable mTLS on resource: global mTLS is not enabled")
+			return
+		}
+	}
+
+	// Convert boolean to integer for SQLite
+	mtlsEnabled := 0
+	if input.MTLSEnabled {
+		mtlsEnabled = 1
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	log.Printf("Updating mTLS config for resource %s: enabled=%t", id, input.MTLSEnabled)
+
+	result, txErr := tx.Exec(
+		"UPDATE resources SET mtls_enabled = ?, updated_at = ? WHERE id = ?",
+		mtlsEnabled, time.Now(), id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating mTLS config: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update mTLS configuration")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err == nil {
+		log.Printf("Update affected %d rows", rowsAffected)
+		if rowsAffected == 0 {
+			log.Printf("Warning: Update query succeeded but no rows were affected")
+		}
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully updated mTLS configuration for resource %s", id)
+	c.JSON(http.StatusOK, gin.H{
+		"id":           id,
+		"mtls_enabled": input.MTLSEnabled,
+	})
+}
+
 // UpdateHeadersConfig updates the custom headers configuration
 func (h *ConfigHandler) UpdateHeadersConfig(c *gin.Context) {
     id := c.Param("id")

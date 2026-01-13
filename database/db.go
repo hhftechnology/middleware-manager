@@ -314,33 +314,56 @@ func runPostMigrationUpdates(db *sql.DB) error {
 	// If the column doesn't exist, add the routing columns too
 	if !hasEntrypointsColumn {
 		log.Println("Adding routing configuration columns to resources table")
-		
+
 		// Add columns for HTTP routing
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN entrypoints TEXT DEFAULT 'websecure'"); err != nil {
 			return fmt.Errorf("failed to add entrypoints column: %w", err)
 		}
-		
+
 		// Add columns for TLS certificate configuration
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN tls_domains TEXT DEFAULT ''"); err != nil {
 			return fmt.Errorf("failed to add tls_domains column: %w", err)
 		}
-		
+
 		// Add columns for TCP SNI routing
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN tcp_enabled INTEGER DEFAULT 0"); err != nil {
 			return fmt.Errorf("failed to add tcp_enabled column: %w", err)
 		}
-		
+
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN tcp_entrypoints TEXT DEFAULT 'tcp'"); err != nil {
 			return fmt.Errorf("failed to add tcp_entrypoints column: %w", err)
 		}
-		
+
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN tcp_sni_rule TEXT DEFAULT ''"); err != nil {
 			return fmt.Errorf("failed to add tcp_sni_rule column: %w", err)
 		}
-		
+
 		log.Println("Successfully added all routing configuration columns")
 	}
-	
+
+	// Check for mtls_enabled column (for mTLS per-resource)
+	var hasMTLSEnabledColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_enabled'
+	`).Scan(&hasMTLSEnabledColumn)
+
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_enabled column exists: %w", err)
+	}
+
+	// If the column doesn't exist, add it
+	if !hasMTLSEnabledColumn {
+		log.Println("Adding mtls_enabled column to resources table")
+
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_enabled INTEGER DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add mtls_enabled column: %w", err)
+		}
+
+		log.Println("Successfully added mtls_enabled column")
+	}
+
 	return nil
 }
 

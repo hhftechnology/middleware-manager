@@ -29,6 +29,7 @@ type Server struct {
 	serviceHandler          *handlers.ServiceHandler
 	pluginHandler           *handlers.PluginHandler
 	traefikHandler          *handlers.TraefikHandler
+	mtlsHandler             *handlers.MTLSHandler
 	configManager           *services.ConfigManager
 	traefikStaticConfigPath string
 }
@@ -90,6 +91,8 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	pluginHandler := handlers.NewPluginHandler(db, traefikStaticConfigPath, configManager)
 	// Initialize TraefikHandler for direct Traefik API access
 	traefikHandler := handlers.NewTraefikHandler(db, configManager)
+	// Initialize MTLSHandler for mTLS certificate management
+	mtlsHandler := handlers.NewMTLSHandler(db)
 
 	// Setup server with all handlers
 	server := &Server{
@@ -102,6 +105,7 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 		serviceHandler:          serviceHandler,
 		pluginHandler:           pluginHandler,
 		traefikHandler:          traefikHandler,
+		mtlsHandler:             mtlsHandler,
 		configManager:           configManager,
 		traefikStaticConfigPath: traefikStaticConfigPath,
 		srv: &http.Server{
@@ -173,6 +177,7 @@ func (s *Server) setupRoutes(uiPath string) {
 			resources.PUT("/:id/config/tcp", s.configHandler.UpdateTCPConfig)
 			resources.PUT("/:id/config/headers", s.configHandler.UpdateHeadersConfig)
 			resources.PUT("/:id/config/priority", s.configHandler.UpdateRouterPriority)
+			resources.PUT("/:id/config/mtls", s.configHandler.UpdateMTLSConfig)
 		}
 
 		// Data source routes
@@ -208,6 +213,23 @@ func (s *Server) setupRoutes(uiPath string) {
 			traefik.GET("/services", s.traefikHandler.GetServices)
 			traefik.GET("/middlewares", s.traefikHandler.GetMiddlewares)
 			traefik.GET("/data", s.traefikHandler.GetFullData)
+		}
+
+		// mTLS Routes - Certificate Authority and client certificate management
+		mtls := api.Group("/mtls")
+		{
+			mtls.GET("/config", s.mtlsHandler.GetConfig)
+			mtls.PUT("/enable", s.mtlsHandler.EnableMTLS)
+			mtls.PUT("/disable", s.mtlsHandler.DisableMTLS)
+			mtls.POST("/ca", s.mtlsHandler.CreateCA)
+			mtls.DELETE("/ca", s.mtlsHandler.DeleteCA)
+			mtls.PUT("/config/path", s.mtlsHandler.UpdateCertsBasePath)
+			mtls.GET("/clients", s.mtlsHandler.GetClients)
+			mtls.POST("/clients", s.mtlsHandler.CreateClient)
+			mtls.GET("/clients/:id", s.mtlsHandler.GetClient)
+			mtls.GET("/clients/:id/download", s.mtlsHandler.DownloadClientP12)
+			mtls.PUT("/clients/:id/revoke", s.mtlsHandler.RevokeClient)
+			mtls.DELETE("/clients/:id", s.mtlsHandler.DeleteClient)
 		}
 	}
 

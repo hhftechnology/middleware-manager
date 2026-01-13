@@ -29,10 +29,13 @@ type Resource struct {
 	
 	// Router priority configuration
 	RouterPriority int       `json:"router_priority"`
-	
+
 	// Source type for tracking data origin
 	SourceType     string    `json:"source_type"`
-	
+
+	// mTLS configuration
+	MTLSEnabled    bool      `json:"mtls_enabled"`
+
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

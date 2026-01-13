@@ -15,6 +15,7 @@ import {
   Layers,
   Server,
   Puzzle,
+  Shield,
   Settings,
   Menu,
 } from 'lucide-react'
@@ -33,6 +34,7 @@ const navItems: NavItem[] = [
   { id: 'middlewares', label: 'Middlewares', icon: <Layers className="h-4 w-4" /> },
   { id: 'services', label: 'Services', icon: <Server className="h-4 w-4" /> },
   { id: 'plugin-hub', label: 'Plugin Hub', icon: <Puzzle className="h-4 w-4" /> },
+  { id: 'security', label: 'Security', icon: <Shield className="h-4 w-4" /> },
 ]
 
 export function Header() {

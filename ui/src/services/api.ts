@@ -35,6 +35,10 @@ import type {
   AllServicesResponse,
   AllMiddlewaresResponse,
   ProtocolType,
+  MTLSConfig,
+  MTLSClient,
+  CreateCARequest,
+  CreateClientRequest,
 } from '@/types'
 
 const API_BASE = '/api'
@@ -167,6 +171,12 @@ export const resourceApi = {
     request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/priority`, {
       method: 'PUT',
       body: JSON.stringify({ router_priority: priority }),
+    }),
+
+  updateMTLSConfig: (resourceId: string, mtlsEnabled: boolean) =>
+    request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/mtls`, {
+      method: 'PUT',
+      body: JSON.stringify({ mtls_enabled: mtlsEnabled }),
     }),
 }
 
@@ -369,6 +379,74 @@ export const traefikApi = {
 
   // Get full Traefik data in one request
   getFullData: () => request<FullTraefikData>(`${API_BASE}/traefik/data`),
+}
+
+// mTLS API - Certificate Authority and client certificate management
+export const mtlsApi = {
+  // Get mTLS configuration
+  getConfig: () => request<MTLSConfig>(`${API_BASE}/mtls/config`),
+
+  // Enable mTLS globally
+  enableMTLS: () =>
+    request<{ message: string; enabled: boolean }>(`${API_BASE}/mtls/enable`, {
+      method: 'PUT',
+    }),
+
+  // Disable mTLS globally
+  disableMTLS: () =>
+    request<{ message: string; enabled: boolean }>(`${API_BASE}/mtls/disable`, {
+      method: 'PUT',
+    }),
+
+  // Create Certificate Authority
+  createCA: (data: CreateCARequest) =>
+    request<MTLSConfig>(`${API_BASE}/mtls/ca`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Delete Certificate Authority (and all client certs)
+  deleteCA: () =>
+    request<{ message: string }>(`${API_BASE}/mtls/ca`, {
+      method: 'DELETE',
+    }),
+
+  // Update certificates base path
+  updateCertsBasePath: (certsBasePath: string) =>
+    request<{ message: string; certs_base_path: string }>(`${API_BASE}/mtls/config/path`, {
+      method: 'PUT',
+      body: JSON.stringify({ certs_base_path: certsBasePath }),
+    }),
+
+  // Get all client certificates
+  getClients: () => request<MTLSClient[]>(`${API_BASE}/mtls/clients`),
+
+  // Create a new client certificate
+  createClient: (data: CreateClientRequest) =>
+    request<MTLSClient>(`${API_BASE}/mtls/clients`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Get a specific client certificate
+  getClient: (id: string) =>
+    request<MTLSClient>(`${API_BASE}/mtls/clients/${encodeURIComponent(id)}`),
+
+  // Get download URL for client P12 file (use with window.open or anchor download)
+  getClientP12Url: (id: string) =>
+    `${API_BASE}/mtls/clients/${encodeURIComponent(id)}/download`,
+
+  // Revoke a client certificate
+  revokeClient: (id: string) =>
+    request<{ message: string; id: string }>(`${API_BASE}/mtls/clients/${encodeURIComponent(id)}/revoke`, {
+      method: 'PUT',
+    }),
+
+  // Delete a client certificate
+  deleteClient: (id: string) =>
+    request<{ message: string; id: string }>(`${API_BASE}/mtls/clients/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 }
 
 // Health check

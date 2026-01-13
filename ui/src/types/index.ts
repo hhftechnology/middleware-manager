@@ -56,6 +56,15 @@ export type {
   CataloguePlugin,
 } from './plugin'
 
+// mTLS types
+export type {
+  MTLSConfig,
+  MTLSClient,
+  CreateCARequest,
+  CreateClientRequest,
+  MTLSConfigRequest,
+} from './mtls'
+
 // Traefik API types
 export type {
   TraefikOverview,
@@ -103,3 +112,4 @@ export type Page =
   | 'services'
   | 'service-form'
   | 'plugin-hub'
+  | 'security'

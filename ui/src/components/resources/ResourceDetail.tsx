@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { useResourceStore } from '@/stores/resourceStore'
 import { useMiddlewareStore } from '@/stores/middlewareStore'
 import { useServiceStore } from '@/stores/serviceStore'
+import { useMTLSStore } from '@/stores/mtlsStore'
 import { useAppStore } from '@/stores/appStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -41,6 +43,7 @@ import {
   Server,
   Layers,
   Settings,
+  Shield,
   Pencil,
   Save,
   X,
@@ -68,6 +71,8 @@ export function ResourceDetail() {
 
   const { middlewares, fetchMiddlewares } = useMiddlewareStore()
   const { services, fetchServices } = useServiceStore()
+  const { config: mtlsConfig, fetchConfig: fetchMTLSConfig } = useMTLSStore()
+  const { updateMTLSConfig } = useResourceStore()
 
   const [selectedMiddlewareId, setSelectedMiddlewareId] = useState('')
   const [middlewarePriority, setMiddlewarePriority] = useState('100')
@@ -86,14 +91,16 @@ export function ResourceDetail() {
   const [editTlsDomains, setEditTlsDomains] = useState('')
   const [editTcpEntrypoints, setEditTcpEntrypoints] = useState('')
   const [editTcpSniRule, setEditTcpSniRule] = useState('')
+  const [mtlsToggleLoading, setMtlsToggleLoading] = useState(false)
 
   useEffect(() => {
     if (resourceId) {
       fetchResource(resourceId)
       fetchMiddlewares()
       fetchServices()
+      fetchMTLSConfig()
     }
-  }, [resourceId, fetchResource, fetchMiddlewares, fetchServices])
+  }, [resourceId, fetchResource, fetchMiddlewares, fetchServices, fetchMTLSConfig])
 
   if (loadingResource) {
     return <PageLoader message="Loading resource..." />
@@ -212,6 +219,17 @@ export function ResourceDetail() {
       setIsEditingConfig(false)
     } finally {
       setSavingConfig(false)
+    }
+  }
+
+  // Handle mTLS toggle
+  const handleMTLSToggle = async () => {
+    if (!resourceId) return
+    setMtlsToggleLoading(true)
+    try {
+      await updateMTLSConfig(resourceId, !selectedResource?.mtls_enabled)
+    } finally {
+      setMtlsToggleLoading(false)
     }
   }
 
@@ -460,6 +478,46 @@ export function ResourceDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* mTLS Configuration Card */}
+      {mtlsConfig?.enabled && mtlsConfig?.has_ca && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              mTLS Authentication
+            </CardTitle>
+            <CardDescription>
+              Require client certificates for this resource
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="mtls-toggle" className="text-base">Enable mTLS</Label>
+                <p className="text-sm text-muted-foreground">
+                  When enabled, clients must present a valid certificate to access this resource
+                </p>
+              </div>
+              <Switch
+                id="mtls-toggle"
+                checked={selectedResource?.mtls_enabled ?? false}
+                onCheckedChange={handleMTLSToggle}
+                disabled={mtlsToggleLoading}
+              />
+            </div>
+            {selectedResource?.mtls_enabled && (
+              <div className="mt-4 p-3 bg-muted rounded-lg text-sm">
+                <p className="font-medium">mTLS is active for this resource</p>
+                <p className="text-muted-foreground mt-1">
+                  Only clients with valid certificates signed by your CA can access this resource.
+                  Issue certificates in the Security tab.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Middlewares Card */}
       <Card>

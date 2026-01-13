@@ -87,3 +87,35 @@ CREATE TABLE IF NOT EXISTS deleted_templates (
     deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id, type)
 );
+
+-- mTLS Global Configuration (singleton table)
+CREATE TABLE IF NOT EXISTS mtls_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER DEFAULT 0,
+    ca_cert TEXT DEFAULT '',
+    ca_key TEXT DEFAULT '',
+    ca_cert_path TEXT DEFAULT '',
+    ca_subject TEXT DEFAULT '',
+    ca_expiry TIMESTAMP,
+    certs_base_path TEXT DEFAULT '/etc/traefik/certs',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- mTLS Client Certificates
+CREATE TABLE IF NOT EXISTS mtls_clients (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    cert TEXT NOT NULL,
+    key TEXT NOT NULL,
+    p12 BLOB,
+    p12_password_hint TEXT DEFAULT '',
+    subject TEXT DEFAULT '',
+    expiry TIMESTAMP,
+    revoked INTEGER DEFAULT 0,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Initialize mTLS config singleton row
+INSERT OR IGNORE INTO mtls_config (id) VALUES (1);

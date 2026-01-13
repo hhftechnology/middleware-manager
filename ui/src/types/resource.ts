@@ -13,6 +13,7 @@ export interface Resource {
   custom_headers: string
   router_priority: number
   source_type: string
+  mtls_enabled: boolean
   middlewares: string
   created_at?: string
   updated_at?: string

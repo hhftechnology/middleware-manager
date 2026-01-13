@@ -9,6 +9,7 @@ import { MiddlewareForm } from '@/components/middlewares/MiddlewareForm'
 import { ServicesList } from '@/components/services/ServicesList'
 import { ServiceForm } from '@/components/services/ServiceForm'
 import { PluginHub } from '@/components/plugins/PluginHub'
+import { SecurityHub } from '@/components/security/SecurityHub'
 import { DataSourceSettings } from '@/components/settings/DataSourceSettings'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -35,6 +36,8 @@ function AppContent() {
         return <ServiceForm />
       case 'plugin-hub':
         return <PluginHub />
+      case 'security':
+        return <SecurityHub />
       default:
         return <Dashboard />
     }

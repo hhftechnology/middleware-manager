@@ -46,6 +46,10 @@ type TraefikConfig struct {
 	UDP struct {
 		Services map[string]interface{} `yaml:"services,omitempty"`
 	} `yaml:"udp,omitempty"`
+
+	TLS struct {
+		Options map[string]interface{} `yaml:"options,omitempty"`
+	} `yaml:"tls,omitempty"`
 }
 
 // Add this simple helper function at the top of config_generator.go
@@ -167,7 +171,7 @@ func (cg *ConfigGenerator) generateConfig() error {
 	config.TCP.Routers = make(map[string]interface{})
 	config.TCP.Services = make(map[string]interface{})
 	config.UDP.Services = make(map[string]interface{})
-
+	config.TLS.Options = make(map[string]interface{})
 
 	if err := cg.processMiddlewares(&config); err != nil {
 		return fmt.Errorf("failed to process middlewares: %w", err)
@@ -180,6 +184,9 @@ func (cg *ConfigGenerator) generateConfig() error {
 	}
 	if err := cg.processTCPRouters(&config); err != nil {
 		return fmt.Errorf("failed to process TCP resources: %w", err)
+	}
+	if err := cg.processMTLSOptions(&config); err != nil {
+		return fmt.Errorf("failed to process mTLS options: %w", err)
 	}
 
 	processedConfig := preserveTraefikValues(config)
@@ -315,7 +322,7 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 
     query := `
         SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
-               r.custom_headers, r.router_priority, r.source_type, 
+               r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
                rm.middleware_id, rm.priority,
                rs.service_id as custom_service_id
         FROM resources r
@@ -340,20 +347,21 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
     for rows.Next() {
         var rID_db, host_db, serviceID_db, entrypoints_db, tlsDomains_db, customHeadersStr_db, sourceType_db string
         var routerPriority_db sql.NullInt64
+        var mtlsEnabled_db int
         var middlewareID_db sql.NullString
         var middlewarePriority_db sql.NullInt64
         var customServiceID_db sql.NullString
 
         err := rows.Scan(
             &rID_db, &host_db, &serviceID_db, &entrypoints_db, &tlsDomains_db,
-            &customHeadersStr_db, &routerPriority_db, &sourceType_db,
+            &customHeadersStr_db, &routerPriority_db, &sourceType_db, &mtlsEnabled_db,
             &middlewareID_db, &middlewarePriority_db, &customServiceID_db,
         )
         if err != nil {
             log.Printf("Failed to scan resource data for HTTP router: %v", err)
             continue
         }
-        
+
         data, exists := resourceDataMap[rID_db]
         if !exists {
             data.Info = models.Resource{
@@ -364,6 +372,7 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
                 TLSDomains:    tlsDomains_db,
                 CustomHeaders: customHeadersStr_db,
                 SourceType:    sourceType_db,
+                MTLSEnabled:   mtlsEnabled_db == 1,
             }
             if routerPriority_db.Valid {
                 data.Info.RouterPriority = int(routerPriority_db.Int64)
@@ -499,14 +508,59 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
                 tlsConfig["domains"] = []map[string]interface{}{{"main": info.Host, "sans": cleanSans}}
             }
         }
+        // Add mTLS options if enabled for this resource
+        if info.MTLSEnabled {
+            tlsConfig["options"] = "mtls-strict@file"
+        }
         routerConfig["tls"] = tlsConfig
         config.HTTP.Routers[routerIDForTraefik] = routerConfig
     }
     return nil
 }
 
-// Add to the imports if needed:
-// import "encoding/json"
+// processMTLSOptions adds TLS options for mTLS if globally enabled
+func (cg *ConfigGenerator) processMTLSOptions(config *TraefikConfig) error {
+	// Check if mTLS is globally enabled
+	var enabled int
+	var caCertPath string
+	err := cg.db.QueryRow(`
+		SELECT enabled, ca_cert_path FROM mtls_config WHERE id = 1
+	`).Scan(&enabled, &caCertPath)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No mTLS config, skip
+			return nil
+		}
+		return fmt.Errorf("failed to check mTLS config: %w", err)
+	}
+
+	// If mTLS is not enabled, don't add TLS options
+	if enabled != 1 {
+		return nil
+	}
+
+	// If no CA cert path configured, skip
+	if caCertPath == "" {
+		log.Printf("Warning: mTLS enabled but no CA certificate path configured")
+		return nil
+	}
+
+	// Add the mtls-strict TLS option
+	config.TLS.Options["mtls-strict"] = map[string]interface{}{
+		"clientAuth": map[string]interface{}{
+			"caFiles":        []string{caCertPath},
+			"clientAuthType": "RequireAndVerifyClientCert",
+		},
+		"minVersion": "VersionTLS12",
+		"sniStrict":  true,
+	}
+
+	if shouldLog() {
+		log.Printf("Added mTLS TLS options with CA cert: %s", caCertPath)
+	}
+
+	return nil
+}
 
 // Helper to fetch service names from Traefik API
 func (cg *ConfigGenerator) fetchTraefikServiceNames() map[string]string {
