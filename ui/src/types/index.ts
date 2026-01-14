@@ -63,6 +63,8 @@ export type {
   CreateCARequest,
   CreateClientRequest,
   MTLSConfigRequest,
+  PluginCheckResponse,
+  MTLSMiddlewareConfig,
 } from './mtls'
 
 // Traefik API types

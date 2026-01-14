@@ -80,6 +80,14 @@ export const useDataSourceStore = create<DataSourceState>((set) => ({
         })),
         loading: false,
       }))
+      
+      // Trigger a resource refresh after data source change
+      // This ensures the UI shows resources from the new data source
+      const { useResourceStore } = await import('./resourceStore')
+      setTimeout(() => {
+        useResourceStore.getState().fetchResources()
+      }, 500) // Small delay to allow backend to update fetcher
+      
       return true
     } catch (err) {
       set({

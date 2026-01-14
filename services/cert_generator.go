@@ -538,3 +538,54 @@ func (cg *CertGenerator) UpdateCertsBasePath(basePath string) error {
 	}
 	return nil
 }
+
+// GetMiddlewareConfig retrieves the mTLS middleware plugin configuration
+func (cg *CertGenerator) GetMiddlewareConfig() (*models.MTLSMiddlewareConfig, error) {
+	var config models.MTLSMiddlewareConfig
+	var rules, requestHeaders, rejectMessage sql.NullString
+	var refreshInterval sql.NullInt64
+
+	err := cg.db.QueryRow(`
+		SELECT middleware_rules, middleware_request_headers, middleware_reject_message, middleware_refresh_interval
+		FROM mtls_config WHERE id = 1
+	`).Scan(&rules, &requestHeaders, &rejectMessage, &refreshInterval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get middleware config: %w", err)
+	}
+
+	if rules.Valid {
+		config.Rules = rules.String
+	}
+	if requestHeaders.Valid {
+		config.RequestHeaders = requestHeaders.String
+	}
+	if rejectMessage.Valid {
+		config.RejectMessage = rejectMessage.String
+	} else {
+		config.RejectMessage = "Access denied: Valid client certificate required"
+	}
+	if refreshInterval.Valid {
+		config.RefreshInterval = int(refreshInterval.Int64)
+	} else {
+		config.RefreshInterval = 300
+	}
+
+	return &config, nil
+}
+
+// UpdateMiddlewareConfig updates the mTLS middleware plugin configuration
+func (cg *CertGenerator) UpdateMiddlewareConfig(config *models.MTLSMiddlewareConfig) error {
+	_, err := cg.db.Exec(`
+		UPDATE mtls_config SET
+			middleware_rules = ?,
+			middleware_request_headers = ?,
+			middleware_reject_message = ?,
+			middleware_refresh_interval = ?,
+			updated_at = ?
+		WHERE id = 1
+	`, config.Rules, config.RequestHeaders, config.RejectMessage, config.RefreshInterval, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update middleware config: %w", err)
+	}
+	return nil
+}

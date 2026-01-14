@@ -21,15 +21,40 @@ func NewResourceHandler(db *sql.DB) *ResourceHandler {
 
 // GetResources returns all resources and their assigned middlewares
 // Supports pagination via ?page=N&page_size=M query parameters
+// Supports filtering by source_type via ?source_type=pangolin|traefik
+// Supports filtering by status via ?status=active|disabled (default: active)
 func (h *ResourceHandler) GetResources(c *gin.Context) {
 	// Check if pagination is requested
 	usePagination := IsPaginationRequested(c)
 	params := GetPaginationParams(c)
+	
+	// Get optional filters
+	sourceType := c.Query("source_type")
+	statusFilter := c.DefaultQuery("status", "active") // Default to active resources only
+
+	// Build WHERE clause for filters
+	whereClause := ""
+	var filterArgs []interface{}
+	
+	if statusFilter != "" && statusFilter != "all" {
+		whereClause = " WHERE r.status = ?"
+		filterArgs = append(filterArgs, statusFilter)
+	}
+	
+	if sourceType != "" {
+		if whereClause == "" {
+			whereClause = " WHERE r.source_type = ?"
+		} else {
+			whereClause += " AND r.source_type = ?"
+		}
+		filterArgs = append(filterArgs, sourceType)
+	}
 
 	var total int
 	if usePagination {
-		// Get total count for pagination
-		err := h.DB.QueryRow("SELECT COUNT(*) FROM resources").Scan(&total)
+		// Get total count for pagination with filters
+		countQuery := "SELECT COUNT(*) FROM resources r" + whereClause
+		err := h.DB.QueryRow(countQuery, filterArgs...).Scan(&total)
 		if err != nil {
 			log.Printf("Error counting resources: %v", err)
 			ResponseWithError(c, http.StatusInternalServerError, "Failed to count resources")
@@ -37,7 +62,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		}
 	}
 
-	// Build query with optional pagination
+	// Build query with optional pagination and filters
 	query := `
 		SELECT r.id, r.host, r.service_id, r.org_id, r.site_id, r.status,
 		       r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
@@ -46,6 +71,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		FROM resources r
 		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
 		LEFT JOIN middlewares m ON rm.middleware_id = m.id
+	` + whereClause + `
 		GROUP BY r.id
 		ORDER BY r.id
 	`
@@ -55,9 +81,10 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 
 	if usePagination {
 		query += " LIMIT ? OFFSET ?"
-		rows, err = h.DB.Query(query, params.PageSize, params.Offset)
+		args := append(filterArgs, params.PageSize, params.Offset)
+		rows, err = h.DB.Query(query, args...)
 	} else {
-		rows, err = h.DB.Query(query)
+		rows, err = h.DB.Query(query, filterArgs...)
 	}
 
 	if err != nil {

@@ -508,9 +508,14 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
                 tlsConfig["domains"] = []map[string]interface{}{{"main": info.Host, "sans": cleanSans}}
             }
         }
-        // Add mTLS options if enabled for this resource
+
+        // Add mTLS middleware and TLS options if enabled for this resource
         if info.MTLSEnabled {
-            tlsConfig["options"] = "mtls-strict@file"
+            // Add TLS options reference for mTLS verification
+            tlsConfig["options"] = "mtls-verify@file"
+            // Prepend mTLS middleware to run first
+            finalMiddlewares = append([]string{"mtls-auth@file"}, finalMiddlewares...)
+            routerConfig["middlewares"] = finalMiddlewares
         }
         routerConfig["tls"] = tlsConfig
         config.HTTP.Routers[routerIDForTraefik] = routerConfig
@@ -518,14 +523,19 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
     return nil
 }
 
-// processMTLSOptions adds TLS options for mTLS if globally enabled
+// processMTLSOptions adds TLS options and mtlswhitelist middleware for mTLS if globally enabled
 func (cg *ConfigGenerator) processMTLSOptions(config *TraefikConfig) error {
-	// Check if mTLS is globally enabled
+	// Check if mTLS is globally enabled and get all config values
 	var enabled int
 	var caCertPath string
+	var middlewareRules, middlewareRequestHeaders, middlewareRejectMessage sql.NullString
+	var middlewareRefreshInterval sql.NullInt64
 	err := cg.db.QueryRow(`
-		SELECT enabled, ca_cert_path FROM mtls_config WHERE id = 1
-	`).Scan(&enabled, &caCertPath)
+		SELECT enabled, ca_cert_path, middleware_rules, middleware_request_headers,
+		       middleware_reject_message, middleware_refresh_interval
+		FROM mtls_config WHERE id = 1
+	`).Scan(&enabled, &caCertPath, &middlewareRules, &middlewareRequestHeaders,
+		&middlewareRejectMessage, &middlewareRefreshInterval)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// No mTLS config, skip
@@ -534,7 +544,7 @@ func (cg *ConfigGenerator) processMTLSOptions(config *TraefikConfig) error {
 		return fmt.Errorf("failed to check mTLS config: %w", err)
 	}
 
-	// If mTLS is not enabled, don't add TLS options
+	// If mTLS is not enabled, don't add config
 	if enabled != 1 {
 		return nil
 	}
@@ -545,18 +555,55 @@ func (cg *ConfigGenerator) processMTLSOptions(config *TraefikConfig) error {
 		return nil
 	}
 
-	// Add the mtls-strict TLS option
-	config.TLS.Options["mtls-strict"] = map[string]interface{}{
+	// 1. Add TLS options with VerifyClientCertIfGiven
+	// This allows clients WITHOUT certs to still connect (plugin handles validation)
+	config.TLS.Options["mtls-verify"] = map[string]interface{}{
 		"clientAuth": map[string]interface{}{
 			"caFiles":        []string{caCertPath},
-			"clientAuthType": "RequireAndVerifyClientCert",
+			"clientAuthType": "VerifyClientCertIfGiven",
 		},
 		"minVersion": "VersionTLS12",
 		"sniStrict":  true,
 	}
 
+	// 2. Add the mtls-auth middleware using mtlswhitelist plugin
+	pluginConfig := map[string]interface{}{
+		"caFiles": []string{caCertPath},
+	}
+
+	// Add optional plugin configuration if set
+	if middlewareRules.Valid && middlewareRules.String != "" {
+		// Parse rules JSON array
+		var rules []interface{}
+		if err := json.Unmarshal([]byte(middlewareRules.String), &rules); err == nil && len(rules) > 0 {
+			pluginConfig["rules"] = rules
+		}
+	}
+
+	if middlewareRequestHeaders.Valid && middlewareRequestHeaders.String != "" {
+		// Parse request headers JSON object
+		var headers map[string]interface{}
+		if err := json.Unmarshal([]byte(middlewareRequestHeaders.String), &headers); err == nil && len(headers) > 0 {
+			pluginConfig["requestHeaders"] = headers
+		}
+	}
+
+	if middlewareRejectMessage.Valid && middlewareRejectMessage.String != "" {
+		pluginConfig["rejectMessage"] = middlewareRejectMessage.String
+	}
+
+	if middlewareRefreshInterval.Valid && middlewareRefreshInterval.Int64 > 0 {
+		pluginConfig["refreshInterval"] = middlewareRefreshInterval.Int64
+	}
+
+	config.HTTP.Middlewares["mtls-auth"] = map[string]interface{}{
+		"plugin": map[string]interface{}{
+			"mtlswhitelist": pluginConfig,
+		},
+	}
+
 	if shouldLog() {
-		log.Printf("Added mTLS TLS options with CA cert: %s", caCertPath)
+		log.Printf("Added mTLS TLS options and mtls-auth middleware with CA cert: %s", caCertPath)
 	}
 
 	return nil

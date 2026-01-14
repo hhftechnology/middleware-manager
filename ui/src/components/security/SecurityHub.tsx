@@ -1,54 +1,110 @@
-import { useEffect, useState } from 'react'
-import { useMTLSStore } from '@/stores/mtlsStore'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Loader2, Shield, ShieldCheck, ShieldAlert, AlertTriangle, Info } from 'lucide-react'
-import { CAManager } from './CAManager'
-import { ClientCertList } from './ClientCertList'
-import { CertImportGuide } from './CertImportGuide'
+import { useEffect, useState } from "react";
+import { useMTLSStore } from "@/stores/mtlsStore";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Loader2,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  Info,
+  CheckCircle,
+  XCircle,
+  Plug,
+} from "lucide-react";
+import { CAManager } from "./CAManager";
+import { ClientCertList } from "./ClientCertList";
+import { CertImportGuide } from "./CertImportGuide";
 
 export function SecurityHub() {
   const {
     config,
     loading,
     error,
+    pluginStatus,
+    middlewareConfig,
     fetchConfig,
     enableMTLS,
     disableMTLS,
+    checkPlugin,
+    fetchMiddlewareConfig,
+    updateMiddlewareConfig,
     clearError,
-  } = useMTLSStore()
+  } = useMTLSStore();
 
-  const [showSetupWarning, setShowSetupWarning] = useState(false)
-  const [switchLoading, setSwitchLoading] = useState(false)
+  const [showSetupWarning, setShowSetupWarning] = useState(false);
+  const [switchLoading, setSwitchLoading] = useState(false);
+  const [middlewareForm, setMiddlewareForm] = useState({
+    rules: "",
+    request_headers: "",
+    reject_message: "Access denied: Valid client certificate required",
+    refresh_interval: 300,
+  });
+  const [savingMiddleware, setSavingMiddleware] = useState(false);
 
   useEffect(() => {
-    fetchConfig()
-  }, [fetchConfig])
+    fetchConfig();
+    checkPlugin();
+    fetchMiddlewareConfig();
+  }, [fetchConfig, checkPlugin, fetchMiddlewareConfig]);
+
+  useEffect(() => {
+    if (middlewareConfig) {
+      setMiddlewareForm({
+        rules: middlewareConfig.rules || "",
+        request_headers: middlewareConfig.request_headers || "",
+        reject_message:
+          middlewareConfig.reject_message ||
+          "Access denied: Valid client certificate required",
+        refresh_interval: middlewareConfig.refresh_interval || 300,
+      });
+    }
+  }, [middlewareConfig]);
 
   const handleToggleMTLS = async () => {
-    setSwitchLoading(true)
+    // Check if plugin is installed before enabling
+    if (!config?.enabled && !pluginStatus?.installed) {
+      return; // Can't enable without plugin
+    }
+
+    setSwitchLoading(true);
     if (config?.enabled) {
-      await disableMTLS()
+      await disableMTLS();
     } else {
-      const success = await enableMTLS()
+      const success = await enableMTLS();
       if (success) {
-        setShowSetupWarning(true)
+        setShowSetupWarning(true);
       }
     }
-    setSwitchLoading(false)
-  }
+    setSwitchLoading(false);
+  };
+
+  const handleSaveMiddlewareConfig = async () => {
+    setSavingMiddleware(true);
+    await updateMiddlewareConfig(middlewareForm);
+    setSavingMiddleware(false);
+  };
 
   if (loading && !config) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    )
+    );
   }
 
   return (
@@ -64,17 +120,35 @@ export function SecurityHub() {
             Manage mTLS (mutual TLS) for secure client authentication
           </p>
         </div>
-        {config?.enabled ? (
-          <Badge variant="default" className="flex items-center gap-1">
-            <ShieldCheck className="h-4 w-4" />
-            mTLS Enabled
-          </Badge>
-        ) : (
-          <Badge variant="secondary" className="flex items-center gap-1">
-            <ShieldAlert className="h-4 w-4" />
-            mTLS Disabled
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Plugin Status Badge */}
+          {pluginStatus?.installed ? (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              Plugin v{pluginStatus.version}
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="flex items-center gap-1 text-yellow-600"
+            >
+              <XCircle className="h-4 w-4" />
+              Plugin Not Installed
+            </Badge>
+          )}
+          {/* mTLS Status Badge */}
+          {config?.enabled ? (
+            <Badge variant="default" className="flex items-center gap-1">
+              <ShieldCheck className="h-4 w-4" />
+              mTLS Enabled
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <ShieldAlert className="h-4 w-4" />
+              mTLS Disabled
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Error Alert */}
@@ -95,23 +169,18 @@ export function SecurityHub() {
       {showSetupWarning && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Traefik Configuration Required</AlertTitle>
+          <AlertTitle>One-Time Plugin Setup Required</AlertTitle>
           <AlertDescription>
             <p className="mb-2">
-              mTLS has been enabled. For it to take effect, you need to:
+              mTLS has been enabled. If this is your first time, complete the
+              setup in the <strong>Setup</strong> tab, then restart Traefik.
             </p>
-            <ol className="list-decimal list-inside space-y-1 text-sm">
-              <li>Add the certificates volume mount to your docker-compose.yml traefik service:</li>
-              <pre className="bg-muted p-2 rounded text-xs my-2 overflow-x-auto">
-{`volumes:
-  - ./config/traefik/certs:/etc/traefik/certs:ro`}
-              </pre>
-              <li>Restart Traefik:</li>
-              <pre className="bg-muted p-2 rounded text-xs my-2">
-                docker compose down && docker compose up -d
-              </pre>
-            </ol>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowSetupWarning(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setShowSetupWarning(false)}
+            >
               Got it
             </Button>
           </AlertDescription>
@@ -121,8 +190,10 @@ export function SecurityHub() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="setup">Setup</TabsTrigger>
           <TabsTrigger value="ca">Certificate Authority</TabsTrigger>
           <TabsTrigger value="clients">Client Certificates</TabsTrigger>
+          <TabsTrigger value="advanced">Advanced</TabsTrigger>
           <TabsTrigger value="guide">Import Guide</TabsTrigger>
         </TabsList>
 
@@ -149,10 +220,27 @@ export function SecurityHub() {
                     id="mtls-toggle"
                     checked={config?.enabled ?? false}
                     onCheckedChange={handleToggleMTLS}
-                    disabled={switchLoading || !config?.has_ca}
+                    disabled={
+                      switchLoading ||
+                      !config?.has_ca ||
+                      !pluginStatus?.installed
+                    }
                   />
                 </div>
-                {!config?.has_ca && (
+                {!pluginStatus?.installed && (
+                  <Alert>
+                    <Plug className="h-4 w-4" />
+                    <AlertDescription>
+                      Install the{" "}
+                      <code className="bg-muted px-1 rounded">
+                        mtlswhitelist
+                      </code>{" "}
+                      plugin first. See the <strong>Setup</strong> tab for
+                      instructions.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {pluginStatus?.installed && !config?.has_ca && (
                   <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
@@ -176,12 +264,16 @@ export function SecurityHub() {
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">CA Status</p>
                     <p className="text-2xl font-bold">
-                      {config?.has_ca ? 'Configured' : 'Not Set'}
+                      {config?.has_ca ? "Configured" : "Not Set"}
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Client Certs</p>
-                    <p className="text-2xl font-bold">{config?.client_count ?? 0}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Client Certs
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {config?.client_count ?? 0}
+                    </p>
                   </div>
                   {config?.ca_expiry && (
                     <div className="col-span-2 space-y-1">
@@ -206,16 +298,155 @@ export function SecurityHub() {
             </CardHeader>
             <CardContent className="prose prose-sm dark:prose-invert max-w-none">
               <p>
-                With mTLS enabled, clients must present a valid certificate signed by your CA
-                to access protected resources. This provides:
+                With mTLS enabled, clients must present a valid certificate
+                signed by your CA to access protected resources. This provides:
               </p>
               <ul>
-                <li><strong>Strong Authentication:</strong> Only clients with valid certificates can connect</li>
-                <li><strong>No Login Page:</strong> Unauthorized users are rejected at the TLS level</li>
-                <li><strong>Per-Resource Control:</strong> Enable mTLS selectively on specific routers</li>
+                <li>
+                  <strong>Strong Authentication:</strong> Only clients with
+                  valid certificates can connect
+                </li>
+                <li>
+                  <strong>No Login Page:</strong> Unauthorized users are
+                  rejected at the TLS level
+                </li>
+                <li>
+                  <strong>Per-Resource Control:</strong> Enable mTLS selectively
+                  on specific routers
+                </li>
               </ul>
               <p className="text-muted-foreground">
-                After enabling mTLS globally, go to Resources and enable it on individual routers.
+                After enabling mTLS globally, go to Resources and enable it on
+                individual routers.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Setup Tab */}
+        <TabsContent value="setup" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>One-Time Traefik Setup</CardTitle>
+              <CardDescription>
+                Complete these steps once to enable mTLS authentication
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Step 1 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="h-6 w-6 rounded-full p-0 flex items-center justify-center"
+                  >
+                    1
+                  </Badge>
+                  <h4 className="font-semibold">
+                    Add the mtlswhitelist plugin to your Traefik static
+                    configuration
+                  </h4>
+                </div>
+                <p className="text-sm text-muted-foreground ml-8">
+                  Add this to your{" "}
+                  <code className="bg-muted px-1 rounded">
+                    traefik_config.yml
+                  </code>{" "}
+                  (or static config file):
+                </p>
+                <pre className="bg-muted p-4 rounded text-xs overflow-x-auto ml-8">
+                  {`experimental:
+  plugins:
+    mtlswhitelist:
+      moduleName: github.com/smerschjohann/mtlswhitelist
+      version: v0.0.4`}
+                </pre>
+              </div>
+
+              {/* Step 2 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="h-6 w-6 rounded-full p-0 flex items-center justify-center"
+                  >
+                    2
+                  </Badge>
+                  <h4 className="font-semibold">
+                    Add the certificates volume mount
+                  </h4>
+                </div>
+                <p className="text-sm text-muted-foreground ml-8">
+                  Add this volume to your Traefik service in{" "}
+                  <code className="bg-muted px-1 rounded">
+                    docker-compose.yml
+                  </code>
+                  :
+                </p>
+                <pre className="bg-muted p-4 rounded text-xs overflow-x-auto ml-8">
+                  {`volumes:
+  - ./config/traefik/certs:/etc/traefik/certs:ro`}
+                </pre>
+              </div>
+
+              {/* Step 3 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="h-6 w-6 rounded-full p-0 flex items-center justify-center"
+                  >
+                    3
+                  </Badge>
+                  <h4 className="font-semibold">Restart Traefik</h4>
+                </div>
+                <p className="text-sm text-muted-foreground ml-8">
+                  After making the above changes, restart Traefik to load the
+                  plugin:
+                </p>
+                <pre className="bg-muted p-4 rounded text-xs overflow-x-auto ml-8">
+                  {`docker compose down && docker compose up -d`}
+                </pre>
+              </div>
+
+              <Alert className="mt-4">
+                <Info className="h-4 w-4" />
+                <AlertTitle>When to restart?</AlertTitle>
+                <AlertDescription>
+                  Only restart Traefik after completing steps 1 and 2. Once the
+                  plugin is installed, you can enable/disable mTLS on individual
+                  resources without restarting.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>How It Works</CardTitle>
+            </CardHeader>
+            <CardContent className="prose prose-sm dark:prose-invert max-w-none">
+              <p>
+                The <code>mtlswhitelist</code> plugin validates client
+                certificates at the middleware level, which means it works
+                seamlessly with routers from any provider (HTTP API, Docker,
+                File).
+              </p>
+              <p>
+                When you enable mTLS on a resource, the <code>mtls-auth</code>{" "}
+                middleware is automatically added to that router. The middleware
+                checks:
+              </p>
+              <ul>
+                <li>
+                  That the client presented a certificate during TLS handshake
+                </li>
+                <li>That the certificate is signed by your CA</li>
+                <li>That the certificate has not expired</li>
+              </ul>
+              <p className="text-muted-foreground">
+                Requests without valid certificates receive a 403 Forbidden
+                response.
               </p>
             </CardContent>
           </Card>
@@ -231,11 +462,166 @@ export function SecurityHub() {
           <ClientCertList />
         </TabsContent>
 
+        {/* Advanced Tab - Middleware Configuration */}
+        <TabsContent value="advanced" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Middleware Configuration</CardTitle>
+              <CardDescription>
+                Configure advanced options for the mtlswhitelist plugin
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Reject Message */}
+              <div className="space-y-2">
+                <Label htmlFor="reject-message">Reject Message</Label>
+                <p className="text-sm text-muted-foreground">
+                  Message returned when certificate validation fails
+                </p>
+                <Input
+                  id="reject-message"
+                  value={middlewareForm.reject_message}
+                  onChange={(e) =>
+                    setMiddlewareForm((prev) => ({
+                      ...prev,
+                      reject_message: e.target.value,
+                    }))
+                  }
+                  placeholder="Access denied: Valid client certificate required"
+                />
+              </div>
+
+              {/* Refresh Interval */}
+              <div className="space-y-2">
+                <Label htmlFor="refresh-interval">Refresh Interval (seconds)</Label>
+                <p className="text-sm text-muted-foreground">
+                  How often to refresh external data sources (if configured)
+                </p>
+                <Input
+                  id="refresh-interval"
+                  type="number"
+                  value={middlewareForm.refresh_interval}
+                  onChange={(e) =>
+                    setMiddlewareForm((prev) => ({
+                      ...prev,
+                      refresh_interval: parseInt(e.target.value) || 300,
+                    }))
+                  }
+                  min={60}
+                  max={3600}
+                />
+              </div>
+
+              {/* Request Headers */}
+              <div className="space-y-2">
+                <Label htmlFor="request-headers">Request Headers (JSON)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Headers to add to requests with certificate info. Example:{" "}
+                  <code className="bg-muted px-1 rounded">
+                    {`{"X-Client-CN": "{{ .Subject.CommonName }}"}`}
+                  </code>
+                </p>
+                <Textarea
+                  id="request-headers"
+                  value={middlewareForm.request_headers}
+                  onChange={(e) =>
+                    setMiddlewareForm((prev) => ({
+                      ...prev,
+                      request_headers: e.target.value,
+                    }))
+                  }
+                  placeholder='{"X-Client-CN": "{{ .Subject.CommonName }}"}'
+                  rows={3}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              {/* Rules */}
+              <div className="space-y-2">
+                <Label htmlFor="rules">Validation Rules (JSON)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Advanced rules for certificate validation. Leave empty for default
+                  CA validation only.
+                </p>
+                <Textarea
+                  id="rules"
+                  value={middlewareForm.rules}
+                  onChange={(e) =>
+                    setMiddlewareForm((prev) => ({
+                      ...prev,
+                      rules: e.target.value,
+                    }))
+                  }
+                  placeholder='[{"type": "AllOf", "rules": [{"type": "Header", "key": "Subject.CommonName", "value": "admin.*"}]}]'
+                  rows={4}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <Button
+                onClick={handleSaveMiddlewareConfig}
+                disabled={savingMiddleware}
+              >
+                {savingMiddleware ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Configuration"
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Documentation */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Rule Types</CardTitle>
+              <CardDescription>
+                Available rule types for the mtlswhitelist plugin
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="prose prose-sm dark:prose-invert max-w-none">
+              <ul>
+                <li>
+                  <strong>AllOf:</strong> All nested rules must match
+                </li>
+                <li>
+                  <strong>AnyOf:</strong> At least one nested rule must match
+                </li>
+                <li>
+                  <strong>NoneOf:</strong> None of the nested rules must match
+                </li>
+                <li>
+                  <strong>Header:</strong> Match certificate field (e.g.,{" "}
+                  <code>Subject.CommonName</code>)
+                </li>
+                <li>
+                  <strong>IPRange:</strong> Match client IP against CIDR range
+                </li>
+              </ul>
+              <p className="text-muted-foreground">
+                See the{" "}
+                <a
+                  href="https://github.com/smerschjohann/mtlswhitelist"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  plugin documentation
+                </a>{" "}
+                for more details.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Import Guide Tab */}
         <TabsContent value="guide">
           <CertImportGuide />
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

@@ -23,7 +23,7 @@ interface PluginCardProps {
 }
 
 // Get status badge variant and icon
-function getStatusBadge(status: Plugin['status'], isInstalled?: boolean) {
+function getStatusBadge(status: Plugin['status'], isInstalled?: boolean, usageCount?: number) {
   switch (status) {
     case 'enabled':
       // If enabled and installed via local config, show as "User" (manually installed and active)
@@ -53,6 +53,15 @@ function getStatusBadge(status: Plugin['status'], isInstalled?: boolean) {
       }
     case 'not_loaded':
     case 'configured':
+      // If the plugin has usage (middlewares using it), it's actually running
+      // This handles cases where status detection missed that it's loaded
+      if (usageCount && usageCount > 0) {
+        return {
+          variant: 'success' as const,
+          icon: <Power className="h-3 w-3" />,
+          label: isInstalled ? 'User' : 'Loaded',
+        }
+      }
       // Plugin is in local config but not yet loaded by Traefik - requires restart
       if (isInstalled) {
         return {
@@ -84,7 +93,7 @@ export function PluginCard({
   removing,
 }: PluginCardProps) {
   const isLoading = installing || removing
-  const statusBadge = getStatusBadge(plugin.status, plugin.isInstalled)
+  const statusBadge = getStatusBadge(plugin.status, plugin.isInstalled, plugin.usageCount)
 
   return (
     <Card

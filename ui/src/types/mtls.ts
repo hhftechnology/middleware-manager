@@ -42,3 +42,16 @@ export interface CreateClientRequest {
 export interface MTLSConfigRequest {
   mtls_enabled: boolean
 }
+
+export interface PluginCheckResponse {
+  installed: boolean
+  plugin_name: string
+  version: string
+}
+
+export interface MTLSMiddlewareConfig {
+  rules: string
+  request_headers: string
+  reject_message: string
+  refresh_interval: number
+}

@@ -232,7 +232,7 @@ func runServiceMigrations(db *DB) error {
 // runPostMigrationUpdates handles migrations that SQLite can't do easily in schema migrations
 func runPostMigrationUpdates(db *sql.DB) error {
 	// Check if existing resources table is missing any of our columns
-	// We'll check for the custom_headers column
+	// Check for the custom_headers column
 	var hasCustomHeadersColumn bool
 	err := db.QueryRow(`
 		SELECT COUNT(*) > 0 
@@ -362,6 +362,38 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		}
 
 		log.Println("Successfully added mtls_enabled column")
+	}
+
+	// Check for middleware config columns in mtls_config table
+	var hasMTLSMiddlewareRulesColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('mtls_config')
+		WHERE name = 'middleware_rules'
+	`).Scan(&hasMTLSMiddlewareRulesColumn)
+
+	if err != nil {
+		return fmt.Errorf("failed to check if middleware_rules column exists: %w", err)
+	}
+
+	// If middleware config columns don't exist, add them
+	if !hasMTLSMiddlewareRulesColumn {
+		log.Println("Adding middleware config columns to mtls_config table")
+
+		if _, err := db.Exec("ALTER TABLE mtls_config ADD COLUMN middleware_rules TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add middleware_rules column: %w", err)
+		}
+		if _, err := db.Exec("ALTER TABLE mtls_config ADD COLUMN middleware_request_headers TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add middleware_request_headers column: %w", err)
+		}
+		if _, err := db.Exec("ALTER TABLE mtls_config ADD COLUMN middleware_reject_message TEXT DEFAULT 'Access denied: Valid client certificate required'"); err != nil {
+			return fmt.Errorf("failed to add middleware_reject_message column: %w", err)
+		}
+		if _, err := db.Exec("ALTER TABLE mtls_config ADD COLUMN middleware_refresh_interval INTEGER DEFAULT 300"); err != nil {
+			return fmt.Errorf("failed to add middleware_refresh_interval column: %w", err)
+		}
+
+		log.Println("Successfully added middleware config columns")
 	}
 
 	return nil

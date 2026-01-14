@@ -59,3 +59,15 @@ type MTLSConfigResponse struct {
 	MTLSConfig
 	ClientCount int `json:"client_count"`
 }
+
+// MTLSMiddlewareConfig represents the mtlswhitelist plugin configuration
+type MTLSMiddlewareConfig struct {
+	// Rules for certificate validation (JSON array of rules)
+	Rules string `json:"rules"`
+	// RequestHeaders to add to requests with cert info (JSON object)
+	RequestHeaders string `json:"request_headers"`
+	// RejectMessage to return when certificate validation fails
+	RejectMessage string `json:"reject_message"`
+	// RefreshInterval in seconds for external data
+	RefreshInterval int `json:"refresh_interval"`
+}

@@ -98,6 +98,11 @@ CREATE TABLE IF NOT EXISTS mtls_config (
     ca_subject TEXT DEFAULT '',
     ca_expiry TIMESTAMP,
     certs_base_path TEXT DEFAULT '/etc/traefik/certs',
+    -- Middleware plugin config
+    middleware_rules TEXT DEFAULT '',
+    middleware_request_headers TEXT DEFAULT '',
+    middleware_reject_message TEXT DEFAULT 'Access denied: Valid client certificate required',
+    middleware_refresh_interval INTEGER DEFAULT 300,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

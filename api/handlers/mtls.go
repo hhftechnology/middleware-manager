@@ -4,16 +4,21 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hhftechnology/middleware-manager/models"
 	"github.com/hhftechnology/middleware-manager/services"
+	"gopkg.in/yaml.v3"
 )
 
 // MTLSHandler handles mTLS-related requests
 type MTLSHandler struct {
-	DB            *sql.DB
-	CertGenerator *services.CertGenerator
+	DB                      *sql.DB
+	CertGenerator           *services.CertGenerator
+	TraefikStaticConfigPath string
 }
 
 // NewMTLSHandler creates a new mTLS handler
@@ -22,6 +27,11 @@ func NewMTLSHandler(db *sql.DB) *MTLSHandler {
 		DB:            db,
 		CertGenerator: services.NewCertGenerator(db),
 	}
+}
+
+// SetTraefikConfigPath sets the Traefik static config path
+func (h *MTLSHandler) SetTraefikConfigPath(path string) {
+	h.TraefikStaticConfigPath = path
 }
 
 // GetConfig returns the current mTLS configuration
@@ -267,5 +277,87 @@ func (h *MTLSHandler) UpdateCertsBasePath(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":         "Certificates base path updated successfully",
 		"certs_base_path": input.CertsBasePath,
+	})
+}
+
+// CheckPlugin checks if the mtlswhitelist plugin is installed
+func (h *MTLSHandler) CheckPlugin(c *gin.Context) {
+	installed, version := h.isPluginInstalled("mtlswhitelist")
+
+	c.JSON(http.StatusOK, gin.H{
+		"installed":   installed,
+		"plugin_name": "mtlswhitelist",
+		"version":     version,
+	})
+}
+
+// isPluginInstalled checks if a specific plugin is installed in Traefik static config
+func (h *MTLSHandler) isPluginInstalled(pluginName string) (bool, string) {
+	if h.TraefikStaticConfigPath == "" {
+		return false, ""
+	}
+
+	cleanPath := filepath.Clean(h.TraefikStaticConfigPath)
+	yamlFile, err := os.ReadFile(cleanPath)
+	if err != nil {
+		log.Printf("Warning: Could not read Traefik config for plugin check: %v", err)
+		return false, ""
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(yamlFile, &config); err != nil {
+		log.Printf("Warning: Could not parse Traefik config for plugin check: %v", err)
+		return false, ""
+	}
+
+	// Check experimental.plugins section
+	if experimentalSection, ok := config["experimental"].(map[string]interface{}); ok {
+		if pluginsConfig, ok := experimentalSection["plugins"].(map[string]interface{}); ok {
+			// Check for the plugin by name (lowercase comparison)
+			for key, pluginData := range pluginsConfig {
+				if strings.EqualFold(key, pluginName) {
+					version := ""
+					if pluginEntry, ok := pluginData.(map[string]interface{}); ok {
+						if v, ok := pluginEntry["version"].(string); ok {
+							version = v
+						}
+					}
+					return true, version
+				}
+			}
+		}
+	}
+
+	return false, ""
+}
+
+// GetMiddlewareConfig returns the mTLS middleware configuration
+func (h *MTLSHandler) GetMiddlewareConfig(c *gin.Context) {
+	config, err := h.CertGenerator.GetMiddlewareConfig()
+	if err != nil {
+		log.Printf("Error getting middleware config: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to get middleware configuration")
+		return
+	}
+
+	c.JSON(http.StatusOK, config)
+}
+
+// UpdateMiddlewareConfig updates the mTLS middleware configuration
+func (h *MTLSHandler) UpdateMiddlewareConfig(c *gin.Context) {
+	var input models.MTLSMiddlewareConfig
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, "Invalid request: "+err.Error())
+		return
+	}
+
+	if err := h.CertGenerator.UpdateMiddlewareConfig(&input); err != nil {
+		log.Printf("Error updating middleware config: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update middleware configuration: "+err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Middleware configuration updated successfully",
 	})
 }

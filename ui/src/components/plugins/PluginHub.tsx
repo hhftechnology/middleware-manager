@@ -94,10 +94,14 @@ export function PluginHub() {
   }, [activeTab, cataloguePlugins.length, loadingCatalogue, fetchCatalogue])
 
   // Compute plugin statistics
+  // A plugin is considered enabled if status is 'enabled' OR if it has active usage
   const stats = useMemo(() => {
+    const isPluginEnabled = (p: Plugin) => 
+      p.status === 'enabled' || (p.usageCount && p.usageCount > 0)
+    
     return {
       total: plugins.length,
-      enabled: plugins.filter((p) => p.status === 'enabled').length,
+      enabled: plugins.filter(isPluginEnabled).length,
       disabled: plugins.filter((p) => p.status === 'disabled').length,
       error: plugins.filter((p) => p.status === 'error').length,
       installed: plugins.filter((p) => p.isInstalled).length,

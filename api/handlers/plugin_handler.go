@@ -142,10 +142,18 @@ func (h *PluginHandler) getPluginsFromLocalConfig() []models.PluginResponse {
 
 // mergeWithLocalConfig merges API plugins with local config info
 func (h *PluginHandler) mergeWithLocalConfig(apiPlugins []models.PluginResponse, localPlugins map[string]map[string]interface{}) []models.PluginResponse {
-	// Create a map for quick lookup
+	// Create a map for quick lookup by name
 	apiPluginMap := make(map[string]*models.PluginResponse)
 	for i := range apiPlugins {
 		apiPluginMap[apiPlugins[i].Name] = &apiPlugins[i]
+	}
+	
+	// Also track which plugins are confirmed enabled (from API with status=enabled)
+	enabledPlugins := make(map[string]bool)
+	for _, plugin := range apiPlugins {
+		if plugin.Status == "enabled" {
+			enabledPlugins[plugin.Name] = true
+		}
 	}
 
 	// Update API plugins with local config info
@@ -156,12 +164,21 @@ func (h *PluginHandler) mergeWithLocalConfig(apiPlugins []models.PluginResponse,
 				plugin.InstalledVersion = version
 			}
 		} else {
-			// Plugin exists in local config but not in API (might not be loaded)
+			// Plugin exists in local config but not directly in API
+			// Check if it might be enabled under a different detection method
+			// If plugin is in enabledPlugins map, it's actually running
 			newPlugin := models.PluginResponse{
 				Name:        key,
 				Type:        "middleware",
-				Status:      "not_loaded",
 				IsInstalled: true,
+			}
+			
+			// Check if this plugin is actually enabled (might be detected via middleware usage)
+			if enabledPlugins[key] {
+				newPlugin.Status = "enabled"
+			} else {
+				// Plugin is configured but not detected as loaded - needs restart
+				newPlugin.Status = "not_loaded"
 			}
 
 			if moduleName, ok := localConfig["moduleName"].(string); ok {

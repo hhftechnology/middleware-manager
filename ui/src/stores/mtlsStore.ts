@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { mtlsApi } from '@/services/api'
-import type { MTLSConfig, MTLSClient, CreateCARequest, CreateClientRequest } from '@/types'
+import type { MTLSConfig, MTLSClient, CreateCARequest, CreateClientRequest, PluginCheckResponse, MTLSMiddlewareConfig } from '@/types'
 
 interface MTLSState {
   // Data
   config: MTLSConfig | null
   clients: MTLSClient[]
+  pluginStatus: PluginCheckResponse | null
+  middlewareConfig: MTLSMiddlewareConfig | null
 
   // Loading states
   loading: boolean
@@ -24,6 +26,9 @@ interface MTLSState {
   createClient: (data: CreateClientRequest) => Promise<MTLSClient | null>
   revokeClient: (id: string) => Promise<boolean>
   deleteClient: (id: string) => Promise<boolean>
+  checkPlugin: () => Promise<boolean>
+  fetchMiddlewareConfig: () => Promise<void>
+  updateMiddlewareConfig: (config: MTLSMiddlewareConfig) => Promise<boolean>
   clearError: () => void
 }
 
@@ -31,6 +36,8 @@ export const useMTLSStore = create<MTLSState>((set, get) => ({
   // Initial state
   config: null,
   clients: [],
+  pluginStatus: null,
+  middlewareConfig: null,
   loading: false,
   loadingClients: false,
   error: null,
@@ -172,6 +179,44 @@ export const useMTLSStore = create<MTLSState>((set, get) => ({
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to delete client certificate',
+      })
+      return false
+    }
+  },
+
+  // Check plugin status
+  checkPlugin: async () => {
+    try {
+      const status = await mtlsApi.checkPlugin()
+      set({ pluginStatus: status })
+      return status.installed
+    } catch (err) {
+      console.error('Failed to check plugin status:', err)
+      set({ pluginStatus: { installed: false, plugin_name: 'mtlswhitelist', version: '' } })
+      return false
+    }
+  },
+
+  // Fetch middleware configuration
+  fetchMiddlewareConfig: async () => {
+    try {
+      const config = await mtlsApi.getMiddlewareConfig()
+      set({ middlewareConfig: config })
+    } catch (err) {
+      console.error('Failed to fetch middleware config:', err)
+    }
+  },
+
+  // Update middleware configuration
+  updateMiddlewareConfig: async (config) => {
+    set({ error: null })
+    try {
+      await mtlsApi.updateMiddlewareConfig(config)
+      set({ middlewareConfig: config })
+      return true
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to update middleware configuration',
       })
       return false
     }

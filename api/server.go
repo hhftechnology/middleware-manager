@@ -93,6 +93,7 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	traefikHandler := handlers.NewTraefikHandler(db, configManager)
 	// Initialize MTLSHandler for mTLS certificate management
 	mtlsHandler := handlers.NewMTLSHandler(db)
+	mtlsHandler.SetTraefikConfigPath(traefikStaticConfigPath)
 
 	// Setup server with all handlers
 	server := &Server{
@@ -230,6 +231,10 @@ func (s *Server) setupRoutes(uiPath string) {
 			mtls.GET("/clients/:id/download", s.mtlsHandler.DownloadClientP12)
 			mtls.PUT("/clients/:id/revoke", s.mtlsHandler.RevokeClient)
 			mtls.DELETE("/clients/:id", s.mtlsHandler.DeleteClient)
+			// Plugin detection and middleware configuration
+			mtls.GET("/plugin/check", s.mtlsHandler.CheckPlugin)
+			mtls.GET("/middleware/config", s.mtlsHandler.GetMiddlewareConfig)
+			mtls.PUT("/middleware/config", s.mtlsHandler.UpdateMiddlewareConfig)
 		}
 	}
 

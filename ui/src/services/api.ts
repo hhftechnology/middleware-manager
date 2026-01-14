@@ -39,6 +39,8 @@ import type {
   MTLSClient,
   CreateCARequest,
   CreateClientRequest,
+  PluginCheckResponse,
+  MTLSMiddlewareConfig,
 } from '@/types'
 
 const API_BASE = '/api'
@@ -446,6 +448,19 @@ export const mtlsApi = {
   deleteClient: (id: string) =>
     request<{ message: string; id: string }>(`${API_BASE}/mtls/clients/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+    }),
+
+  // Check if mtlswhitelist plugin is installed
+  checkPlugin: () => request<PluginCheckResponse>(`${API_BASE}/mtls/plugin/check`),
+
+  // Get middleware plugin configuration
+  getMiddlewareConfig: () => request<MTLSMiddlewareConfig>(`${API_BASE}/mtls/middleware/config`),
+
+  // Update middleware plugin configuration
+  updateMiddlewareConfig: (config: MTLSMiddlewareConfig) =>
+    request<{ message: string }>(`${API_BASE}/mtls/middleware/config`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
     }),
 }
 

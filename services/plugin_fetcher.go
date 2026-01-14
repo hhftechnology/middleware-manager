@@ -175,7 +175,7 @@ func (f *PluginFetcher) buildPluginResponses(middlewares []models.TraefikMiddlew
 	// Map to track unique plugins and their usage
 	pluginMap := make(map[string]*models.PluginResponse)
 
-	// Extract plugins from middlewares
+	// Extract plugins from middlewares - if a middleware references a plugin, it's running
 	for _, mw := range middlewares {
 		// Check if this middleware is a plugin type
 		if mw.Type != "plugin" && !isPluginMiddleware(mw) {
@@ -196,7 +196,7 @@ func (f *PluginFetcher) buildPluginResponses(middlewares []models.TraefikMiddlew
 				Version:     extractVersion(mw),
 				Type:        "middleware",
 				Provider:    mw.Provider,
-				Status:      "enabled",
+				Status:      "enabled", // If middleware uses plugin, plugin IS enabled
 				IsInstalled: true,
 				UsageCount:  0,
 				UsedBy:      []string{},
@@ -208,6 +208,28 @@ func (f *PluginFetcher) buildPluginResponses(middlewares []models.TraefikMiddlew
 		// Track usage
 		plugin.UsageCount++
 		plugin.UsedBy = append(plugin.UsedBy, mw.Name)
+	}
+
+	// Also scan middlewares for plugin provider patterns (e.g., "plugin-badger@file")
+	// These indicate the plugin is loaded and registered
+	for _, mw := range middlewares {
+		// Check if middleware name indicates it's a plugin middleware
+		if strings.Contains(mw.Name, "plugin-") || strings.Contains(mw.Provider, "plugin") {
+			// Extract plugin name from middleware name
+			pluginName := extractPluginNameFromMiddlewareName(mw.Name)
+			if pluginName != "" && pluginMap[pluginName] == nil {
+				pluginMap[pluginName] = &models.PluginResponse{
+					Name:        pluginName,
+					ModuleName:  pluginName,
+					Type:        "middleware",
+					Provider:    mw.Provider,
+					Status:      "enabled",
+					IsInstalled: true,
+					UsageCount:  1,
+					UsedBy:      []string{mw.Name},
+				}
+			}
+		}
 	}
 
 	// Update status from overview if available
@@ -269,6 +291,17 @@ func (f *PluginFetcher) buildPluginResponses(middlewares []models.TraefikMiddlew
 	}
 
 	return plugins
+}
+
+// extractPluginNameFromMiddlewareName extracts plugin name from middleware naming patterns
+func extractPluginNameFromMiddlewareName(name string) string {
+	// Handle patterns like "plugin-badger@file" or "badger-middleware@file"
+	name = strings.TrimPrefix(name, "plugin-")
+	if idx := strings.Index(name, "@"); idx != -1 {
+		name = name[:idx]
+	}
+	name = strings.TrimSuffix(name, "-middleware")
+	return name
 }
 
 // isPluginMiddleware checks if a middleware is plugin-based
