@@ -79,34 +79,50 @@ func (cm *ConfigManager) loadConfig() error {
 func (cm *ConfigManager) EnsureDefaultDataSources(pangolinURL, traefikURL string) error {
     cm.mu.Lock()
     defer cm.mu.Unlock()
-    
+
     // Ensure data sources map exists
     if cm.config.DataSources == nil {
         cm.config.DataSources = make(map[string]models.DataSourceConfig)
     }
-    
+
     // Add default Pangolin data source if not present
     if _, exists := cm.config.DataSources["pangolin"]; !exists {
         cm.config.DataSources["pangolin"] = models.DataSourceConfig{
             Type: models.PangolinAPI,
             URL:  pangolinURL,
         }
+    } else {
+        // Ensure Type is set for existing Pangolin config (fix for old configs)
+        pConfig := cm.config.DataSources["pangolin"]
+        if pConfig.Type == "" {
+            pConfig.Type = models.PangolinAPI
+            if pConfig.URL == "" {
+                pConfig.URL = pangolinURL
+            }
+            cm.config.DataSources["pangolin"] = pConfig
+            log.Printf("Fixed missing Type for pangolin data source")
+        }
     }
-    
+
     // Add default Traefik data source if not present
     if _, exists := cm.config.DataSources["traefik"]; !exists {
         cm.config.DataSources["traefik"] = models.DataSourceConfig{
             Type: models.TraefikAPI,
             URL:  traefikURL,
         }
-    } else if traefikURL != "" {
-        // Update Traefik URL if provided (could be auto-discovered)
+    } else {
+        // Ensure Type is set for existing Traefik config (fix for old configs)
         tConfig := cm.config.DataSources["traefik"]
-        if tConfig.URL != traefikURL {
+        if tConfig.Type == "" {
+            tConfig.Type = models.TraefikAPI
+            log.Printf("Fixed missing Type for traefik data source")
+        }
+        // Update Traefik URL if provided (could be auto-discovered)
+        if traefikURL != "" && tConfig.URL != traefikURL {
             log.Printf("Updating Traefik URL from %s to %s", tConfig.URL, traefikURL)
             tConfig.URL = traefikURL
-            cm.config.DataSources["traefik"] = tConfig
         }
+        cm.config.DataSources["traefik"] = tConfig
     }
     
     // Ensure there's an active data source
@@ -161,13 +177,25 @@ func (cm *ConfigManager) saveConfig() error {
 func (cm *ConfigManager) GetActiveDataSourceConfig() (models.DataSourceConfig, error) {
     cm.mu.RLock()
     defer cm.mu.RUnlock()
-    
+
     dsName := cm.config.ActiveDataSource
     ds, ok := cm.config.DataSources[dsName]
     if !ok {
         return models.DataSourceConfig{}, fmt.Errorf("active data source not found: %s", dsName)
     }
-    
+
+    // Fallback: infer Type from name if empty (for old configs)
+    if ds.Type == "" {
+        switch dsName {
+        case "pangolin":
+            ds.Type = models.PangolinAPI
+        case "traefik":
+            ds.Type = models.TraefikAPI
+        default:
+            return models.DataSourceConfig{}, fmt.Errorf("unknown data source type for: %s", dsName)
+        }
+    }
+
     return ds, nil
 }
 
