@@ -138,14 +138,15 @@ func main() {
     go configGenerator.Start(cfg.GenerateInterval)
 
     serverConfig := api.ServerConfig{
-        Port:       cfg.Port,
-        UIPath:     cfg.UIPath,
-        Debug:      cfg.Debug,
-        AllowCORS:  cfg.AllowCORS,
-        CORSOrigin: cfg.CORSOrigin,
+        Port:        cfg.Port,
+        UIPath:      cfg.UIPath,
+        Debug:       cfg.Debug,
+        AllowCORS:   cfg.AllowCORS,
+        CORSOrigin:  cfg.CORSOrigin,
+        PangolinURL: cfg.PangolinAPIURL,
     }
 
-    server := api.NewServer(db.DB, serverConfig, configManager, cfg.TraefikStaticConfigPath)
+    server := api.NewServer(db, serverConfig, configManager, cfg.TraefikStaticConfigPath)
     go func() {
         if err := server.Start(); err != nil {
             log.Printf("Server error: %v", err)

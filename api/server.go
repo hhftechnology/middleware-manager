@@ -14,6 +14,7 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/hhftechnology/middleware-manager/api/handlers"
+	"github.com/hhftechnology/middleware-manager/database"
 	"github.com/hhftechnology/middleware-manager/services"
 )
 
@@ -30,28 +31,34 @@ type Server struct {
 	pluginHandler           *handlers.PluginHandler
 	traefikHandler          *handlers.TraefikHandler
 	mtlsHandler             *handlers.MTLSHandler
+	proxyHandler            *handlers.ProxyHandler
 	configManager           *services.ConfigManager
+	configProxy             *services.ConfigProxy
 	traefikStaticConfigPath string
 }
 
 // ServerConfig contains configuration options for the server
 type ServerConfig struct {
-	Port       string
-	UIPath     string
-	Debug      bool
-	AllowCORS  bool
-	CORSOrigin string
+	Port        string
+	UIPath      string
+	Debug       bool
+	AllowCORS   bool
+	CORSOrigin  string
+	PangolinURL string // URL for Pangolin API (for config proxy)
 }
 
 // NewServer creates a new API server
-func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigManager, traefikStaticConfigPath string) *Server {
+func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *services.ConfigManager, traefikStaticConfigPath string) *Server {
+	// Get the underlying sql.DB for handlers that need it
+	db := dbWrapper.DB
+
 	// Set gin mode based on debug flag
 	if !config.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	
+
 	router := gin.New()
-	
+
 	// Use recovery and logger middleware
 	router.Use(gin.Recovery())
 	if config.Debug {
@@ -64,20 +71,20 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	// CORS middleware if enabled
 	if config.AllowCORS {
 		corsConfig := cors.DefaultConfig()
-		
+
 		// If a specific origin is provided, use it
 		if config.CORSOrigin != "" {
 			corsConfig.AllowOrigins = []string{config.CORSOrigin}
 		} else {
 			corsConfig.AllowAllOrigins = true
 		}
-		
+
 		corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 		corsConfig.ExposeHeaders = []string{"Content-Length"}
 		corsConfig.AllowCredentials = true
 		corsConfig.MaxAge = 12 * time.Hour
-		
+
 		router.Use(cors.New(corsConfig))
 	}
 
@@ -95,6 +102,10 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	mtlsHandler := handlers.NewMTLSHandler(db)
 	mtlsHandler.SetTraefikConfigPath(traefikStaticConfigPath)
 
+	// Initialize ConfigProxy for Traefik config proxying
+	configProxy := services.NewConfigProxy(dbWrapper, configManager, config.PangolinURL)
+	proxyHandler := handlers.NewProxyHandler(configProxy)
+
 	// Setup server with all handlers
 	server := &Server{
 		db:                      db,
@@ -107,7 +118,9 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 		pluginHandler:           pluginHandler,
 		traefikHandler:          traefikHandler,
 		mtlsHandler:             mtlsHandler,
+		proxyHandler:            proxyHandler,
 		configManager:           configManager,
+		configProxy:             configProxy,
 		traefikStaticConfigPath: traefikStaticConfigPath,
 		srv: &http.Server{
 			Addr:              ":" + config.Port,
@@ -236,6 +249,12 @@ func (s *Server) setupRoutes(uiPath string) {
 			mtls.GET("/middleware/config", s.mtlsHandler.GetMiddlewareConfig)
 			mtls.PUT("/middleware/config", s.mtlsHandler.UpdateMiddlewareConfig)
 		}
+
+		// Config Proxy Routes - Proxies Pangolin config with MW-manager additions
+		// This endpoint is designed for Traefik's HTTP provider
+		api.GET("/traefik-config", s.proxyHandler.GetTraefikConfig)
+		api.POST("/traefik-config/invalidate", s.proxyHandler.InvalidateCache)
+		api.GET("/traefik-config/status", s.proxyHandler.GetProxyStatus)
 	}
 
 	// Serve the React app (Vite build output)
