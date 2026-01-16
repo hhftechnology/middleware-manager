@@ -112,6 +112,9 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 		return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
 	}
 
+	// Remove empty protocol sections so Traefik doesn't reject blank configs
+	cp.pruneEmptySections(config)
+
 	// Update cache
 	cp.cache = config
 	cp.cacheExpiry = time.Now().Add(cp.cacheDuration)
@@ -215,6 +218,32 @@ func (cp *ConfigProxy) initializeConfigMaps(config *ProxiedTraefikConfig) {
 	}
 	if config.TLS.Options == nil {
 		config.TLS.Options = make(map[string]interface{})
+	}
+}
+
+// pruneEmptySections removes protocol blocks that contain no routers or services.
+// Traefik rejects empty protocol sections from the HTTP provider response.
+func (cp *ConfigProxy) pruneEmptySections(config *ProxiedTraefikConfig) {
+	if config == nil {
+		return
+	}
+
+	if config.TCP != nil {
+		if len(config.TCP.Routers) == 0 && len(config.TCP.Services) == 0 {
+			config.TCP = nil
+		}
+	}
+
+	if config.UDP != nil {
+		if len(config.UDP.Routers) == 0 && len(config.UDP.Services) == 0 {
+			config.UDP = nil
+		}
+	}
+
+	if config.TLS != nil {
+		if len(config.TLS.Options) == 0 {
+			config.TLS = nil
+		}
 	}
 }
 
