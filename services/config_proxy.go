@@ -648,7 +648,10 @@ func (cp *ConfigProxy) applyMTLSConfig(config *ProxiedTraefikConfig) error {
 	}
 
 	if middlewareRejectMessage.Valid && middlewareRejectMessage.String != "" {
-		pluginConfig["rejectMessage"] = middlewareRejectMessage.String
+		pluginConfig["rejectMessage"] = map[string]interface{}{
+			"message": middlewareRejectMessage.String,
+			"code":    403,
+		}
 	}
 
 	if middlewareRefreshInterval.Valid && middlewareRefreshInterval.Int64 > 0 {
