@@ -257,6 +257,16 @@ func (s *Server) setupRoutes(uiPath string) {
 		api.GET("/traefik-config/status", s.proxyHandler.GetProxyStatus)
 	}
 
+	// API v1 routes - for Traefik HTTP provider compatibility
+	// Traefik expects the endpoint at /api/v1/traefik-config (same as Pangolin)
+	v1 := s.router.Group("/api/v1")
+	{
+		// Config Proxy endpoint - replaces Pangolin's /api/v1/traefik-config
+		v1.GET("/traefik-config", s.proxyHandler.GetTraefikConfig)
+		v1.POST("/traefik-config/invalidate", s.proxyHandler.InvalidateCache)
+		v1.GET("/traefik-config/status", s.proxyHandler.GetProxyStatus)
+	}
+
 	// Serve the React app (Vite build output)
 	uiPathToUse := uiPath
 	if uiPathToUse == "" {

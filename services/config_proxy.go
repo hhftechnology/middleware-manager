@@ -138,7 +138,16 @@ func (cp *ConfigProxy) fetchPangolinConfig() (*ProxiedTraefikConfig, error) {
 		}
 	}
 
-	url := strings.TrimSuffix(pangolinURL, "/") + "/api/v1/traefik-config"
+	// Build the correct URL - handle both base URL and URLs that include /api/v1
+	pangolinURL = strings.TrimSuffix(pangolinURL, "/")
+	var url string
+	if strings.HasSuffix(pangolinURL, "/api/v1") {
+		// URL already includes /api/v1, just append traefik-config
+		url = pangolinURL + "/traefik-config"
+	} else {
+		// Base URL, append full path
+		url = pangolinURL + "/api/v1/traefik-config"
+	}
 
 	if shouldLogInfo() {
 		log.Printf("Fetching Pangolin config from: %s", url)
@@ -209,27 +218,24 @@ func (cp *ConfigProxy) initializeConfigMaps(config *ProxiedTraefikConfig) {
 	}
 }
 
-// mergeMiddlewareManagerConfig merges all MW-manager additions into the config
+// mergeMiddlewareManagerConfig merges MW-manager middlewares into the config
+// NOTE: Routers and services come from Pangolin API and are NOT modified here.
+// Only middlewares are added - they get merged into the http.middlewares section.
 func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig) error {
 	// Apply custom middlewares from database
+	// These are the only additions middleware-manager makes to the Pangolin config
 	if err := cp.applyMiddlewares(config); err != nil {
 		return fmt.Errorf("failed to apply middlewares: %w", err)
 	}
 
-	// Apply custom services from database
-	if err := cp.applyServices(config); err != nil {
-		return fmt.Errorf("failed to apply services: %w", err)
-	}
-
-	// Apply resource overrides (middleware assignments, headers, priority)
-	if err := cp.applyResourceOverrides(config); err != nil {
-		return fmt.Errorf("failed to apply resource overrides: %w", err)
-	}
-
-	// Apply mTLS configuration
+	// Apply mTLS configuration (adds TLS options and mtls-auth middleware)
 	if err := cp.applyMTLSConfig(config); err != nil {
 		return fmt.Errorf("failed to apply mTLS config: %w", err)
 	}
+
+	// NOTE: We do NOT apply services or resource overrides here.
+	// Routers and services are managed by Pangolin and pass through unchanged.
+	// Routers in Pangolin already reference the middlewares they need.
 
 	return nil
 }

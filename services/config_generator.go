@@ -159,10 +159,12 @@ func (cg *ConfigGenerator) generateConfigWithRetry() error {
 }
 
 // generateConfig generates Traefik configuration files
+// NOTE: Only middlewares are written to the override file.
+// Routers and services come from Pangolin API, not the override file.
 func (cg *ConfigGenerator) generateConfig() error {
-	    if shouldLog() {
-        log.Println("Generating Traefik configuration...")
-    }
+	if shouldLog() {
+		log.Println("Generating Traefik configuration...")
+	}
 
 	config := TraefikConfig{}
 	config.HTTP.Middlewares = make(map[string]interface{})
@@ -173,21 +175,18 @@ func (cg *ConfigGenerator) generateConfig() error {
 	config.UDP.Services = make(map[string]interface{})
 	config.TLS.Options = make(map[string]interface{})
 
+	// Only process middlewares - routers and services come from Pangolin API
 	if err := cg.processMiddlewares(&config); err != nil {
 		return fmt.Errorf("failed to process middlewares: %w", err)
 	}
-	if err := cg.processServices(&config); err != nil {
-		return fmt.Errorf("failed to process services: %w", err)
-	}
-	if err := cg.processResourcesWithServices(&config); err != nil {
-		return fmt.Errorf("failed to process HTTP resources with services: %w", err)
-	}
-	if err := cg.processTCPRouters(&config); err != nil {
-		return fmt.Errorf("failed to process TCP resources: %w", err)
-	}
+
+	// Process mTLS options (adds TLS options and mtls-auth middleware)
 	if err := cg.processMTLSOptions(&config); err != nil {
 		return fmt.Errorf("failed to process mTLS options: %w", err)
 	}
+
+	// NOTE: We do NOT process services, HTTP routers, or TCP routers here.
+	// These are managed by Pangolin API and should not be in the override file.
 
 	processedConfig := preserveTraefikValues(config)
 
