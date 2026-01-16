@@ -50,6 +50,25 @@ type TLSConfig struct {
 	Options map[string]interface{} `json:"options,omitempty"`
 }
 
+type middlewareWithPriority struct {
+	ID       string
+	Priority int
+}
+
+type resourceData struct {
+	ID              string
+	Host            string
+	ServiceID       string
+	Entrypoints     string
+	TLSDomains      string
+	CustomHeaders   string
+	RouterPriority  int
+	SourceType      string
+	MTLSEnabled     bool
+	Middlewares     []middlewareWithPriority
+	CustomServiceID sql.NullString
+}
+
 // ConfigProxy fetches config from Pangolin and merges MW-manager additions
 type ConfigProxy struct {
 	db            *database.DB
@@ -249,28 +268,51 @@ func (cp *ConfigProxy) pruneEmptySections(config *ProxiedTraefikConfig) {
 
 // mergeMiddlewareManagerConfig merges MW-manager middlewares into the config
 // NOTE: Routers and services come from Pangolin API and are NOT modified here.
-// Only middlewares are added - they get merged into the http.middlewares section.
 func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig) error {
-	// Apply custom middlewares from database
-	// These are the only additions middleware-manager makes to the Pangolin config
-	if err := cp.applyMiddlewares(config); err != nil {
-		return fmt.Errorf("failed to apply middlewares: %w", err)
+	// Load resources and their middleware assignments
+	resources, err := cp.fetchResourceData()
+	if err != nil {
+		return fmt.Errorf("failed to fetch resources: %w", err)
 	}
 
-	// Apply mTLS configuration (adds TLS options and mtls-auth middleware)
-	if err := cp.applyMTLSConfig(config); err != nil {
-		return fmt.Errorf("failed to apply mTLS config: %w", err)
+	assignedMiddlewareIDs := make(map[string]struct{})
+	hasMTLSResources := false
+
+	for _, res := range resources {
+		if res.MTLSEnabled {
+			hasMTLSResources = true
+		}
+		for _, mw := range res.Middlewares {
+			assignedMiddlewareIDs[mw.ID] = struct{}{}
+		}
 	}
 
-	// NOTE: We do NOT apply services or resource overrides here.
-	// Routers and services are managed by Pangolin and pass through unchanged.
-	// Routers in Pangolin already reference the middlewares they need.
+	// Only add MW-manager middlewares that are assigned to resources/routers
+	if len(assignedMiddlewareIDs) > 0 {
+		if err := cp.applyMiddlewares(config, assignedMiddlewareIDs); err != nil {
+			return fmt.Errorf("failed to apply middlewares: %w", err)
+		}
+	}
+
+	// Apply mTLS middleware and TLS options only if any resource has mTLS enabled
+	if hasMTLSResources {
+		if err := cp.applyMTLSConfig(config); err != nil {
+			return fmt.Errorf("failed to apply mTLS config: %w", err)
+		}
+	}
+
+	// Apply resource-specific overrides (middleware attachments, priorities, headers, mtls)
+	if len(resources) > 0 {
+		if err := cp.applyResourceOverrides(config, resources); err != nil {
+			return fmt.Errorf("failed to apply resource overrides: %w", err)
+		}
+	}
 
 	return nil
 }
 
 // applyMiddlewares adds custom middlewares from the database
-func (cp *ConfigProxy) applyMiddlewares(config *ProxiedTraefikConfig) error {
+func (cp *ConfigProxy) applyMiddlewares(config *ProxiedTraefikConfig, allowedIDs map[string]struct{}) error {
 	rows, err := cp.db.Query("SELECT id, name, type, config FROM middlewares")
 	if err != nil {
 		return fmt.Errorf("failed to fetch middlewares: %w", err)
@@ -282,6 +324,13 @@ func (cp *ConfigProxy) applyMiddlewares(config *ProxiedTraefikConfig) error {
 		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
 			log.Printf("Failed to scan middleware: %v", err)
 			continue
+		}
+
+		// Skip middlewares not assigned to any resource/router
+		if allowedIDs != nil {
+			if _, ok := allowedIDs[id]; !ok {
+				continue
+			}
 		}
 
 		var middlewareConfig map[string]interface{}
@@ -353,104 +402,8 @@ func (cp *ConfigProxy) applyServices(config *ProxiedTraefikConfig) error {
 }
 
 // applyResourceOverrides applies middleware assignments and other overrides to routers
-func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig) error {
-	query := `
-		SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
-		       r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
-		       rm.middleware_id, rm.priority,
-		       rs.service_id as custom_service_id
-		FROM resources r
-		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
-		LEFT JOIN resource_services rs ON r.id = rs.resource_id
-		WHERE r.status = 'active'
-		ORDER BY r.id, rm.priority DESC
-	`
-	rows, err := cp.db.Query(query)
-	if err != nil {
-		return fmt.Errorf("failed to fetch resources: %w", err)
-	}
-	defer rows.Close()
-
-	type middlewareWithPriority struct {
-		ID       string
-		Priority int
-	}
-
-	type resourceData struct {
-		ID              string
-		Host            string
-		ServiceID       string
-		Entrypoints     string
-		TLSDomains      string
-		CustomHeaders   string
-		RouterPriority  int
-		SourceType      string
-		MTLSEnabled     bool
-		Middlewares     []middlewareWithPriority
-		CustomServiceID sql.NullString
-	}
-
-	resourceMap := make(map[string]*resourceData)
-
-	for rows.Next() {
-		var rID, host, serviceID, entrypoints, tlsDomains, customHeaders, sourceType string
-		var routerPriority sql.NullInt64
-		var mtlsEnabled int
-		var middlewareID sql.NullString
-		var middlewarePriority sql.NullInt64
-		var customServiceID sql.NullString
-
-		err := rows.Scan(
-			&rID, &host, &serviceID, &entrypoints, &tlsDomains,
-			&customHeaders, &routerPriority, &sourceType, &mtlsEnabled,
-			&middlewareID, &middlewarePriority, &customServiceID,
-		)
-		if err != nil {
-			log.Printf("Failed to scan resource: %v", err)
-			continue
-		}
-
-		// Get or create resource data
-		data, exists := resourceMap[rID]
-		if !exists {
-			priority := 200
-			if routerPriority.Valid {
-				priority = int(routerPriority.Int64)
-			}
-			data = &resourceData{
-				ID:              rID,
-				Host:            host,
-				ServiceID:       serviceID,
-				Entrypoints:     entrypoints,
-				TLSDomains:      tlsDomains,
-				CustomHeaders:   customHeaders,
-				RouterPriority:  priority,
-				SourceType:      sourceType,
-				MTLSEnabled:     mtlsEnabled == 1,
-				CustomServiceID: customServiceID,
-			}
-			resourceMap[rID] = data
-		}
-
-		// Add middleware if present
-		if middlewareID.Valid {
-			mwPriority := 200
-			if middlewarePriority.Valid {
-				mwPriority = int(middlewarePriority.Int64)
-			}
-			data.Middlewares = append(data.Middlewares, middlewareWithPriority{
-				ID:       middlewareID.String,
-				Priority: mwPriority,
-			})
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error iterating resources: %w", err)
-	}
-
-	// Now apply overrides to matching routers
-	for _, resource := range resourceMap {
+func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, resources []*resourceData) error {
+	for _, resource := range resources {
 		// Find matching router by host
 		routerKey, router := cp.findMatchingRouter(config.HTTP.Routers, resource.Host)
 
@@ -546,6 +499,89 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig) erro
 	}
 
 	return nil
+}
+
+// fetchResourceData loads active resources and their middleware assignments
+func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
+	query := `
+		SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
+		       r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
+		       rm.middleware_id, rm.priority,
+		       rs.service_id as custom_service_id
+		FROM resources r
+		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
+		LEFT JOIN resource_services rs ON r.id = rs.resource_id
+		WHERE r.status = 'active'
+		ORDER BY r.id, rm.priority DESC
+	`
+	rows, err := cp.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	resourceMap := make(map[string]*resourceData)
+
+	for rows.Next() {
+		var rID, host, serviceID, entrypoints, tlsDomains, customHeaders, sourceType string
+		var routerPriority sql.NullInt64
+		var mtlsEnabled int
+		var middlewareID sql.NullString
+		var middlewarePriority sql.NullInt64
+		var customServiceID sql.NullString
+
+		err := rows.Scan(
+			&rID, &host, &serviceID, &entrypoints, &tlsDomains,
+			&customHeaders, &routerPriority, &sourceType, &mtlsEnabled,
+			&middlewareID, &middlewarePriority, &customServiceID,
+		)
+		if err != nil {
+			log.Printf("Failed to scan resource: %v", err)
+			continue
+		}
+
+		data, exists := resourceMap[rID]
+		if !exists {
+			priority := 200
+			if routerPriority.Valid {
+				priority = int(routerPriority.Int64)
+			}
+			data = &resourceData{
+				ID:              rID,
+				Host:            host,
+				ServiceID:       serviceID,
+				Entrypoints:     entrypoints,
+				TLSDomains:      tlsDomains,
+				CustomHeaders:   customHeaders,
+				RouterPriority:  priority,
+				SourceType:      sourceType,
+				MTLSEnabled:     mtlsEnabled == 1,
+				CustomServiceID: customServiceID,
+			}
+			resourceMap[rID] = data
+		}
+
+		if middlewareID.Valid {
+			mwPriority := 200
+			if middlewarePriority.Valid {
+				mwPriority = int(middlewarePriority.Int64)
+			}
+			data.Middlewares = append(data.Middlewares, middlewareWithPriority{
+				ID:       middlewareID.String,
+				Priority: mwPriority,
+			})
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	resources := make([]*resourceData, 0, len(resourceMap))
+	for _, r := range resourceMap {
+		resources = append(resources, r)
+	}
+	return resources, nil
 }
 
 // applyMTLSConfig adds TLS options and mTLS middleware if globally enabled

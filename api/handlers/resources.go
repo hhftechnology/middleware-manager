@@ -27,7 +27,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 	// Check if pagination is requested
 	usePagination := IsPaginationRequested(c)
 	params := GetPaginationParams(c)
-	
+
 	// Get optional filters
 	sourceType := c.Query("source_type")
 	statusFilter := c.DefaultQuery("status", "active") // Default to active resources only
@@ -35,12 +35,12 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 	// Build WHERE clause for filters
 	whereClause := ""
 	var filterArgs []interface{}
-	
+
 	if statusFilter != "" && statusFilter != "all" {
 		whereClause = " WHERE r.status = ?"
 		filterArgs = append(filterArgs, statusFilter)
 	}
-	
+
 	if sourceType != "" {
 		if whereClause == "" {
 			whereClause = " WHERE r.source_type = ?"
@@ -66,7 +66,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 	query := `
 		SELECT r.id, r.host, r.service_id, r.org_id, r.site_id, r.status,
 		       r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
-		       r.custom_headers, r.router_priority, r.source_type,
+		       r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
 		       GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
 		FROM resources r
 		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
@@ -98,12 +98,13 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 	for rows.Next() {
 		var id, host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
 		var tcpEnabled int
+		var mtlsEnabled int
 		var routerPriority sql.NullInt64
 		var middlewares sql.NullString
 
 		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status,
 			&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
-			&customHeaders, &routerPriority, &sourceType, &middlewares); err != nil {
+			&customHeaders, &mtlsEnabled, &routerPriority, &sourceType, &middlewares); err != nil {
 			log.Printf("Error scanning resource row: %v", err)
 			continue
 		}
@@ -126,6 +127,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 			"tcp_entrypoints": tcpEntrypoints,
 			"tcp_sni_rule":    tcpSNIRule,
 			"custom_headers":  customHeaders,
+			"mtls_enabled":    mtlsEnabled > 0,
 			"router_priority": priority,
 			"source_type":     sourceType,
 		}
@@ -156,70 +158,72 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 // GetResource returns a specific resource
 // GetResource returns a specific resource
 func (h *ResourceHandler) GetResource(c *gin.Context) {
-    id := c.Param("id")
-    if id == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
 
-    var host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
-    var tcpEnabled int
-    var routerPriority sql.NullInt64
-    var middlewares sql.NullString
+	var host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
+	var tcpEnabled int
+	var mtlsEnabled int
+	var routerPriority sql.NullInt64
+	var middlewares sql.NullString
 
-    err := h.DB.QueryRow(`
+	err := h.DB.QueryRow(`
         SELECT r.host, r.service_id, r.org_id, r.site_id, r.status,
                r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
-               r.custom_headers, r.router_priority, r.source_type,
+               r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
                GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
         FROM resources r
         LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
         LEFT JOIN middlewares m ON rm.middleware_id = m.id
         WHERE r.id = ?
         GROUP BY r.id
-    `, id).Scan(&host, &serviceID, &orgID, &siteID, &status, 
-            &entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule, 
-            &customHeaders, &routerPriority, &sourceType, &middlewares)
+    `, id).Scan(&host, &serviceID, &orgID, &siteID, &status,
+		&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
+		&customHeaders, &mtlsEnabled, &routerPriority, &sourceType, &middlewares)
 
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Resource not found: %s", id))
-        return
-    } else if err != nil {
-        log.Printf("Error fetching resource: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch resource")
-        return
-    }
-    
-    // Use default priority if null
-    priority := 200 // Default value
-    if routerPriority.Valid {
-        priority = int(routerPriority.Int64)
-    }
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Resource not found: %s", id))
+		return
+	} else if err != nil {
+		log.Printf("Error fetching resource: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch resource")
+		return
+	}
 
-    resource := map[string]interface{}{
-        "id":              id,
-        "host":            host,
-        "service_id":      serviceID,
-        "org_id":          orgID,
-        "site_id":         siteID,
-        "status":          status,
-        "entrypoints":     entrypoints,
-        "tls_domains":     tlsDomains,
-        "tcp_enabled":     tcpEnabled > 0,
-        "tcp_entrypoints": tcpEntrypoints,
-        "tcp_sni_rule":    tcpSNIRule,
-        "custom_headers":  customHeaders,
-        "router_priority": priority,
-        "source_type":     sourceType, // Make sure this is included
-    }
+	// Use default priority if null
+	priority := 200 // Default value
+	if routerPriority.Valid {
+		priority = int(routerPriority.Int64)
+	}
 
-    if middlewares.Valid {
-        resource["middlewares"] = middlewares.String
-    } else {
-        resource["middlewares"] = ""
-    }
+	resource := map[string]interface{}{
+		"id":              id,
+		"host":            host,
+		"service_id":      serviceID,
+		"org_id":          orgID,
+		"site_id":         siteID,
+		"status":          status,
+		"entrypoints":     entrypoints,
+		"tls_domains":     tlsDomains,
+		"tcp_enabled":     tcpEnabled > 0,
+		"tcp_entrypoints": tcpEntrypoints,
+		"tcp_sni_rule":    tcpSNIRule,
+		"custom_headers":  customHeaders,
+		"mtls_enabled":    mtlsEnabled > 0,
+		"router_priority": priority,
+		"source_type":     sourceType, // Make sure this is included
+	}
 
-    c.JSON(http.StatusOK, resource)
+	if middlewares.Valid {
+		resource["middlewares"] = middlewares.String
+	} else {
+		resource["middlewares"] = ""
+	}
+
+	c.JSON(http.StatusOK, resource)
 }
 
 // DeleteResource deletes a resource from the database
@@ -255,7 +259,7 @@ func (h *ResourceHandler) DeleteResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -264,7 +268,7 @@ func (h *ResourceHandler) DeleteResource(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
+
 	// First delete any middleware relationships
 	log.Printf("Removing middleware relationships for resource %s", id)
 	_, txErr = tx.Exec("DELETE FROM resource_middlewares WHERE resource_id = ?", id)
@@ -273,7 +277,7 @@ func (h *ResourceHandler) DeleteResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to delete resource")
 		return
 	}
-	
+
 	// Then delete the resource
 	log.Printf("Deleting resource %s", id)
 	result, txErr := tx.Exec("DELETE FROM resources WHERE id = ?", id)
@@ -289,14 +293,14 @@ func (h *ResourceHandler) DeleteResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	if rowsAffected == 0 {
 		ResponseWithError(c, http.StatusNotFound, "Resource not found")
 		return
 	}
-	
+
 	log.Printf("Delete affected %d rows", rowsAffected)
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -343,7 +347,7 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// Don't allow attaching middlewares to disabled resources
 	if status == "disabled" {
 		ResponseWithError(c, http.StatusBadRequest, "Cannot assign middleware to a disabled resource")
@@ -368,7 +372,7 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -377,7 +381,7 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
+
 	// First delete any existing relationship
 	log.Printf("Removing existing middleware relationship: resource=%s, middleware=%s",
 		resourceID, input.MiddlewareID)
@@ -390,7 +394,7 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// Then insert the new relationship
 	log.Printf("Creating new middleware relationship: resource=%s, middleware=%s, priority=%d",
 		resourceID, input.MiddlewareID, input.Priority)
@@ -403,12 +407,12 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to assign middleware")
 		return
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err == nil {
 		log.Printf("Insert affected %d rows", rowsAffected)
 	}
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -427,198 +431,198 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 
 // AssignMultipleMiddlewares assigns multiple middlewares to a resource in one operation
 func (h *ResourceHandler) AssignMultipleMiddlewares(c *gin.Context) {
-    resourceID := c.Param("id")
-    if resourceID == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
+	resourceID := c.Param("id")
+	if resourceID == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
 
-    var input struct {
-        Middlewares []struct {
-            MiddlewareID string `json:"middleware_id" binding:"required"`
-            Priority     int    `json:"priority"`
-        } `json:"middlewares" binding:"required"`
-    }
+	var input struct {
+		Middlewares []struct {
+			MiddlewareID string `json:"middleware_id" binding:"required"`
+			Priority     int    `json:"priority"`
+		} `json:"middlewares" binding:"required"`
+	}
 
-    if err := c.ShouldBindJSON(&input); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
-    }
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
 
-    // Verify resource exists and is active
-    var exists int
-    var status string
-    err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", resourceID).Scan(&exists, &status)
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, "Resource not found")
-        return
-    } else if err != nil {
-        log.Printf("Error checking resource existence: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Don't allow attaching middlewares to disabled resources
-    if status == "disabled" {
-        ResponseWithError(c, http.StatusBadRequest, "Cannot assign middlewares to a disabled resource")
-        return
-    }
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", resourceID).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
 
-    // Start a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // If something goes wrong, rollback
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
+	// Don't allow attaching middlewares to disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot assign middlewares to a disabled resource")
+		return
+	}
 
-    // Process each middleware
-    successful := make([]map[string]interface{}, 0)
-    log.Printf("Assigning %d middlewares to resource %s", len(input.Middlewares), resourceID)
-    
-    for _, mw := range input.Middlewares {
-        // Default priority is 200 if not specified
-        if mw.Priority <= 0 {
-            mw.Priority = 200
-        }
+	// Start a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
 
-        // Verify middleware exists
-        var middlewareExists int
-        err := h.DB.QueryRow("SELECT 1 FROM middlewares WHERE id = ?", mw.MiddlewareID).Scan(&middlewareExists)
-        if err == sql.ErrNoRows {
-            // Skip this middleware but don't fail the entire request
-            log.Printf("Middleware %s not found, skipping", mw.MiddlewareID)
-            continue
-        } else if err != nil {
-            log.Printf("Error checking middleware existence: %v", err)
-            ResponseWithError(c, http.StatusInternalServerError, "Database error")
-            return
-        }
+	// If something goes wrong, rollback
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
 
-        // First delete any existing relationship
-        log.Printf("Removing existing relationship: resource=%s, middleware=%s",
-            resourceID, mw.MiddlewareID)
-        _, txErr = tx.Exec(
-            "DELETE FROM resource_middlewares WHERE resource_id = ? AND middleware_id = ?",
-            resourceID, mw.MiddlewareID,
-        )
-        if txErr != nil {
-            log.Printf("Error removing existing relationship: %v", txErr)
-            ResponseWithError(c, http.StatusInternalServerError, "Database error")
-            return
-        }
-        
-        // Then insert the new relationship
-        log.Printf("Creating new relationship: resource=%s, middleware=%s, priority=%d",
-            resourceID, mw.MiddlewareID, mw.Priority)
-        result, txErr := tx.Exec(
-            "INSERT INTO resource_middlewares (resource_id, middleware_id, priority) VALUES (?, ?, ?)",
-            resourceID, mw.MiddlewareID, mw.Priority,
-        )
-        if txErr != nil {
-            log.Printf("Error assigning middleware: %v", txErr)
-            ResponseWithError(c, http.StatusInternalServerError, "Failed to assign middleware")
-            return
-        }
-        
-        rowsAffected, err := result.RowsAffected()
-        if err == nil && rowsAffected > 0 {
-            log.Printf("Successfully assigned middleware %s with priority %d", 
-                mw.MiddlewareID, mw.Priority)
-            successful = append(successful, map[string]interface{}{
-                "middleware_id": mw.MiddlewareID,
-                "priority": mw.Priority,
-            })
-        } else {
-            log.Printf("Warning: Insertion query succeeded but affected %d rows", rowsAffected)
-        }
-    }
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
+	// Process each middleware
+	successful := make([]map[string]interface{}, 0)
+	log.Printf("Assigning %d middlewares to resource %s", len(input.Middlewares), resourceID)
 
-    log.Printf("Successfully assigned %d middlewares to resource %s", len(successful), resourceID)
-    c.JSON(http.StatusOK, gin.H{
-        "resource_id": resourceID,
-        "middlewares": successful,
-    })
+	for _, mw := range input.Middlewares {
+		// Default priority is 200 if not specified
+		if mw.Priority <= 0 {
+			mw.Priority = 200
+		}
+
+		// Verify middleware exists
+		var middlewareExists int
+		err := h.DB.QueryRow("SELECT 1 FROM middlewares WHERE id = ?", mw.MiddlewareID).Scan(&middlewareExists)
+		if err == sql.ErrNoRows {
+			// Skip this middleware but don't fail the entire request
+			log.Printf("Middleware %s not found, skipping", mw.MiddlewareID)
+			continue
+		} else if err != nil {
+			log.Printf("Error checking middleware existence: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Database error")
+			return
+		}
+
+		// First delete any existing relationship
+		log.Printf("Removing existing relationship: resource=%s, middleware=%s",
+			resourceID, mw.MiddlewareID)
+		_, txErr = tx.Exec(
+			"DELETE FROM resource_middlewares WHERE resource_id = ? AND middleware_id = ?",
+			resourceID, mw.MiddlewareID,
+		)
+		if txErr != nil {
+			log.Printf("Error removing existing relationship: %v", txErr)
+			ResponseWithError(c, http.StatusInternalServerError, "Database error")
+			return
+		}
+
+		// Then insert the new relationship
+		log.Printf("Creating new relationship: resource=%s, middleware=%s, priority=%d",
+			resourceID, mw.MiddlewareID, mw.Priority)
+		result, txErr := tx.Exec(
+			"INSERT INTO resource_middlewares (resource_id, middleware_id, priority) VALUES (?, ?, ?)",
+			resourceID, mw.MiddlewareID, mw.Priority,
+		)
+		if txErr != nil {
+			log.Printf("Error assigning middleware: %v", txErr)
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to assign middleware")
+			return
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err == nil && rowsAffected > 0 {
+			log.Printf("Successfully assigned middleware %s with priority %d",
+				mw.MiddlewareID, mw.Priority)
+			successful = append(successful, map[string]interface{}{
+				"middleware_id": mw.MiddlewareID,
+				"priority":      mw.Priority,
+			})
+		} else {
+			log.Printf("Warning: Insertion query succeeded but affected %d rows", rowsAffected)
+		}
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully assigned %d middlewares to resource %s", len(successful), resourceID)
+	c.JSON(http.StatusOK, gin.H{
+		"resource_id": resourceID,
+		"middlewares": successful,
+	})
 }
 
 // RemoveMiddleware removes a middleware from a resource
 func (h *ResourceHandler) RemoveMiddleware(c *gin.Context) {
-    resourceID := c.Param("id")
-    middlewareID := c.Param("middlewareId")
-    
-    if resourceID == "" || middlewareID == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID and Middleware ID are required")
-        return
-    }
+	resourceID := c.Param("id")
+	middlewareID := c.Param("middlewareId")
 
-    log.Printf("Removing middleware %s from resource %s", middlewareID, resourceID)
+	if resourceID == "" || middlewareID == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID and Middleware ID are required")
+		return
+	}
 
-    // Delete the relationship using a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // If something goes wrong, rollback
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
-    
-    result, txErr := tx.Exec(
-        "DELETE FROM resource_middlewares WHERE resource_id = ? AND middleware_id = ?",
-        resourceID, middlewareID,
-    )
-    
-    if txErr != nil {
-        log.Printf("Error removing middleware: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to remove middleware")
-        return
-    }
+	log.Printf("Removing middleware %s from resource %s", middlewareID, resourceID)
 
-    rowsAffected, err := result.RowsAffected()
-    if err != nil {
-        log.Printf("Error getting rows affected: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    if rowsAffected == 0 {
-        log.Printf("No relationship found between resource %s and middleware %s", resourceID, middlewareID)
-        ResponseWithError(c, http.StatusNotFound, "Resource middleware relationship not found")
-        return
-    }
-    
-    log.Printf("Delete affected %d rows", rowsAffected)
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
+	// Delete the relationship using a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
 
-    log.Printf("Successfully removed middleware %s from resource %s", middlewareID, resourceID)
-    c.JSON(http.StatusOK, gin.H{"message": "Middleware removed from resource successfully"})
+	// If something goes wrong, rollback
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	result, txErr := tx.Exec(
+		"DELETE FROM resource_middlewares WHERE resource_id = ? AND middleware_id = ?",
+		resourceID, middlewareID,
+	)
+
+	if txErr != nil {
+		log.Printf("Error removing middleware: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to remove middleware")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	if rowsAffected == 0 {
+		log.Printf("No relationship found between resource %s and middleware %s", resourceID, middlewareID)
+		ResponseWithError(c, http.StatusNotFound, "Resource middleware relationship not found")
+		return
+	}
+
+	log.Printf("Delete affected %d rows", rowsAffected)
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully removed middleware %s from resource %s", middlewareID, resourceID)
+	c.JSON(http.StatusOK, gin.H{"message": "Middleware removed from resource successfully"})
 }
