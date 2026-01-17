@@ -9,6 +9,8 @@ export type {
   HeadersConfig,
   AssignMiddlewareRequest,
   AssignServiceRequest,
+  MTLSWhitelistConfigRequest,
+  MTLSWhitelistExternalData,
 } from './resource'
 
 // Middleware types

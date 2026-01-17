@@ -32,6 +32,14 @@ CREATE TABLE IF NOT EXISTS resources (
     -- Custom headers configuration
     custom_headers TEXT DEFAULT '',
     
+    -- mTLS whitelist plugin configuration (per-resource overrides)
+    mtls_rules TEXT DEFAULT '',
+    mtls_request_headers TEXT DEFAULT '',
+    mtls_reject_message TEXT DEFAULT '',
+    mtls_reject_code INTEGER DEFAULT 403,
+    mtls_refresh_interval TEXT DEFAULT '',
+    mtls_external_data TEXT DEFAULT '',
+    
     -- Router priority configuration
     router_priority INTEGER DEFAULT 100,
     

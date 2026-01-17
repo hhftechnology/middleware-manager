@@ -55,6 +55,15 @@ type middlewareWithPriority struct {
 	Priority int
 }
 
+type mtlsConfigData struct {
+	CACertPath      string
+	Rules           []interface{}
+	RequestHeaders  map[string]interface{}
+	RejectMessage   string
+	RejectCode      int
+	RefreshInterval string
+}
+
 type resourceData struct {
 	ID              string
 	Host            string
@@ -65,6 +74,12 @@ type resourceData struct {
 	RouterPriority  int
 	SourceType      string
 	MTLSEnabled     bool
+	MTLSRules       sql.NullString
+	MTLSRequestHdrs sql.NullString
+	MTLSRejectMsg   sql.NullString
+	MTLSRejectCode  sql.NullInt64
+	MTLSRefresh     sql.NullString
+	MTLSExternal    sql.NullString
 	Middlewares     []middlewareWithPriority
 	CustomServiceID sql.NullString
 }
@@ -287,6 +302,18 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 		}
 	}
 
+	var mtlsCfg *mtlsConfigData
+	if hasMTLSResources {
+		cfg, err := cp.loadGlobalMTLSConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load global mTLS config: %w", err)
+		}
+		mtlsCfg = cfg
+		if mtlsCfg != nil {
+			cp.applyTLSOptions(config, mtlsCfg)
+		}
+	}
+
 	// Only add MW-manager middlewares that are assigned to resources/routers
 	if len(assignedMiddlewareIDs) > 0 {
 		if err := cp.applyMiddlewares(config, assignedMiddlewareIDs); err != nil {
@@ -294,16 +321,9 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 		}
 	}
 
-	// Apply mTLS middleware and TLS options only if any resource has mTLS enabled
-	if hasMTLSResources {
-		if err := cp.applyMTLSConfig(config); err != nil {
-			return fmt.Errorf("failed to apply mTLS config: %w", err)
-		}
-	}
-
 	// Apply resource-specific overrides (middleware attachments, priorities, headers, mtls)
 	if len(resources) > 0 {
-		if err := cp.applyResourceOverrides(config, resources); err != nil {
+		if err := cp.applyResourceOverrides(config, resources, mtlsCfg); err != nil {
 			return fmt.Errorf("failed to apply resource overrides: %w", err)
 		}
 	}
@@ -402,7 +422,7 @@ func (cp *ConfigProxy) applyServices(config *ProxiedTraefikConfig) error {
 }
 
 // applyResourceOverrides applies middleware assignments and other overrides to routers
-func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, resources []*resourceData) error {
+func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, resources []*resourceData, mtlsCfg *mtlsConfigData) error {
 	for _, resource := range resources {
 		// Find matching router by host
 		routerKey, router := cp.findMatchingRouter(config.HTTP.Routers, resource.Host)
@@ -420,8 +440,28 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 			return resource.Middlewares[i].Priority > resource.Middlewares[j].Priority
 		})
 
-		// Build middleware list
+		// Build middleware list (mTLS first, then custom headers, then assigned)
 		var newMiddlewares []string
+
+		if resource.MTLSEnabled && mtlsCfg != nil {
+			mtlsMiddlewareName, err := cp.ensureResourceMTLSMiddleware(config, resource, mtlsCfg)
+			if err != nil {
+				log.Printf("Failed to build mTLS middleware for resource %s: %v", resource.ID, err)
+			} else if mtlsMiddlewareName != "" {
+				newMiddlewares = append(newMiddlewares, mtlsMiddlewareName)
+
+				// Add mTLS TLS options on the router
+				if tlsConfig, ok := router["tls"].(map[string]interface{}); ok {
+					if _, ok := tlsConfig["options"]; !ok {
+						tlsConfig["options"] = "mtls-verify"
+					}
+				} else {
+					router["tls"] = map[string]interface{}{
+						"options": "mtls-verify",
+					}
+				}
+			}
+		}
 
 		// Add custom headers middleware if configured
 		if resource.CustomHeaders != "" && resource.CustomHeaders != "{}" && resource.CustomHeaders != "null" {
@@ -438,12 +478,6 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 		// Add assigned middlewares
 		for _, mw := range resource.Middlewares {
 			newMiddlewares = append(newMiddlewares, mw.ID)
-		}
-
-		// Add mTLS middleware if enabled for this resource
-		if resource.MTLSEnabled {
-			// Prepend mTLS middleware to run first
-			newMiddlewares = append([]string{"mtls-auth"}, newMiddlewares...)
 		}
 
 		// Get existing middlewares from router
@@ -475,17 +509,6 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 			router["priority"] = resource.RouterPriority
 		}
 
-		// Add mTLS TLS options if enabled
-		if resource.MTLSEnabled {
-			if tlsConfig, ok := router["tls"].(map[string]interface{}); ok {
-				tlsConfig["options"] = "mtls-verify"
-			} else {
-				router["tls"] = map[string]interface{}{
-					"options": "mtls-verify",
-				}
-			}
-		}
-
 		// Update custom service if configured
 		if resource.CustomServiceID.Valid && resource.CustomServiceID.String != "" {
 			router["service"] = resource.CustomServiceID.String
@@ -501,11 +524,106 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 	return nil
 }
 
+// ensureResourceMTLSMiddleware builds and registers a per-resource mtlswhitelist middleware
+func (cp *ConfigProxy) ensureResourceMTLSMiddleware(config *ProxiedTraefikConfig, resource *resourceData, mtlsCfg *mtlsConfigData) (string, error) {
+	if mtlsCfg == nil || mtlsCfg.CACertPath == "" {
+		return "", fmt.Errorf("mTLS enabled for resource %s but no CA certificate configured", resource.ID)
+	}
+
+	pluginConfig := map[string]interface{}{
+		"caFiles": []string{mtlsCfg.CACertPath},
+	}
+
+	if len(mtlsCfg.Rules) > 0 {
+		pluginConfig["rules"] = append([]interface{}{}, mtlsCfg.Rules...)
+	}
+	if len(mtlsCfg.RequestHeaders) > 0 {
+		pluginConfig["requestHeaders"] = copyInterfaceMap(mtlsCfg.RequestHeaders)
+	}
+	if mtlsCfg.RejectMessage != "" || mtlsCfg.RejectCode > 0 {
+		code := mtlsCfg.RejectCode
+		if code == 0 {
+			code = 403
+		}
+		entry := map[string]interface{}{
+			"code": code,
+		}
+		if mtlsCfg.RejectMessage != "" {
+			entry["message"] = mtlsCfg.RejectMessage
+		}
+		pluginConfig["rejectMessage"] = entry
+	}
+	if mtlsCfg.RefreshInterval != "" {
+		pluginConfig["refreshInterval"] = mtlsCfg.RefreshInterval
+	}
+
+	// Resource-level overrides
+	if resource.MTLSRules.Valid && strings.TrimSpace(resource.MTLSRules.String) != "" {
+		var rules []interface{}
+		if err := json.Unmarshal([]byte(resource.MTLSRules.String), &rules); err == nil {
+			pluginConfig["rules"] = rules
+		} else {
+			log.Printf("Failed to parse mtls_rules for resource %s: %v", resource.ID, err)
+		}
+	}
+
+	if resource.MTLSRequestHdrs.Valid && strings.TrimSpace(resource.MTLSRequestHdrs.String) != "" {
+		var headers map[string]interface{}
+		if err := json.Unmarshal([]byte(resource.MTLSRequestHdrs.String), &headers); err == nil {
+			pluginConfig["requestHeaders"] = headers
+		} else {
+			log.Printf("Failed to parse mtls_request_headers for resource %s: %v", resource.ID, err)
+		}
+	}
+
+	// Reject message + code
+	if (resource.MTLSRejectMsg.Valid && strings.TrimSpace(resource.MTLSRejectMsg.String) != "") || resource.MTLSRejectCode.Valid {
+		code := mtlsCfg.RejectCode
+		if resource.MTLSRejectCode.Valid {
+			code = int(resource.MTLSRejectCode.Int64)
+		}
+		if code == 0 {
+			code = 403
+		}
+		entry := map[string]interface{}{
+			"code": code,
+		}
+		if resource.MTLSRejectMsg.Valid && strings.TrimSpace(resource.MTLSRejectMsg.String) != "" {
+			entry["message"] = resource.MTLSRejectMsg.String
+		}
+		pluginConfig["rejectMessage"] = entry
+	}
+
+	if resource.MTLSRefresh.Valid && strings.TrimSpace(resource.MTLSRefresh.String) != "" {
+		pluginConfig["refreshInterval"] = resource.MTLSRefresh.String
+	}
+
+	if resource.MTLSExternal.Valid && strings.TrimSpace(resource.MTLSExternal.String) != "" {
+		var external map[string]interface{}
+		if err := json.Unmarshal([]byte(resource.MTLSExternal.String), &external); err == nil {
+			pluginConfig["externalData"] = external
+		} else {
+			log.Printf("Failed to parse mtls_external_data for resource %s: %v", resource.ID, err)
+		}
+	}
+
+	middlewareName := fmt.Sprintf("%s-mtlsauth", resource.ID)
+	config.HTTP.Middlewares[middlewareName] = map[string]interface{}{
+		"plugin": map[string]interface{}{
+			"mtlswhitelist": pluginConfig,
+		},
+	}
+
+	return middlewareName, nil
+}
+
 // fetchResourceData loads active resources and their middleware assignments
 func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	query := `
 		SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
 		       r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
+		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
+		       r.mtls_refresh_interval, r.mtls_external_data,
 		       rm.middleware_id, rm.priority,
 		       rs.service_id as custom_service_id
 		FROM resources r
@@ -529,10 +647,14 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 		var middlewareID sql.NullString
 		var middlewarePriority sql.NullInt64
 		var customServiceID sql.NullString
+		var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
+		var mtlsRejectCode sql.NullInt64
 
 		err := rows.Scan(
 			&rID, &host, &serviceID, &entrypoints, &tlsDomains,
 			&customHeaders, &routerPriority, &sourceType, &mtlsEnabled,
+			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
+			&mtlsRefreshInterval, &mtlsExternalData,
 			&middlewareID, &middlewarePriority, &customServiceID,
 		)
 		if err != nil {
@@ -557,6 +679,12 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 				SourceType:      sourceType,
 				MTLSEnabled:     mtlsEnabled == 1,
 				CustomServiceID: customServiceID,
+				MTLSRules:       mtlsRules,
+				MTLSRequestHdrs: mtlsRequestHeaders,
+				MTLSRejectMsg:   mtlsRejectMessage,
+				MTLSRejectCode:  mtlsRejectCode,
+				MTLSRefresh:     mtlsRefreshInterval,
+				MTLSExternal:    mtlsExternalData,
 			}
 			resourceMap[rID] = data
 		}
@@ -584,8 +712,8 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	return resources, nil
 }
 
-// applyMTLSConfig adds TLS options and mTLS middleware if globally enabled
-func (cp *ConfigProxy) applyMTLSConfig(config *ProxiedTraefikConfig) error {
+// loadGlobalMTLSConfig retrieves global mTLS settings (including plugin defaults).
+func (cp *ConfigProxy) loadGlobalMTLSConfig() (*mtlsConfigData, error) {
 	var enabled int
 	var caCertPath string
 	var middlewareRules, middlewareRequestHeaders, middlewareRejectMessage sql.NullString
@@ -600,75 +728,59 @@ func (cp *ConfigProxy) applyMTLSConfig(config *ProxiedTraefikConfig) error {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// No mTLS config, skip
-			return nil
+			return nil, nil
 		}
-		return fmt.Errorf("failed to check mTLS config: %w", err)
+		return nil, fmt.Errorf("failed to check mTLS config: %w", err)
 	}
 
-	// If mTLS is not enabled, don't add config
-	if enabled != 1 {
-		return nil
+	if enabled != 1 || caCertPath == "" {
+		return nil, nil
 	}
 
-	// If no CA cert path configured, skip
-	if caCertPath == "" {
-		log.Printf("Warning: mTLS enabled but no CA certificate path configured")
-		return nil
+	cfg := &mtlsConfigData{
+		CACertPath: caCertPath,
+		RejectCode: 403,
 	}
 
-	// Add TLS options with VerifyClientCertIfGiven
-	config.TLS.Options["mtls-verify"] = map[string]interface{}{
-		"clientAuth": map[string]interface{}{
-			"caFiles":        []string{caCertPath},
-			"clientAuthType": "VerifyClientCertIfGiven",
-		},
-		"minVersion": "VersionTLS12",
-		"sniStrict":  true,
-	}
-
-	// Add the mtls-auth middleware using mtlswhitelist plugin
-	pluginConfig := map[string]interface{}{
-		"caFiles": []string{caCertPath},
-	}
-
-	// Add optional plugin configuration if set
 	if middlewareRules.Valid && middlewareRules.String != "" {
 		var rules []interface{}
-		if err := json.Unmarshal([]byte(middlewareRules.String), &rules); err == nil && len(rules) > 0 {
-			pluginConfig["rules"] = rules
+		if err := json.Unmarshal([]byte(middlewareRules.String), &rules); err == nil {
+			cfg.Rules = rules
 		}
 	}
 
 	if middlewareRequestHeaders.Valid && middlewareRequestHeaders.String != "" {
 		var headers map[string]interface{}
-		if err := json.Unmarshal([]byte(middlewareRequestHeaders.String), &headers); err == nil && len(headers) > 0 {
-			pluginConfig["requestHeaders"] = headers
+		if err := json.Unmarshal([]byte(middlewareRequestHeaders.String), &headers); err == nil {
+			cfg.RequestHeaders = headers
 		}
 	}
 
 	if middlewareRejectMessage.Valid && middlewareRejectMessage.String != "" {
-		pluginConfig["rejectMessage"] = map[string]interface{}{
-			"message": middlewareRejectMessage.String,
-			"code":    403,
-		}
+		cfg.RejectMessage = middlewareRejectMessage.String
 	}
 
 	if middlewareRefreshInterval.Valid && middlewareRefreshInterval.Int64 > 0 {
-		pluginConfig["refreshInterval"] = fmt.Sprintf("%ds", middlewareRefreshInterval.Int64)
+		cfg.RefreshInterval = fmt.Sprintf("%ds", middlewareRefreshInterval.Int64)
 	}
 
-	config.HTTP.Middlewares["mtls-auth"] = map[string]interface{}{
-		"plugin": map[string]interface{}{
-			"mtlswhitelist": pluginConfig,
+	return cfg, nil
+}
+
+// applyTLSOptions adds TLS options for mTLS verification
+func (cp *ConfigProxy) applyTLSOptions(config *ProxiedTraefikConfig, mtlsCfg *mtlsConfigData) {
+	if mtlsCfg == nil || mtlsCfg.CACertPath == "" {
+		return
+	}
+
+	config.TLS.Options["mtls-verify"] = map[string]interface{}{
+		"clientAuth": map[string]interface{}{
+			"caFiles":        []string{mtlsCfg.CACertPath},
+			"clientAuthType": "VerifyClientCertIfGiven",
 		},
+		"minVersion": "VersionTLS12",
+		"sniStrict":  true,
 	}
-
-	if shouldLog() {
-		log.Printf("Added mTLS TLS options and mtls-auth middleware with CA cert: %s", caCertPath)
-	}
-
-	return nil
 }
 
 // findMatchingRouter finds a router that matches the given host
@@ -737,6 +849,17 @@ func (cp *ConfigProxy) determineServiceProtocol(serviceType string, config map[s
 		}
 	}
 	return "http"
+}
+
+func copyInterfaceMap(src map[string]interface{}) map[string]interface{} {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 // SetPangolinURL updates the Pangolin API URL

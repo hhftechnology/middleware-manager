@@ -16,6 +16,7 @@ import type {
   TLSConfig,
   TCPConfig,
   HeadersConfig,
+  MTLSWhitelistConfigRequest,
   TestConnectionResponse,
   PluginInstallRequest,
   PluginRemoveRequest,
@@ -179,6 +180,12 @@ export const resourceApi = {
     request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/mtls`, {
       method: 'PUT',
       body: JSON.stringify({ mtls_enabled: mtlsEnabled }),
+    }),
+
+  updateMTLSWhitelistConfig: (resourceId: string, config: MTLSWhitelistConfigRequest) =>
+    request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/mtlswhitelist`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
     }),
 }
 

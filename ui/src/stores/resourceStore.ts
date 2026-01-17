@@ -7,6 +7,7 @@ import type {
   TLSConfig,
   TCPConfig,
   HeadersConfig,
+  MTLSWhitelistConfigRequest,
 } from '@/types'
 
 interface ResourceState {
@@ -35,6 +36,7 @@ interface ResourceState {
   updateHeadersConfig: (resourceId: string, config: HeadersConfig) => Promise<boolean>
   updateRouterPriority: (resourceId: string, priority: number) => Promise<boolean>
   updateMTLSConfig: (resourceId: string, mtlsEnabled: boolean) => Promise<boolean>
+  updateMTLSWhitelistConfig: (resourceId: string, config: MTLSWhitelistConfigRequest) => Promise<boolean>
   clearError: () => void
   clearSelectedResource: () => void
 }
@@ -242,6 +244,21 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to update mTLS config',
+      })
+      return false
+    }
+  },
+
+  // Update mTLS whitelist plugin config
+  updateMTLSWhitelistConfig: async (resourceId, config) => {
+    set({ error: null })
+    try {
+      await resourceApi.updateMTLSWhitelistConfig(resourceId, config)
+      await get().fetchResource(resourceId)
+      return true
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to update mTLS whitelist config',
       })
       return false
     }

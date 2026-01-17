@@ -14,6 +14,12 @@ export interface Resource {
   router_priority: number
   source_type: string
   mtls_enabled: boolean
+  mtls_rules?: string
+  mtls_request_headers?: string
+  mtls_reject_message?: string
+  mtls_reject_code?: number
+  mtls_refresh_interval?: string
+  mtls_external_data?: string
   middlewares: string
   created_at?: string
   updated_at?: string
@@ -48,6 +54,23 @@ export interface TCPConfig {
 
 export interface HeadersConfig {
   custom_headers: Record<string, string>
+}
+
+export interface MTLSWhitelistExternalData {
+  url?: string
+  skipTlsVerify?: boolean
+  dataKey?: string
+  headers?: Record<string, string>
+  [key: string]: unknown
+}
+
+export interface MTLSWhitelistConfigRequest {
+  rules?: unknown[]
+  request_headers?: Record<string, string>
+  reject_message?: string
+  reject_code?: number
+  refresh_interval?: string
+  external_data?: MTLSWhitelistExternalData | Record<string, unknown>
 }
 
 export interface AssignMiddlewareRequest {

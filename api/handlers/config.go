@@ -23,368 +23,368 @@ func NewConfigHandler(db *sql.DB) *ConfigHandler {
 
 // UpdateRouterPriority updates the router priority for a resource
 func (h *ConfigHandler) UpdateRouterPriority(c *gin.Context) {
-    id := c.Param("id")
-    if id == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
-    
-    var input struct {
-        RouterPriority int `json:"router_priority" binding:"required"`
-    }
-    
-    if err := c.ShouldBindJSON(&input); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
-    }
-    
-    // Verify resource exists and is active
-    var exists int
-    var status string
-    err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, "Resource not found")
-        return
-    } else if err != nil {
-        log.Printf("Error checking resource existence: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Don't allow updating disabled resources
-    if status == "disabled" {
-        ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
-        return
-    }
-    
-    // Update the resource within a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
-    
-    log.Printf("Updating router priority for resource %s to %d", id, input.RouterPriority)
-    
-    result, txErr := tx.Exec(
-        "UPDATE resources SET router_priority = ?, updated_at = ? WHERE id = ?",
-        input.RouterPriority, time.Now(), id,
-    )
-    
-    if txErr != nil {
-        log.Printf("Error updating router priority: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to update router priority")
-        return
-    }
-    
-    rowsAffected, err := result.RowsAffected()
-    if err == nil {
-        log.Printf("Update affected %d rows", rowsAffected)
-    }
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    log.Printf("Successfully updated router priority for resource %s", id)
-    c.JSON(http.StatusOK, gin.H{
-        "id": id,
-        "router_priority": input.RouterPriority,
-    })
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		RouterPriority int `json:"router_priority" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Don't allow updating disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	log.Printf("Updating router priority for resource %s to %d", id, input.RouterPriority)
+
+	result, txErr := tx.Exec(
+		"UPDATE resources SET router_priority = ?, updated_at = ? WHERE id = ?",
+		input.RouterPriority, time.Now(), id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating router priority: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update router priority")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err == nil {
+		log.Printf("Update affected %d rows", rowsAffected)
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully updated router priority for resource %s", id)
+	c.JSON(http.StatusOK, gin.H{
+		"id":              id,
+		"router_priority": input.RouterPriority,
+	})
 }
 
 // UpdateHTTPConfig updates the HTTP router entrypoints configuration
 func (h *ConfigHandler) UpdateHTTPConfig(c *gin.Context) {
-    id := c.Param("id")
-    if id == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
-    
-    var input struct {
-        Entrypoints string `json:"entrypoints"`
-    }
-    
-    if err := c.ShouldBindJSON(&input); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
-    }
-    
-    // Verify resource exists and is active
-    var exists int
-    var status string
-    err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, "Resource not found")
-        return
-    } else if err != nil {
-        log.Printf("Error checking resource existence: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Don't allow updating disabled resources
-    if status == "disabled" {
-        ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
-        return
-    }
-    
-    // Validate entrypoints - should be comma-separated list
-    if input.Entrypoints == "" {
-        input.Entrypoints = "websecure" // Default
-    }
-    
-    // Update the resource within a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
-    
-    log.Printf("Updating HTTP entrypoints for resource %s: %s", id, input.Entrypoints)
-    
-    result, txErr := tx.Exec(
-        "UPDATE resources SET entrypoints = ?, updated_at = ? WHERE id = ?",
-        input.Entrypoints, time.Now(), id,
-    )
-    
-    if txErr != nil {
-        log.Printf("Error updating resource entrypoints: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to update resource")
-        return
-    }
-    
-    rowsAffected, err := result.RowsAffected()
-    if err == nil {
-        log.Printf("Update affected %d rows", rowsAffected)
-        if rowsAffected == 0 {
-            log.Printf("Warning: Update query succeeded but no rows were affected")
-        }
-    }
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    log.Printf("Successfully updated HTTP entrypoints for resource %s", id)
-    c.JSON(http.StatusOK, gin.H{
-        "id": id,
-        "entrypoints": input.Entrypoints,
-    })
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		Entrypoints string `json:"entrypoints"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Don't allow updating disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// Validate entrypoints - should be comma-separated list
+	if input.Entrypoints == "" {
+		input.Entrypoints = "websecure" // Default
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	log.Printf("Updating HTTP entrypoints for resource %s: %s", id, input.Entrypoints)
+
+	result, txErr := tx.Exec(
+		"UPDATE resources SET entrypoints = ?, updated_at = ? WHERE id = ?",
+		input.Entrypoints, time.Now(), id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating resource entrypoints: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update resource")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err == nil {
+		log.Printf("Update affected %d rows", rowsAffected)
+		if rowsAffected == 0 {
+			log.Printf("Warning: Update query succeeded but no rows were affected")
+		}
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully updated HTTP entrypoints for resource %s", id)
+	c.JSON(http.StatusOK, gin.H{
+		"id":          id,
+		"entrypoints": input.Entrypoints,
+	})
 }
 
 // UpdateTLSConfig updates the TLS certificate domains configuration
 func (h *ConfigHandler) UpdateTLSConfig(c *gin.Context) {
-    id := c.Param("id")
-    if id == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
-    
-    var input struct {
-        TLSDomains string `json:"tls_domains"`
-    }
-    
-    if err := c.ShouldBindJSON(&input); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
-    }
-    
-    // Verify resource exists and is active
-    var exists int
-    var status string
-    err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, "Resource not found")
-        return
-    } else if err != nil {
-        log.Printf("Error checking resource existence: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Don't allow updating disabled resources
-    if status == "disabled" {
-        ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
-        return
-    }
-    
-    // Update the resource within a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
-    
-    log.Printf("Updating TLS domains for resource %s: %s", id, input.TLSDomains)
-    
-    result, txErr := tx.Exec(
-        "UPDATE resources SET tls_domains = ?, updated_at = ? WHERE id = ?",
-        input.TLSDomains, time.Now(), id,
-    )
-    
-    if txErr != nil {
-        log.Printf("Error updating TLS domains: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to update TLS domains")
-        return
-    }
-    
-    rowsAffected, err := result.RowsAffected()
-    if err == nil {
-        log.Printf("Update affected %d rows", rowsAffected)
-        if rowsAffected == 0 {
-            log.Printf("Warning: Update query succeeded but no rows were affected")
-        }
-    }
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    log.Printf("Successfully updated TLS domains for resource %s", id)
-    c.JSON(http.StatusOK, gin.H{
-        "id": id,
-        "tls_domains": input.TLSDomains,
-    })
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		TLSDomains string `json:"tls_domains"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Don't allow updating disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	log.Printf("Updating TLS domains for resource %s: %s", id, input.TLSDomains)
+
+	result, txErr := tx.Exec(
+		"UPDATE resources SET tls_domains = ?, updated_at = ? WHERE id = ?",
+		input.TLSDomains, time.Now(), id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating TLS domains: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update TLS domains")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err == nil {
+		log.Printf("Update affected %d rows", rowsAffected)
+		if rowsAffected == 0 {
+			log.Printf("Warning: Update query succeeded but no rows were affected")
+		}
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully updated TLS domains for resource %s", id)
+	c.JSON(http.StatusOK, gin.H{
+		"id":          id,
+		"tls_domains": input.TLSDomains,
+	})
 }
 
 // UpdateTCPConfig updates the TCP SNI router configuration
 func (h *ConfigHandler) UpdateTCPConfig(c *gin.Context) {
-    id := c.Param("id")
-    if id == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
-    
-    var input struct {
-        TCPEnabled     bool   `json:"tcp_enabled"`
-        TCPEntrypoints string `json:"tcp_entrypoints"`
-        TCPSNIRule     string `json:"tcp_sni_rule"`
-    }
-    
-    if err := c.ShouldBindJSON(&input); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
-    }
-    
-    // Verify resource exists and is active
-    var exists int
-    var status string
-    err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, "Resource not found")
-        return
-    } else if err != nil {
-        log.Printf("Error checking resource existence: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Don't allow updating disabled resources
-    if status == "disabled" {
-        ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
-        return
-    }
-    
-    // Validate TCP entrypoints if provided
-    if input.TCPEntrypoints == "" {
-        input.TCPEntrypoints = "tcp" // Default
-    }
-    
-    // Convert boolean to integer for SQLite
-    tcpEnabled := 0
-    if input.TCPEnabled {
-        tcpEnabled = 1
-    }
-    
-    // Update the resource within a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
-    
-    log.Printf("Updating TCP config for resource %s: enabled=%t, entrypoints=%s", 
-        id, input.TCPEnabled, input.TCPEntrypoints)
-    
-    result, txErr := tx.Exec(
-        "UPDATE resources SET tcp_enabled = ?, tcp_entrypoints = ?, tcp_sni_rule = ?, updated_at = ? WHERE id = ?",
-        tcpEnabled, input.TCPEntrypoints, input.TCPSNIRule, time.Now(), id,
-    )
-    
-    if txErr != nil {
-        log.Printf("Error updating TCP config: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to update TCP configuration")
-        return
-    }
-    
-    rowsAffected, err := result.RowsAffected()
-    if err == nil {
-        log.Printf("Update affected %d rows", rowsAffected)
-        if rowsAffected == 0 {
-            log.Printf("Warning: Update query succeeded but no rows were affected")
-        }
-    }
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    log.Printf("Successfully updated TCP configuration for resource %s", id)
-    c.JSON(http.StatusOK, gin.H{
-        "id":              id,
-        "tcp_enabled":     input.TCPEnabled,
-        "tcp_entrypoints": input.TCPEntrypoints,
-        "tcp_sni_rule":    input.TCPSNIRule,
-    })
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		TCPEnabled     bool   `json:"tcp_enabled"`
+		TCPEntrypoints string `json:"tcp_entrypoints"`
+		TCPSNIRule     string `json:"tcp_sni_rule"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Don't allow updating disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// Validate TCP entrypoints if provided
+	if input.TCPEntrypoints == "" {
+		input.TCPEntrypoints = "tcp" // Default
+	}
+
+	// Convert boolean to integer for SQLite
+	tcpEnabled := 0
+	if input.TCPEnabled {
+		tcpEnabled = 1
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	log.Printf("Updating TCP config for resource %s: enabled=%t, entrypoints=%s",
+		id, input.TCPEnabled, input.TCPEntrypoints)
+
+	result, txErr := tx.Exec(
+		"UPDATE resources SET tcp_enabled = ?, tcp_entrypoints = ?, tcp_sni_rule = ?, updated_at = ? WHERE id = ?",
+		tcpEnabled, input.TCPEntrypoints, input.TCPSNIRule, time.Now(), id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating TCP config: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update TCP configuration")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err == nil {
+		log.Printf("Update affected %d rows", rowsAffected)
+		if rowsAffected == 0 {
+			log.Printf("Warning: Update query succeeded but no rows were affected")
+		}
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully updated TCP configuration for resource %s", id)
+	c.JSON(http.StatusOK, gin.H{
+		"id":              id,
+		"tcp_enabled":     input.TCPEnabled,
+		"tcp_entrypoints": input.TCPEntrypoints,
+		"tcp_sni_rule":    input.TCPSNIRule,
+	})
 }
 
 // UpdateMTLSConfig updates the mTLS configuration for a resource
@@ -495,109 +495,243 @@ func (h *ConfigHandler) UpdateMTLSConfig(c *gin.Context) {
 	})
 }
 
+// UpdateMTLSWhitelistConfig updates per-resource mtlswhitelist plugin configuration
+func (h *ConfigHandler) UpdateMTLSWhitelistConfig(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		Rules           []interface{}          `json:"rules"`
+		RequestHeaders  map[string]string      `json:"request_headers"`
+		RejectMessage   string                 `json:"reject_message"`
+		RejectCode      *int                   `json:"reject_code"`
+		RefreshInterval string                 `json:"refresh_interval"`
+		ExternalData    map[string]interface{} `json:"external_data"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var status string
+	err := h.DB.QueryRow("SELECT status FROM resources WHERE id = ?", id).Scan(&status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// Marshal complex fields to JSON for storage
+	rulesJSON := "[]"
+	if input.Rules != nil {
+		if data, err := json.Marshal(input.Rules); err == nil {
+			rulesJSON = string(data)
+		} else {
+			ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid rules: %v", err))
+			return
+		}
+	}
+
+	requestHeadersJSON := "{}"
+	if input.RequestHeaders != nil {
+		if data, err := json.Marshal(input.RequestHeaders); err == nil {
+			requestHeadersJSON = string(data)
+		} else {
+			ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request_headers: %v", err))
+			return
+		}
+	}
+
+	externalDataJSON := ""
+	if input.ExternalData != nil {
+		if data, err := json.Marshal(input.ExternalData); err == nil {
+			externalDataJSON = string(data)
+		} else {
+			ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid external_data: %v", err))
+			return
+		}
+	}
+
+	rejectCode := 403
+	if input.RejectCode != nil {
+		rejectCode = *input.RejectCode
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	_, txErr = tx.Exec(
+		`UPDATE resources 
+		 SET mtls_rules = ?, 
+		     mtls_request_headers = ?, 
+		     mtls_reject_message = ?, 
+		     mtls_reject_code = ?, 
+		     mtls_refresh_interval = ?, 
+		     mtls_external_data = ?, 
+		     updated_at = ?
+		 WHERE id = ?`,
+		rulesJSON,
+		requestHeadersJSON,
+		input.RejectMessage,
+		rejectCode,
+		input.RefreshInterval,
+		externalDataJSON,
+		time.Now(),
+		id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating mtlswhitelist config: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update mTLS whitelist configuration")
+		return
+	}
+
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":                    id,
+		"mtls_rules":            rulesJSON,
+		"mtls_request_headers":  requestHeadersJSON,
+		"mtls_reject_message":   input.RejectMessage,
+		"mtls_reject_code":      rejectCode,
+		"mtls_refresh_interval": input.RefreshInterval,
+		"mtls_external_data":    externalDataJSON,
+	})
+}
+
 // UpdateHeadersConfig updates the custom headers configuration
 func (h *ConfigHandler) UpdateHeadersConfig(c *gin.Context) {
-    id := c.Param("id")
-    if id == "" {
-        ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
-        return
-    }
-    
-    var input struct {
-        CustomHeaders map[string]string `json:"custom_headers" binding:"required"`
-    }
-    
-    if err := c.ShouldBindJSON(&input); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
-    }
-    
-    // Verify resource exists and is active
-    var exists int
-    var status string
-    err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
-    if err == sql.ErrNoRows {
-        ResponseWithError(c, http.StatusNotFound, "Resource not found")
-        return
-    } else if err != nil {
-        log.Printf("Error checking resource existence: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Don't allow updating disabled resources
-    if status == "disabled" {
-        ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
-        return
-    }
-    
-    // Convert headers to JSON for storage
-    headersJSON, err := json.Marshal(input.CustomHeaders)
-    if err != nil {
-        log.Printf("Error encoding headers: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to encode headers")
-        return
-    }
-    
-    // Update the resource within a transaction
-    tx, err := h.DB.Begin()
-    if err != nil {
-        log.Printf("Error beginning transaction: %v", err)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    var txErr error
-    defer func() {
-        if txErr != nil {
-            tx.Rollback()
-            log.Printf("Transaction rolled back due to error: %v", txErr)
-        }
-    }()
-    
-    log.Printf("Updating custom headers for resource %s with %d headers", 
-        id, len(input.CustomHeaders))
-    
-    result, txErr := tx.Exec(
-        "UPDATE resources SET custom_headers = ?, updated_at = ? WHERE id = ?",
-        string(headersJSON), time.Now(), id,
-    )
-    
-    if txErr != nil {
-        log.Printf("Error updating custom headers: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Failed to update custom headers")
-        return
-    }
-    
-    rowsAffected, err := result.RowsAffected()
-    if err == nil {
-        log.Printf("Update affected %d rows", rowsAffected)
-        if rowsAffected == 0 {
-            log.Printf("Warning: Update query succeeded but no rows were affected")
-        }
-    }
-    
-    // Commit the transaction
-    if txErr = tx.Commit(); txErr != nil {
-        log.Printf("Error committing transaction: %v", txErr)
-        ResponseWithError(c, http.StatusInternalServerError, "Database error")
-        return
-    }
-    
-    // Verify the update by reading back the custom_headers
-    var storedHeaders string
-    verifyErr := h.DB.QueryRow("SELECT custom_headers FROM resources WHERE id = ?", id).Scan(&storedHeaders)
-    if verifyErr != nil {
-        log.Printf("Warning: Could not verify headers update: %v", verifyErr)
-    } else if storedHeaders == "" {
-        log.Printf("Warning: Headers may be empty after update for resource %s", id)
-    } else {
-        log.Printf("Successfully verified headers update for resource %s", id)
-    }
-    
-    log.Printf("Successfully updated custom headers for resource %s", id)
-    c.JSON(http.StatusOK, gin.H{
-        "id": id,
-        "custom_headers": input.CustomHeaders,
-    })
+	id := c.Param("id")
+	if id == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		CustomHeaders map[string]string `json:"custom_headers" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", id).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Don't allow updating disabled resources
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot update a disabled resource")
+		return
+	}
+
+	// Convert headers to JSON for storage
+	headersJSON, err := json.Marshal(input.CustomHeaders)
+	if err != nil {
+		log.Printf("Error encoding headers: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to encode headers")
+		return
+	}
+
+	// Update the resource within a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	log.Printf("Updating custom headers for resource %s with %d headers",
+		id, len(input.CustomHeaders))
+
+	result, txErr := tx.Exec(
+		"UPDATE resources SET custom_headers = ?, updated_at = ? WHERE id = ?",
+		string(headersJSON), time.Now(), id,
+	)
+
+	if txErr != nil {
+		log.Printf("Error updating custom headers: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to update custom headers")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err == nil {
+		log.Printf("Update affected %d rows", rowsAffected)
+		if rowsAffected == 0 {
+			log.Printf("Warning: Update query succeeded but no rows were affected")
+		}
+	}
+
+	// Commit the transaction
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Verify the update by reading back the custom_headers
+	var storedHeaders string
+	verifyErr := h.DB.QueryRow("SELECT custom_headers FROM resources WHERE id = ?", id).Scan(&storedHeaders)
+	if verifyErr != nil {
+		log.Printf("Warning: Could not verify headers update: %v", verifyErr)
+	} else if storedHeaders == "" {
+		log.Printf("Warning: Headers may be empty after update for resource %s", id)
+	} else {
+		log.Printf("Successfully verified headers update for resource %s", id)
+	}
+
+	log.Printf("Successfully updated custom headers for resource %s", id)
+	c.JSON(http.StatusOK, gin.H{
+		"id":             id,
+		"custom_headers": input.CustomHeaders,
+	})
 }

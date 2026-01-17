@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
 // import "github.com/hhftechnology/middleware-manager/config"
 
 // DB is a wrapper around sql.DB
@@ -45,36 +46,36 @@ type TraefikConfig struct {
 		Routers     map[string]interface{} `yaml:"routers,omitempty"`
 		Services    map[string]interface{} `yaml:"services,omitempty"`
 	} `yaml:"http"`
-	
+
 	TCP struct {
-		Routers     map[string]interface{} `yaml:"routers,omitempty"`
-		Services    map[string]interface{} `yaml:"services,omitempty"`
+		Routers  map[string]interface{} `yaml:"routers,omitempty"`
+		Services map[string]interface{} `yaml:"services,omitempty"`
 	} `yaml:"tcp,omitempty"`
-	
+
 	UDP struct {
 		Services map[string]interface{} `yaml:"services,omitempty"`
 	} `yaml:"udp,omitempty"`
 }
 
 func NewDB(dbPath string) (*DB, error) {
-    db, err := sql.Open("sqlite3", dbPath)
-    if err != nil {
-        return nil, err
-    }
-    
-    dbWrapper := &DB{db}
-    
-    // Enable WAL mode and configure for concurrency
-    if err := dbWrapper.EnableWALMode(); err != nil {
-        log.Printf("Warning: Failed to enable WAL mode: %v", err)
-    }
-    
-    // Run migrations
-    if err := runMigrations(db); err != nil {
-        return nil, err
-    }
-    
-    return dbWrapper, nil
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dbWrapper := &DB{db}
+
+	// Enable WAL mode and configure for concurrency
+	if err := dbWrapper.EnableWALMode(); err != nil {
+		log.Printf("Warning: Failed to enable WAL mode: %v", err)
+	}
+
+	// Run migrations
+	if err := runMigrations(db); err != nil {
+		return nil, err
+	}
+
+	return dbWrapper, nil
 }
 
 // InitDB initializes the database connection
@@ -109,16 +110,16 @@ func InitDB(dbPath string) (*DB, error) {
 		db.Close() // Close the connection on failure
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
-	
+
 	// Create a DB wrapper
 	dbWrapper := &DB{db}
-	
+
 	// Run service migrations
 	if err := runServiceMigrations(dbWrapper); err != nil {
 		log.Printf("Warning: Error running service migrations: %v", err)
 		// Continue despite errors to avoid breaking existing functionality
 	}
-	
+
 	// Run post-migration updates
 	if err := runPostMigrationUpdates(db); err != nil {
 		log.Printf("Warning: Error running post-migration updates: %v", err)
@@ -177,55 +178,55 @@ func runServiceMigrations(db *DB) error {
 		FROM sqlite_master 
 		WHERE type='table' AND name='services'
 	`).Scan(&hasServicesTable)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to check if services table exists: %w", err)
 	}
-	
+
 	// If the table doesn't exist, create it
 	if !hasServicesTable {
 		log.Println("Services table doesn't exist, running service migrations")
-		
+
 		// Find the migrations file
 		migrationsFile := findServiceMigrationsFile()
 		if migrationsFile == "" {
 			return fmt.Errorf("service migrations file not found")
 		}
-		
+
 		// Read migrations file
 		migrations, err := os.ReadFile(migrationsFile)
 		if err != nil {
 			return fmt.Errorf("failed to read service migrations file: %w", err)
 		}
-		
+
 		// Execute migrations in a transaction
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to begin transaction: %w", err)
 		}
-		
+
 		var txErr error
 		defer func() {
 			if txErr != nil {
 				tx.Rollback()
 			}
 		}()
-		
+
 		// Execute migrations
 		if _, txErr = tx.Exec(string(migrations)); txErr != nil {
 			return fmt.Errorf("failed to execute service migrations: %w", txErr)
 		}
-		
+
 		// Commit the transaction
 		if txErr = tx.Commit(); txErr != nil {
 			return fmt.Errorf("failed to commit transaction: %w", txErr)
 		}
-		
+
 		log.Println("Service migrations completed successfully")
 	} else {
 		log.Println("Services table already exists, skipping service migrations")
 	}
-	
+
 	return nil
 }
 
@@ -239,19 +240,19 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		FROM pragma_table_info('resources') 
 		WHERE name = 'custom_headers'
 	`).Scan(&hasCustomHeadersColumn)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to check if custom_headers column exists: %w", err)
 	}
-	
+
 	// If the column doesn't exist, we need to add it to the existing table
 	if !hasCustomHeadersColumn {
 		log.Println("Adding custom_headers column to resources table")
-		
+
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN custom_headers TEXT DEFAULT ''"); err != nil {
 			return fmt.Errorf("failed to add custom_headers column: %w", err)
 		}
-		
+
 		log.Println("Successfully added custom_headers column")
 	}
 	// Check for router_priority column
@@ -269,13 +270,13 @@ func runPostMigrationUpdates(db *sql.DB) error {
 	// If the column doesn't exist, add it
 	if !hasRouterPriorityColumn {
 		log.Println("Adding router_priority column to resources table")
-		
+
 		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN router_priority INTEGER DEFAULT 100"); err != nil {
 			return fmt.Errorf("failed to add router_priority column: %w", err)
 		}
-		
+
 		log.Println("Successfully added router_priority column")
-	}	
+	}
 	// Check for entrypoints column as well (from previous migration)
 	var hasEntrypointsColumn bool
 	err = db.QueryRow(`
@@ -283,7 +284,7 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		FROM pragma_table_info('resources') 
 		WHERE name = 'entrypoints'
 	`).Scan(&hasEntrypointsColumn)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to check if entrypoints column exists: %w", err)
 	}
@@ -297,20 +298,20 @@ func runPostMigrationUpdates(db *sql.DB) error {
 `).Scan(&hasSourceTypeColumn)
 
 	if err != nil {
-    return fmt.Errorf("failed to check if source_type column exists: %w", err)
+		return fmt.Errorf("failed to check if source_type column exists: %w", err)
 	}
 
-   // If the column doesn't exist, add it
+	// If the column doesn't exist, add it
 	if !hasSourceTypeColumn {
-    log.Println("Adding source_type column to resources table")
-    
-    if _, err := db.Exec("ALTER TABLE resources ADD COLUMN source_type TEXT DEFAULT ''"); err != nil {
-        return fmt.Errorf("failed to add source_type column: %w", err)
-    }
-    
-    log.Println("Successfully added source_type column")
+		log.Println("Adding source_type column to resources table")
+
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN source_type TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add source_type column: %w", err)
+		}
+
+		log.Println("Successfully added source_type column")
 	}
-	
+
 	// If the column doesn't exist, add the routing columns too
 	if !hasEntrypointsColumn {
 		log.Println("Adding routing configuration columns to resources table")
@@ -362,6 +363,103 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		}
 
 		log.Println("Successfully added mtls_enabled column")
+	}
+
+	// Check for per-resource mtlswhitelist columns
+	var hasMTLSRulesColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_rules'
+	`).Scan(&hasMTLSRulesColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_rules column exists: %w", err)
+	}
+	if !hasMTLSRulesColumn {
+		log.Println("Adding mtls_rules column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_rules TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add mtls_rules column: %w", err)
+		}
+	}
+
+	var hasMTLSRequestHeadersColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_request_headers'
+	`).Scan(&hasMTLSRequestHeadersColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_request_headers column exists: %w", err)
+	}
+	if !hasMTLSRequestHeadersColumn {
+		log.Println("Adding mtls_request_headers column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_request_headers TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add mtls_request_headers column: %w", err)
+		}
+	}
+
+	var hasMTLSRejectMessageColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_reject_message'
+	`).Scan(&hasMTLSRejectMessageColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_reject_message column exists: %w", err)
+	}
+	if !hasMTLSRejectMessageColumn {
+		log.Println("Adding mtls_reject_message column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_reject_message TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add mtls_reject_message column: %w", err)
+		}
+	}
+
+	var hasMTLSRejectCodeColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_reject_code'
+	`).Scan(&hasMTLSRejectCodeColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_reject_code column exists: %w", err)
+	}
+	if !hasMTLSRejectCodeColumn {
+		log.Println("Adding mtls_reject_code column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_reject_code INTEGER DEFAULT 403"); err != nil {
+			return fmt.Errorf("failed to add mtls_reject_code column: %w", err)
+		}
+	}
+
+	var hasMTLSRefreshIntervalColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_refresh_interval'
+	`).Scan(&hasMTLSRefreshIntervalColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_refresh_interval column exists: %w", err)
+	}
+	if !hasMTLSRefreshIntervalColumn {
+		log.Println("Adding mtls_refresh_interval column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_refresh_interval TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add mtls_refresh_interval column: %w", err)
+		}
+	}
+
+	var hasMTLSExternalDataColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'mtls_external_data'
+	`).Scan(&hasMTLSExternalDataColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if mtls_external_data column exists: %w", err)
+	}
+	if !hasMTLSExternalDataColumn {
+		log.Println("Adding mtls_external_data column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN mtls_external_data TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add mtls_external_data column: %w", err)
+		}
 	}
 
 	// Check for middleware config columns in mtls_config table
@@ -503,9 +601,9 @@ func (db *DB) GetResources() ([]map[string]interface{}, error) {
 		var tcpEnabled int
 		var routerPriority sql.NullInt64
 		var middlewares sql.NullString
-		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status, 
-				   &entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule, 
-				   &customHeaders, &routerPriority, &sourceType, &middlewares); err != nil {
+		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status,
+			&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
+			&customHeaders, &routerPriority, &sourceType, &middlewares); err != nil {
 			return nil, fmt.Errorf("row scan failed: %w", err)
 		}
 
@@ -514,7 +612,7 @@ func (db *DB) GetResources() ([]map[string]interface{}, error) {
 		if routerPriority.Valid {
 			priority = int(routerPriority.Int64)
 		}
-		
+
 		resource := map[string]interface{}{
 			"id":              id,
 			"host":            host,
@@ -531,13 +629,13 @@ func (db *DB) GetResources() ([]map[string]interface{}, error) {
 			"router_priority": priority,
 			"source_type":     sourceType,
 		}
-		
+
 		if middlewares.Valid {
 			resource["middlewares"] = middlewares.String
 		} else {
 			resource["middlewares"] = ""
 		}
-		
+
 		resources = append(resources, resource)
 	}
 
@@ -565,9 +663,9 @@ func (db *DB) GetResource(id string) (map[string]interface{}, error) {
 		LEFT JOIN middlewares m ON rm.middleware_id = m.id
 		WHERE r.id = ?
 		GROUP BY r.id
-	`, id).Scan(&host, &serviceID, &orgID, &siteID, &status, 
-		    &entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule, 
-		    &customHeaders, &routerPriority, &sourceType, &middlewares)
+	`, id).Scan(&host, &serviceID, &orgID, &siteID, &status,
+		&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
+		&customHeaders, &routerPriority, &sourceType, &middlewares)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("resource not found: %s", id)

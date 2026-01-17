@@ -192,6 +192,7 @@ func (s *Server) setupRoutes(uiPath string) {
 			resources.PUT("/:id/config/headers", s.configHandler.UpdateHeadersConfig)
 			resources.PUT("/:id/config/priority", s.configHandler.UpdateRouterPriority)
 			resources.PUT("/:id/config/mtls", s.configHandler.UpdateMTLSConfig)
+			resources.PUT("/:id/config/mtlswhitelist", s.configHandler.UpdateMTLSWhitelistConfig)
 		}
 
 		// Data source routes

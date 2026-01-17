@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -50,6 +51,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { parseJSON } from '@/lib/utils'
+import type { MTLSWhitelistExternalData } from '@/types'
 
 export function ResourceDetail() {
   const { resourceId, navigateTo } = useAppStore()
@@ -72,7 +74,7 @@ export function ResourceDetail() {
   const { middlewares, fetchMiddlewares } = useMiddlewareStore()
   const { services, fetchServices } = useServiceStore()
   const { config: mtlsConfig, fetchConfig: fetchMTLSConfig } = useMTLSStore()
-  const { updateMTLSConfig } = useResourceStore()
+  const { updateMTLSConfig, updateMTLSWhitelistConfig } = useResourceStore()
 
   const [selectedMiddlewareId, setSelectedMiddlewareId] = useState('')
   const [middlewarePriority, setMiddlewarePriority] = useState('100')
@@ -92,6 +94,17 @@ export function ResourceDetail() {
   const [editTcpEntrypoints, setEditTcpEntrypoints] = useState('')
   const [editTcpSniRule, setEditTcpSniRule] = useState('')
   const [mtlsToggleLoading, setMtlsToggleLoading] = useState(false)
+  const [mtlsRulesText, setMtlsRulesText] = useState('[]')
+  const [requestHeaderEntries, setRequestHeaderEntries] = useState<Array<{ key: string; value: string }>>([])
+  const [mtlsRejectMessage, setMtlsRejectMessage] = useState('')
+  const [mtlsRejectCode, setMtlsRejectCode] = useState<number>(403)
+  const [mtlsRefreshInterval, setMtlsRefreshInterval] = useState('')
+  const [externalUrl, setExternalUrl] = useState('')
+  const [externalDataKey, setExternalDataKey] = useState('')
+  const [externalSkipTls, setExternalSkipTls] = useState(false)
+  const [externalHeaderEntries, setExternalHeaderEntries] = useState<Array<{ key: string; value: string }>>([])
+  const [savingWhitelist, setSavingWhitelist] = useState(false)
+  const [whitelistError, setWhitelistError] = useState<string | null>(null)
 
   useEffect(() => {
     if (resourceId) {
@@ -101,6 +114,27 @@ export function ResourceDetail() {
       fetchMTLSConfig()
     }
   }, [resourceId, fetchResource, fetchMiddlewares, fetchServices, fetchMTLSConfig])
+
+  useEffect(() => {
+    if (!selectedResource) return
+
+    const rules = parseJSON<unknown[]>(selectedResource.mtls_rules || '[]', [])
+    setMtlsRulesText(JSON.stringify(rules, null, 2))
+
+    const parsedHeaders = parseJSON<Record<string, string>>(selectedResource.mtls_request_headers || '{}', {})
+    setRequestHeaderEntries(Object.entries(parsedHeaders).map(([key, value]) => ({ key, value })))
+
+    setMtlsRejectMessage(selectedResource.mtls_reject_message || '')
+    setMtlsRejectCode(selectedResource.mtls_reject_code ?? 403)
+    setMtlsRefreshInterval(selectedResource.mtls_refresh_interval || '')
+
+    const external = parseJSON<MTLSWhitelistExternalData>(selectedResource.mtls_external_data || '{}', {})
+    setExternalUrl(external.url || '')
+    setExternalDataKey(external.dataKey || '')
+    setExternalSkipTls(Boolean(external.skipTlsVerify))
+    const extHeaders = external.headers || {}
+    setExternalHeaderEntries(Object.entries(extHeaders).map(([key, value]) => ({ key, value })))
+  }, [selectedResource])
 
   if (loadingResource) {
     return <PageLoader message="Loading resource..." />
@@ -230,6 +264,78 @@ export function ResourceDetail() {
       await updateMTLSConfig(resourceId, !selectedResource?.mtls_enabled)
     } finally {
       setMtlsToggleLoading(false)
+    }
+  }
+
+  const handleAddRequestHeaderRow = () => {
+    setRequestHeaderEntries((prev) => [...prev, { key: '', value: '' }])
+  }
+
+  const handleRemoveRequestHeaderRow = (index: number) => {
+    setRequestHeaderEntries((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleAddExternalHeaderRow = () => {
+    setExternalHeaderEntries((prev) => [...prev, { key: '', value: '' }])
+  }
+
+  const handleRemoveExternalHeaderRow = (index: number) => {
+    setExternalHeaderEntries((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSaveWhitelistConfig = async () => {
+    if (!resourceId) return
+    setWhitelistError(null)
+    setSavingWhitelist(true)
+    try {
+      let parsedRules: unknown[] = []
+      const trimmedRules = mtlsRulesText.trim()
+      if (trimmedRules) {
+        try {
+          const candidate = JSON.parse(trimmedRules)
+          if (Array.isArray(candidate)) {
+            parsedRules = candidate
+          } else {
+            throw new Error('Rules must be a JSON array')
+          }
+        } catch (err) {
+          setWhitelistError(err instanceof Error ? err.message : 'Invalid rules JSON')
+          return
+        }
+      }
+
+      const requestHeaders = requestHeaderEntries.reduce<Record<string, string>>((acc, entry) => {
+        if (entry.key.trim()) {
+          acc[entry.key.trim()] = entry.value
+        }
+        return acc
+      }, {})
+
+      const externalHeaders = externalHeaderEntries.reduce<Record<string, string>>((acc, entry) => {
+        if (entry.key.trim()) {
+          acc[entry.key.trim()] = entry.value
+        }
+        return acc
+      }, {})
+
+      const externalData: MTLSWhitelistExternalData = {}
+      if (externalUrl.trim()) externalData.url = externalUrl.trim()
+      if (externalDataKey.trim()) externalData.dataKey = externalDataKey.trim()
+      if (externalSkipTls) externalData.skipTlsVerify = true
+      if (Object.keys(externalHeaders).length > 0) externalData.headers = externalHeaders
+
+      const payload = {
+        rules: parsedRules,
+        request_headers: requestHeaders,
+        reject_message: mtlsRejectMessage || undefined,
+        reject_code: mtlsRejectCode || undefined,
+        refresh_interval: mtlsRefreshInterval || undefined,
+        external_data: Object.keys(externalData).length > 0 ? externalData : undefined,
+      }
+
+      await updateMTLSWhitelistConfig(resourceId, payload)
+    } finally {
+      setSavingWhitelist(false)
     }
   }
 
@@ -515,6 +621,191 @@ export function ResourceDetail() {
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {mtlsConfig?.enabled && mtlsConfig?.has_ca && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              mTLS Whitelist (mtlswhitelist)
+            </CardTitle>
+            <CardDescription>
+              Configure per-resource whitelist rules, request headers, refresh interval, external data, and reject message.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {whitelistError && (
+              <div className="rounded-md bg-destructive/10 text-destructive p-3 text-sm">
+                {whitelistError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Rules JSON</Label>
+              <Textarea
+                value={mtlsRulesText}
+                onChange={(e) => setMtlsRulesText(e.target.value)}
+                className="font-mono text-sm"
+                rows={8}
+                placeholder={`[{"type":"ipRange","ranges":["192.168.0.0/24"],"addInterface":true}]`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Use the mtlswhitelist rule schema (ipRange/header/anyOf/allOf/noneOf). Rules must be a JSON array.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Request Headers (templates allowed)</Label>
+                <Button variant="outline" size="sm" onClick={handleAddRequestHeaderRow}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add header
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {requestHeaderEntries.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No request headers configured.</p>
+                )}
+                {requestHeaderEntries.map((entry, idx) => (
+                  <div key={`${entry.key}-${idx}`} className="grid grid-cols-2 gap-2 items-center">
+                    <Input
+                      placeholder="Header name"
+                      value={entry.key}
+                      onChange={(e) => {
+                        const newEntries = [...requestHeaderEntries]
+                        newEntries[idx] = { ...entry, key: e.target.value }
+                        setRequestHeaderEntries(newEntries)
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Header value template"
+                        value={entry.value}
+                        onChange={(e) => {
+                          const newEntries = [...requestHeaderEntries]
+                          newEntries[idx] = { ...entry, value: e.target.value }
+                          setRequestHeaderEntries(newEntries)
+                        }}
+                      />
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveRequestHeaderRow(idx)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Reject Message</Label>
+                <Input
+                  placeholder="Forbidden"
+                  value={mtlsRejectMessage}
+                  onChange={(e) => setMtlsRejectMessage(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reject Code</Label>
+                <Input
+                  type="number"
+                  value={mtlsRejectCode}
+                  onChange={(e) => setMtlsRejectCode(parseInt(e.target.value || '0', 10))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Refresh Interval</Label>
+                <Input
+                  placeholder="30m, 300s"
+                  value={mtlsRefreshInterval}
+                  onChange={(e) => setMtlsRefreshInterval(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Duration string understood by the plugin.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>External Data</Label>
+                  <p className="text-xs text-muted-foreground">Optional fetch for IP ranges or headers.</p>
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>URL</Label>
+                  <Input
+                    placeholder="https://api.example/config"
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Key</Label>
+                  <Input
+                    placeholder="data"
+                    value={externalDataKey}
+                    onChange={(e) => setExternalDataKey(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Switch checked={externalSkipTls} onCheckedChange={setExternalSkipTls} />
+                    Skip TLS Verify
+                  </Label>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>External Headers</Label>
+                  <Button variant="outline" size="sm" onClick={handleAddExternalHeaderRow}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add header
+                  </Button>
+                </div>
+                {externalHeaderEntries.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No external headers configured.</p>
+                )}
+                {externalHeaderEntries.map((entry, idx) => (
+                  <div key={`ext-${entry.key}-${idx}`} className="grid grid-cols-2 gap-2 items-center">
+                    <Input
+                      placeholder="Header name"
+                      value={entry.key}
+                      onChange={(e) => {
+                        const next = [...externalHeaderEntries]
+                        next[idx] = { ...entry, key: e.target.value }
+                        setExternalHeaderEntries(next)
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Header value"
+                        value={entry.value}
+                        onChange={(e) => {
+                          const next = [...externalHeaderEntries]
+                          next[idx] = { ...entry, value: e.target.value }
+                          setExternalHeaderEntries(next)
+                        }}
+                      />
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveExternalHeaderRow(idx)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={handleSaveWhitelistConfig} disabled={savingWhitelist || !selectedResource?.mtls_enabled}>
+                {savingWhitelist ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Save whitelist
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

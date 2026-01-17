@@ -67,6 +67,8 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		SELECT r.id, r.host, r.service_id, r.org_id, r.site_id, r.status,
 		       r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
 		       r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
+		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
+		       r.mtls_refresh_interval, r.mtls_external_data,
 		       GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
 		FROM resources r
 		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
@@ -101,10 +103,15 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		var mtlsEnabled int
 		var routerPriority sql.NullInt64
 		var middlewares sql.NullString
+		var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
+		var mtlsRejectCode sql.NullInt64
 
 		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status,
 			&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
-			&customHeaders, &mtlsEnabled, &routerPriority, &sourceType, &middlewares); err != nil {
+			&customHeaders, &mtlsEnabled, &routerPriority, &sourceType,
+			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
+			&mtlsRefreshInterval, &mtlsExternalData,
+			&middlewares); err != nil {
 			log.Printf("Error scanning resource row: %v", err)
 			continue
 		}
@@ -130,6 +137,25 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 			"mtls_enabled":    mtlsEnabled > 0,
 			"router_priority": priority,
 			"source_type":     sourceType,
+		}
+
+		if mtlsRules.Valid {
+			resource["mtls_rules"] = mtlsRules.String
+		}
+		if mtlsRequestHeaders.Valid {
+			resource["mtls_request_headers"] = mtlsRequestHeaders.String
+		}
+		if mtlsRejectMessage.Valid {
+			resource["mtls_reject_message"] = mtlsRejectMessage.String
+		}
+		if mtlsRejectCode.Valid {
+			resource["mtls_reject_code"] = mtlsRejectCode.Int64
+		}
+		if mtlsRefreshInterval.Valid {
+			resource["mtls_refresh_interval"] = mtlsRefreshInterval.String
+		}
+		if mtlsExternalData.Valid {
+			resource["mtls_external_data"] = mtlsExternalData.String
 		}
 
 		if middlewares.Valid {
@@ -169,11 +195,15 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 	var mtlsEnabled int
 	var routerPriority sql.NullInt64
 	var middlewares sql.NullString
+	var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
+	var mtlsRejectCode sql.NullInt64
 
 	err := h.DB.QueryRow(`
         SELECT r.host, r.service_id, r.org_id, r.site_id, r.status,
                r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
                r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
+               r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
+               r.mtls_refresh_interval, r.mtls_external_data,
                GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
         FROM resources r
         LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
@@ -182,7 +212,10 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
         GROUP BY r.id
     `, id).Scan(&host, &serviceID, &orgID, &siteID, &status,
 		&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
-		&customHeaders, &mtlsEnabled, &routerPriority, &sourceType, &middlewares)
+		&customHeaders, &mtlsEnabled, &routerPriority, &sourceType,
+		&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
+		&mtlsRefreshInterval, &mtlsExternalData,
+		&middlewares)
 
 	if err == sql.ErrNoRows {
 		ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Resource not found: %s", id))
@@ -215,6 +248,25 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 		"mtls_enabled":    mtlsEnabled > 0,
 		"router_priority": priority,
 		"source_type":     sourceType, // Make sure this is included
+	}
+
+	if mtlsRules.Valid {
+		resource["mtls_rules"] = mtlsRules.String
+	}
+	if mtlsRequestHeaders.Valid {
+		resource["mtls_request_headers"] = mtlsRequestHeaders.String
+	}
+	if mtlsRejectMessage.Valid {
+		resource["mtls_reject_message"] = mtlsRejectMessage.String
+	}
+	if mtlsRejectCode.Valid {
+		resource["mtls_reject_code"] = mtlsRejectCode.Int64
+	}
+	if mtlsRefreshInterval.Valid {
+		resource["mtls_refresh_interval"] = mtlsRefreshInterval.String
+	}
+	if mtlsExternalData.Valid {
+		resource["mtls_external_data"] = mtlsExternalData.String
 	}
 
 	if middlewares.Valid {
