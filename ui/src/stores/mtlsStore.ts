@@ -156,6 +156,12 @@ export const useMTLSStore = create<MTLSState>((set, get) => ({
     set({ error: null })
     try {
       await mtlsApi.revokeClient(id)
+      // Optimistically mark revoked locally to avoid stale UI when fetch may fail
+      set((state) => ({
+        clients: state.clients.map((c) =>
+          c.id === id ? { ...c, revoked: true, revoked_at: new Date().toISOString() } : c
+        ),
+      }))
       await get().fetchClients()
       return true
     } catch (err) {
@@ -188,11 +194,13 @@ export const useMTLSStore = create<MTLSState>((set, get) => ({
   checkPlugin: async () => {
     try {
       const status = await mtlsApi.checkPlugin()
-      set({ pluginStatus: status })
+      // Normalize version display; default to recommended v0.0.4 if missing
+      const version = status.version || 'v0.0.4'
+      set({ pluginStatus: { ...status, version } })
       return status.installed
     } catch (err) {
       console.error('Failed to check plugin status:', err)
-      set({ pluginStatus: { installed: false, plugin_name: 'mtlswhitelist', version: '' } })
+      set({ pluginStatus: { installed: false, plugin_name: 'mtlswhitelist', version: 'v0.0.4' } })
       return false
     }
   },

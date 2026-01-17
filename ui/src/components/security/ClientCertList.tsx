@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Loader2,
   Plus,
@@ -57,6 +57,8 @@ export function ClientCertList() {
     createClient,
     revokeClient,
     deleteClient,
+    error,
+    clearError,
   } = useMTLSStore()
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -69,6 +71,7 @@ export function ClientCertList() {
   const [formError, setFormError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newClientId, setNewClientId] = useState<string | null>(null)
+  const [revokeLoading, setRevokeLoading] = useState<string | null>(null)
 
   useEffect(() => {
     if (config?.has_ca) {
@@ -117,7 +120,9 @@ export function ClientCertList() {
   }
 
   const handleRevoke = async (id: string) => {
+    setRevokeLoading(id)
     await revokeClient(id)
+    setRevokeLoading(null)
   }
 
   const handleDelete = async (id: string) => {
@@ -249,6 +254,16 @@ export function ClientCertList() {
         </div>
       </CardHeader>
       <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription className="flex justify-between items-center">
+              {error}
+              <Button size="sm" variant="outline" onClick={clearError}>
+                Dismiss
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {newClientId && (
           <Alert className="mb-4">
             <CheckCircle className="h-4 w-4" />
@@ -327,7 +342,7 @@ export function ClientCertList() {
                     {!client.revoked && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" disabled={revokeLoading === client.id}>
                             <Ban className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
@@ -342,7 +357,11 @@ export function ClientCertList() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction onClick={() => handleRevoke(client.id)}>
-                              Revoke
+                              {revokeLoading === client.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Revoke'
+                              )}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>

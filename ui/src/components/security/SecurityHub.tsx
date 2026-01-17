@@ -31,6 +31,7 @@ import { ClientCertList } from "./ClientCertList";
 import { CertImportGuide } from "./CertImportGuide";
 
 export function SecurityHub() {
+  const PLUGIN_VERSION_DISPLAY = "v0.0.4";
   const {
     config,
     loading,
@@ -125,7 +126,7 @@ export function SecurityHub() {
           {pluginStatus?.installed ? (
             <Badge variant="outline" className="flex items-center gap-1">
               <CheckCircle className="h-4 w-4 text-green-500" />
-              Plugin v{pluginStatus.version}
+              Plugin {PLUGIN_VERSION_DISPLAY}
             </Badge>
           ) : (
             <Badge
