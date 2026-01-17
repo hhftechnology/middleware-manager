@@ -603,7 +603,7 @@ func (cg *ConfigGenerator) processMTLSOptions(config *TraefikConfig) error {
 	}
 
 	if middlewareRefreshInterval.Valid && middlewareRefreshInterval.Int64 > 0 {
-		pluginConfig["refreshInterval"] = middlewareRefreshInterval.Int64
+		pluginConfig["refreshInterval"] = fmt.Sprintf("%ds", middlewareRefreshInterval.Int64)
 	}
 
 	config.HTTP.Middlewares["mtls-auth"] = map[string]interface{}{
