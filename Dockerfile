@@ -16,7 +16,7 @@ COPY ui/ ./
 RUN npm run build
 
 # Build Go stage - using Debian for glibc compatibility with go-sqlite3
-FROM golang:1.21-bookworm AS go-builder
+FROM golang:1.24-bookworm AS go-builder
 
 # Install build dependencies for Go with CGO and static linking
 RUN apt-get update && apt-get install -y --no-install-recommends \
