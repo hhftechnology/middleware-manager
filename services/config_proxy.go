@@ -328,6 +328,9 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 		}
 	}
 
+	// Sanitize mtlswhitelist requestHeaders to ensure map type (Traefik plugin is strict)
+	cp.sanitizeMTLSWhitelist(config)
+
 	return nil
 }
 
@@ -849,6 +852,46 @@ func (cp *ConfigProxy) determineServiceProtocol(serviceType string, config map[s
 		}
 	}
 	return "http"
+}
+
+// sanitizeMTLSWhitelist ensures requestHeaders is a map for all mtlswhitelist middlewares
+func (cp *ConfigProxy) sanitizeMTLSWhitelist(config *ProxiedTraefikConfig) {
+	if config == nil || config.HTTP == nil {
+		return
+	}
+	for key, mw := range config.HTTP.Middlewares {
+		mwMap, ok := mw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		pluginVal, ok := mwMap["plugin"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		mtlsVal, ok := pluginVal["mtlswhitelist"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if rh, exists := mtlsVal["requestHeaders"]; exists {
+			switch v := rh.(type) {
+			case map[string]interface{}:
+				// ok
+			case map[string]string:
+				mtlsVal["requestHeaders"] = v
+			case string:
+				// Traefik plugin expects a map; replace string with empty map
+				mtlsVal["requestHeaders"] = map[string]interface{}{}
+				if shouldLog() {
+					log.Printf("Sanitized mtlswhitelist.requestHeaders for middleware %s (was string)", key)
+				}
+			default:
+				mtlsVal["requestHeaders"] = map[string]interface{}{}
+				if shouldLog() {
+					log.Printf("Sanitized mtlswhitelist.requestHeaders for middleware %s (was %T)", key, v)
+				}
+			}
+		}
+	}
 }
 
 // SetPangolinURL updates the Pangolin API URL
