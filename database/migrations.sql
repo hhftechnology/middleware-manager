@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS resources (
     custom_headers TEXT DEFAULT '',
     
     -- Router priority configuration
-    router_priority INTEGER DEFAULT 200,
+    router_priority INTEGER DEFAULT 100,
     
     -- Source type for tracking data origin
     source_type TEXT DEFAULT '',
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS resources (
 CREATE TABLE IF NOT EXISTS resource_middlewares (
     resource_id TEXT NOT NULL,
     middleware_id TEXT NOT NULL,
-    priority INTEGER NOT NULL DEFAULT 200,
+    priority INTEGER NOT NULL DEFAULT 100,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (resource_id, middleware_id),
     FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,

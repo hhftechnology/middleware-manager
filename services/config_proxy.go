@@ -471,7 +471,7 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 		}
 
 		// Update priority if customized
-		if resource.RouterPriority != 200 {
+		if resource.RouterPriority != 100 {
 			router["priority"] = resource.RouterPriority
 		}
 
@@ -542,7 +542,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 
 		data, exists := resourceMap[rID]
 		if !exists {
-			priority := 200
+			priority := 100
 			if routerPriority.Valid {
 				priority = int(routerPriority.Int64)
 			}
@@ -562,7 +562,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 		}
 
 		if middlewareID.Valid {
-			mwPriority := 200
+			mwPriority := 100
 			if middlewarePriority.Valid {
 				mwPriority = int(middlewarePriority.Int64)
 			}

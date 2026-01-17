@@ -181,7 +181,7 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 			Status:         "active",
 			SourceType:     string(models.PangolinAPI),
 			Entrypoints:    strings.Join(router.EntryPoints, ","),
-			RouterPriority: 200, // Default
+			RouterPriority: 100, // Default
 		}
 
 		resources.Resources = append(resources.Resources, resource)
@@ -274,7 +274,7 @@ func (f *PangolinFetcher) GetTraefikRouters(ctx context.Context) ([]models.Traef
 			Service:     router.Service,
 			EntryPoints: router.EntryPoints,
 			Middlewares: router.Middlewares,
-			Priority:    200, // Default priority
+			Priority:    100, // Default priority
 			Provider:    "pangolin",
 			Status:      "enabled",
 			TLS: models.TraefikTLSConfig{

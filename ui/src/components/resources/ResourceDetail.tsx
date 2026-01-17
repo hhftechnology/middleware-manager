@@ -177,7 +177,7 @@ export function ResourceDetail() {
   const handleStartEditConfig = () => {
     if (selectedResource) {
       setEditEntrypoints(selectedResource.entrypoints || 'websecure')
-      setEditPriority(String(selectedResource.router_priority || 200))
+      setEditPriority(String(selectedResource.router_priority || 100))
       setEditTlsDomains(selectedResource.tls_domains || '')
       setEditTcpEntrypoints(selectedResource.tcp_entrypoints || '')
       setEditTcpSniRule(selectedResource.tcp_sni_rule || '')
@@ -200,7 +200,7 @@ export function ResourceDetail() {
       await updateHTTPConfig(resourceId, { entrypoints: editEntrypoints })
 
       // Update router priority
-      const newPriority = parseInt(editPriority, 10) || 200
+      const newPriority = parseInt(editPriority, 10) || 100
       await updateRouterPriority(resourceId, newPriority)
 
       // Update TLS config
@@ -329,7 +329,7 @@ export function ResourceDetail() {
                       type="number"
                       value={editPriority}
                       onChange={(e) => setEditPriority(e.target.value)}
-                      placeholder="200"
+                      placeholder="100"
                     />
                     <p className="text-xs text-muted-foreground">
                       Higher priority routers are evaluated first
@@ -385,7 +385,7 @@ export function ResourceDetail() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Priority</Label>
-                    <p className="font-medium">{selectedResource.router_priority || 200}</p>
+                    <p className="font-medium">{selectedResource.router_priority || 100}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Service ID</Label>

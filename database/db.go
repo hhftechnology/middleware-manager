@@ -270,7 +270,7 @@ func runPostMigrationUpdates(db *sql.DB) error {
 	if !hasRouterPriorityColumn {
 		log.Println("Adding router_priority column to resources table")
 		
-		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN router_priority INTEGER DEFAULT 200"); err != nil {
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN router_priority INTEGER DEFAULT 100"); err != nil {
 			return fmt.Errorf("failed to add router_priority column: %w", err)
 		}
 		
@@ -510,7 +510,7 @@ func (db *DB) GetResources() ([]map[string]interface{}, error) {
 		}
 
 		// Set default priority if null
-		priority := 200 // Default value
+		priority := 100 // Default value
 		if routerPriority.Valid {
 			priority = int(routerPriority.Int64)
 		}
@@ -576,7 +576,7 @@ func (db *DB) GetResource(id string) (map[string]interface{}, error) {
 	}
 
 	// Set default priority if null
-	priority := 200 // Default value
+	priority := 100 // Default value
 	if routerPriority.Valid {
 		priority = int(routerPriority.Int64)
 	}
