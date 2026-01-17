@@ -572,9 +572,9 @@ func (cp *ConfigProxy) ensureResourceMTLSMiddleware(config *ProxiedTraefikConfig
 
 	if resource.MTLSRequestHdrs.Valid && strings.TrimSpace(resource.MTLSRequestHdrs.String) != "" {
 		var headers map[string]string
-		if err := json.Unmarshal([]byte(resource.MTLSRequestHdrs.String), &headers); err == nil {
+		if err := json.Unmarshal([]byte(resource.MTLSRequestHdrs.String), &headers); err == nil && len(headers) > 0 {
 			pluginConfig["requestHeaders"] = headers
-		} else {
+		} else if err != nil {
 			log.Printf("Failed to parse mtls_request_headers for resource %s: %v", resource.ID, err)
 		}
 	}
@@ -754,7 +754,7 @@ func (cp *ConfigProxy) loadGlobalMTLSConfig() (*mtlsConfigData, error) {
 
 	if middlewareRequestHeaders.Valid && middlewareRequestHeaders.String != "" {
 		var headers map[string]string
-		if err := json.Unmarshal([]byte(middlewareRequestHeaders.String), &headers); err == nil {
+		if err := json.Unmarshal([]byte(middlewareRequestHeaders.String), &headers); err == nil && len(headers) > 0 {
 			cfg.RequestHeaders = headers
 		}
 	}
@@ -876,16 +876,23 @@ func (cp *ConfigProxy) sanitizeMTLSWhitelist(config *ProxiedTraefikConfig) {
 			switch v := rh.(type) {
 			case map[string]interface{}:
 				// ok
+				if len(v) == 0 {
+					delete(mtlsVal, "requestHeaders")
+				}
 			case map[string]string:
-				mtlsVal["requestHeaders"] = v
+				if len(v) == 0 {
+					delete(mtlsVal, "requestHeaders")
+				} else {
+					mtlsVal["requestHeaders"] = v
+				}
 			case string:
 				// Traefik plugin expects a map; replace string with empty map
-				mtlsVal["requestHeaders"] = map[string]interface{}{}
+				delete(mtlsVal, "requestHeaders")
 				if shouldLog() {
 					log.Printf("Sanitized mtlswhitelist.requestHeaders for middleware %s (was string)", key)
 				}
 			default:
-				mtlsVal["requestHeaders"] = map[string]interface{}{}
+				delete(mtlsVal, "requestHeaders")
 				if shouldLog() {
 					log.Printf("Sanitized mtlswhitelist.requestHeaders for middleware %s (was %T)", key, v)
 				}
