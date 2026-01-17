@@ -72,6 +72,7 @@ export function ClientCertList() {
   const [creating, setCreating] = useState(false)
   const [newClientId, setNewClientId] = useState<string | null>(null)
   const [revokeLoading, setRevokeLoading] = useState<string | null>(null)
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState<string | null>(null)
 
   useEffect(() => {
     if (config?.has_ca) {
@@ -121,8 +122,11 @@ export function ClientCertList() {
 
   const handleRevoke = async (id: string) => {
     setRevokeLoading(id)
-    await revokeClient(id)
+    const success = await revokeClient(id)
     setRevokeLoading(null)
+    if (success) {
+      setRevokeDialogOpen(null)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -340,10 +344,21 @@ export function ClientCertList() {
                       <Download className="h-4 w-4" />
                     </Button>
                     {!client.revoked && (
-                      <AlertDialog>
+                      <AlertDialog
+                        open={revokeDialogOpen === client.id}
+                        onOpenChange={(open) => {
+                          if (!revokeLoading) {
+                            setRevokeDialogOpen(open ? client.id : null)
+                          }
+                        }}
+                      >
                         <AlertDialogTrigger asChild>
                           <Button variant="outline" size="sm" disabled={revokeLoading === client.id}>
-                            <Ban className="h-4 w-4" />
+                            {revokeLoading === client.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Ban className="h-4 w-4" />
+                            )}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -355,10 +370,21 @@ export function ClientCertList() {
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleRevoke(client.id)}>
+                            <AlertDialogCancel disabled={revokeLoading === client.id}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={(e) => {
+                                e.preventDefault()
+                                handleRevoke(client.id)
+                              }}
+                              disabled={revokeLoading === client.id}
+                            >
                               {revokeLoading === client.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Revoking...
+                                </>
                               ) : (
                                 'Revoke'
                               )}
