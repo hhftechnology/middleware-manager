@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // import "github.com/hhftechnology/middleware-manager/config"
@@ -502,6 +500,8 @@ func findMigrationsFile() string {
 	possiblePaths := []string{
 		"database/migrations.sql",
 		"migrations.sql",
+		"../database/migrations.sql",
+		"../../database/migrations.sql",
 		"/app/database/migrations.sql",
 		"/app/migrations.sql",
 	}
@@ -520,6 +520,8 @@ func findServiceMigrationsFile() string {
 	possiblePaths := []string{
 		"database/migrations_service.sql",
 		"migrations_service.sql",
+		"../database/migrations_service.sql",
+		"../../database/migrations_service.sql",
 		"/app/database/migrations_service.sql",
 		"/app/migrations_service.sql",
 	}

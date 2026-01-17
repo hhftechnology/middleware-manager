@@ -58,7 +58,7 @@ type middlewareWithPriority struct {
 type mtlsConfigData struct {
 	CACertPath      string
 	Rules           []interface{}
-	RequestHeaders  map[string]interface{}
+	RequestHeaders  map[string]string
 	RejectMessage   string
 	RejectCode      int
 	RefreshInterval string
@@ -538,7 +538,7 @@ func (cp *ConfigProxy) ensureResourceMTLSMiddleware(config *ProxiedTraefikConfig
 		pluginConfig["rules"] = append([]interface{}{}, mtlsCfg.Rules...)
 	}
 	if len(mtlsCfg.RequestHeaders) > 0 {
-		pluginConfig["requestHeaders"] = copyInterfaceMap(mtlsCfg.RequestHeaders)
+		pluginConfig["requestHeaders"] = mtlsCfg.RequestHeaders
 	}
 	if mtlsCfg.RejectMessage != "" || mtlsCfg.RejectCode > 0 {
 		code := mtlsCfg.RejectCode
@@ -568,7 +568,7 @@ func (cp *ConfigProxy) ensureResourceMTLSMiddleware(config *ProxiedTraefikConfig
 	}
 
 	if resource.MTLSRequestHdrs.Valid && strings.TrimSpace(resource.MTLSRequestHdrs.String) != "" {
-		var headers map[string]interface{}
+		var headers map[string]string
 		if err := json.Unmarshal([]byte(resource.MTLSRequestHdrs.String), &headers); err == nil {
 			pluginConfig["requestHeaders"] = headers
 		} else {
@@ -750,7 +750,7 @@ func (cp *ConfigProxy) loadGlobalMTLSConfig() (*mtlsConfigData, error) {
 	}
 
 	if middlewareRequestHeaders.Valid && middlewareRequestHeaders.String != "" {
-		var headers map[string]interface{}
+		var headers map[string]string
 		if err := json.Unmarshal([]byte(middlewareRequestHeaders.String), &headers); err == nil {
 			cfg.RequestHeaders = headers
 		}
@@ -849,17 +849,6 @@ func (cp *ConfigProxy) determineServiceProtocol(serviceType string, config map[s
 		}
 	}
 	return "http"
-}
-
-func copyInterfaceMap(src map[string]interface{}) map[string]interface{} {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]interface{}, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
 }
 
 // SetPangolinURL updates the Pangolin API URL
