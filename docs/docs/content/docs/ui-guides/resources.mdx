@@ -1,0 +1,33 @@
+---
+title: Resources & Routers
+description: Inspect routers, attach middlewares and services, and tune routing.
+---
+
+## List view
+
+- Displays resources discovered from the active data source.
+- Click a resource to open detail and router controls.
+
+## Resource detail
+
+Tabs and actions:
+
+- **HTTP config**: entrypoints, TLS domains (SANs), custom headers, router priority.
+- **TCP config**: entrypoints and SNI rules when TCP is enabled.
+- **mTLS toggle**: enable/disable per resource; uses `mtlswhitelist` middleware with optional per-resource overrides.
+- **Middlewares**: assign/remove; priority ordering is preserved (higher runs first).
+- **Service override**: assign/remove a custom service to replace the default backend.
+
+<Callout type="warning" title="Header changes affect backends">
+Custom request headers (e.g., `Host`) change what your upstream sees. Test carefully before applying to production routers.
+</Callout>
+
+## Tips
+
+- Use staging hosts to validate new middleware chains.
+- Router priority defaults to `100`; raise/lower to control matching precedence.
+- For TCP, ensure entrypoints and SNI rules align with your certificates.
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — resource detail with middlewares/service overrides.
+</div>

@@ -1,0 +1,73 @@
+---
+title: API Overview
+description: High-level API surface for operators and integrators.
+---
+
+Base path: `/api`
+
+<Callout type="info" title="Auth">
+If you expose the API, secure it at the network layer (reverse proxy, firewall, or VPN). No public auth is provided by default.
+</Callout>
+
+## Health
+
+- `GET /health` — liveness.
+
+## Middlewares
+
+- `GET /middlewares`
+- `POST /middlewares`
+- `GET /middlewares/:id`
+- `PUT /middlewares/:id`
+- `DELETE /middlewares/:id`
+
+## Services
+
+- `GET /services`
+- `POST /services`
+- `GET /services/:id`
+- `PUT /services/:id`
+- `DELETE /services/:id`
+
+## Resources
+
+- `GET /resources`
+- `GET /resources/:id`
+- `DELETE /resources/:id`
+- Assign/remove middlewares: `POST /resources/:id/middlewares`, `POST /resources/:id/middlewares/bulk`, `DELETE /resources/:id/middlewares/:middlewareId`
+- Assign/remove service: `GET/POST/DELETE /resources/:id/service`
+- Router config: `PUT /resources/:id/config/http|tls|tcp|headers|priority|mtls|mtlswhitelist`
+
+## Data source
+
+- `GET /datasource`, `GET /datasource/active`, `PUT /datasource/active`, `PUT /datasource/:name`, `POST /datasource/:name/test`
+
+## Plugins
+
+- `GET /plugins`, `GET /plugins/catalogue`, `GET /plugins/:name/usage`
+- Install/remove: `POST /plugins/install`, `DELETE /plugins/remove`
+- Static config path: `GET/PUT /plugins/configpath`
+
+## Traefik explorer
+
+- `GET /traefik/overview|version|entrypoints`
+- `GET /traefik/routers|services|middlewares` (type query: `http|tcp|udp|all`)
+- `GET /traefik/data`
+
+## mTLS
+
+- `GET /mtls/config`, `PUT /mtls/enable|disable`
+- CA: `POST /mtls/ca`, `DELETE /mtls/ca`
+- Certs: `GET/POST /mtls/clients`, `GET /mtls/clients/:id`, `GET /mtls/clients/:id/download`, `PUT /mtls/clients/:id/revoke`, `DELETE /mtls/clients/:id`
+- Plugin check/config: `GET /mtls/plugin/check`, `GET/PUT /mtls/middleware/config`
+
+## Config proxy (Traefik HTTP provider)
+
+- `GET /traefik-config`
+- `POST /traefik-config/invalidate`
+- `GET /traefik-config/status`
+- Same endpoints under `/api/v1/*` for Traefik compatibility.
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — API surface summary or Swagger link (if added).
+</div>

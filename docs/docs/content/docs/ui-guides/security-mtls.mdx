@@ -1,0 +1,37 @@
+---
+title: Security & mTLS
+description: Manage mTLS, CA/client certs, and the mtlswhitelist plugin.
+---
+
+## Global mTLS
+
+- Enable/disable globally via Security Hub; stores CA path and middleware defaults in DB.
+- Adds TLS option `mtls-verify` with `clientAuth` pointing to your CA.
+
+## Per-resource mTLS
+
+- Toggle **mTLS** on a resource to inject a per-resource `mtlswhitelist` middleware and set router `tls.options=mtls-verify`.
+- Optional per-resource overrides:
+  - Rules (allowlist)
+  - Request headers to inject
+  - Reject message/code
+  - Refresh interval
+  - External data payload
+
+## Certificates
+
+- Create CA, issue client certs, revoke/delete from the Security Hub.
+- Download P12 bundles per client.
+
+## Plugin requirement
+
+- The `mtlswhitelist` Traefik plugin must be installed (see Plugin Hub) and present in static config.
+- `TRAEFIK_STATIC_CONFIG_PATH` must be correct for plugin detection.
+
+<Callout type="warning" title="mTLS misconfiguration">
+Incorrect CA path or missing plugin will break router handshakes. Test on staging entrypoints before enabling on production hosts.
+</Callout>
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — Security Hub and per-resource mTLS toggle.
+</div>

@@ -1,0 +1,64 @@
+---
+title: Deploy with Pangolin
+description: Run Middleware Manager alongside Pangolin and Traefik.
+---
+
+Use this when Pangolin already manages Traefik and you want Middleware Manager to add middlewares, custom services, and plugin/mTLS control.
+
+## Container layout (summary)
+
+- `traefik`: uses static config from `/etc/traefik/traefik_config.yml`; watches dynamic rules from `/rules`.
+- `middleware-manager`: writes overrides to `/conf` (mounted to Traefik `/rules`) and stores state in `/data/middleware.db`.
+- `pangolin`: remains the primary source of router/service data when `ACTIVE_DATA_SOURCE=pangolin`.
+
+## Required volumes and env
+
+```yaml
+traefik:
+  volumes:
+    - ./config/traefik:/etc/traefik:ro
+    - ./config/traefik/rules:/rules
+    - ./config/traefik/logs:/var/log/traefik
+    - ./pangolin-data:/var/dynamic:ro
+middleware-manager:
+  volumes:
+    - ./data:/data
+    - ./config/middleware-manager:/app/config
+    - ./config/traefik/rules:/conf
+    - ./config/traefik:/etc/traefik
+  environment:
+    - ACTIVE_DATA_SOURCE=pangolin
+    - PANGOLIN_API_URL=http://pangolin:3001/api/v1
+    - TRAEFIK_STATIC_CONFIG_PATH=/etc/traefik/traefik_config.yml
+    - TRAEFIK_CONF_DIR=/conf
+    - DB_PATH=/data/middleware.db
+    - PORT=3456
+```
+
+<Callout type="warning" title="Static config path must match the mount">
+`TRAEFIK_STATIC_CONFIG_PATH` must point to the static file inside the Middleware Manager container (not the host). If the path is wrong, plugin install/removal will fail silently.
+</Callout>
+
+## Steps
+
+1) Prepare directories: `./config/traefik`, `./config/traefik/rules`, `./config/middleware-manager`, `./data`.  
+2) Ensure Traefik static config includes the HTTP provider pointing to Middleware Manager:
+   - `providers.http.endpoint=http://middleware-manager:3456/api/v1/traefik-config`
+   - `providers.file.directory=/rules` (shared with Middleware Manager `/conf`).  
+3) Start containers: `docker compose up -d`.  
+4) Open UI at `http://<host>:3456` and test the Pangolin data source in **Settings**.  
+5) Confirm routers/services appear in **Traefik Explorer**.
+
+## Health & ports
+
+- Middleware Manager: `:3456` (UI/API), `GET /health`.
+- Traefik dashboard: depends on your exposure; keep it restricted.
+
+## When to switch to Traefik data source
+
+- You want to override or inspect Traefik directly (not only Pangolin projections).
+- Use **Settings → Active Data Source** and set `TRAFFIC_API_URL` (via config) if needed.
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — Pangolin stack deployment diagram / docker-compose.
+</div>
