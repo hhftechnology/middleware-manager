@@ -1,0 +1,27 @@
+---
+title: Plugin Hub
+description: Install and manage Traefik plugins from the UI.
+---
+
+## How it works
+
+- Reads/writes `experimental.plugins` in Traefik static config at `TRAEFIK_STATIC_CONFIG_PATH`.
+- Requires Traefik restart to load/unload plugin code.
+
+## Workflow
+
+1) Ensure `TRAEFIK_STATIC_CONFIG_PATH` points to the mounted static config inside MM.  
+2) Browse catalogue or list existing plugins.  
+3) **Install**: writes the plugin entry; restart Traefik.  
+4) Create a middleware of type `plugin` using the same key.  
+5) Assign the middleware to resources.
+
+<Callout type="warning" title="Restart Traefik after install/remove">
+Static config changes do not take effect until Traefik restarts.
+</Callout>
+
+## Troubleshooting
+
+- Wrong static config path → install appears to “succeed” but Traefik won’t load the plugin.
+- Plugin key mismatch → middleware fails to resolve.
+- Check Traefik logs for plugin load errors.

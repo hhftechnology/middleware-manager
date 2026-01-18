@@ -1,0 +1,37 @@
+---
+title: Middleware Manager
+description: End-to-end guide for deploying, configuring, and operating the Traefik/Pangolin Middleware Manager.
+---
+
+# Overview
+
+Middleware Manager lets you attach Traefik middlewares, manage custom services, tune routers, and control plugins/mTLS from a single UI. It works with Pangolin or directly with Traefik as the data source and generates Traefik dynamic config (e.g., `resource-overrides.yml`) automatically.
+
+<Callout type="info" title="Who this is for">
+- Operators deploying with Pangolin or standalone Traefik
+- Platform/SRE teams managing routers, services, plugins, and mTLS
+- Contributors extending the Go API or React/Vite UI
+</Callout>
+
+## What you can do
+
+- Discover resources from Pangolin or Traefik and override routers/services safely
+- Create and assign Traefik middlewares with priorities and templates
+- Define custom services (load balancer, weighted, mirroring, failover)
+- Install/manage plugins (writes to Traefik static config) and restart Traefik as needed
+- Enable mTLS via the `mtlswhitelist` plugin with per-resource rules
+- Inspect Traefik routers/services/middlewares via the built-in explorer
+
+## Navigation
+
+<Cards>
+  <Card title="Onboarding" href="/docs/getting-started/onboarding" />
+  <Card title="Deploy" href="/docs/getting-started/deploy-pangolin" />
+  <Card title="Configuration" href="/docs/configuration/config-overview" />
+  <Card title="UI Guides" href="/docs/ui-guides/dashboard" />
+  <Card title="Security" href="/docs/security/risks" />
+  <Card title="Operations" href="/docs/operations/runbook" />
+  <Card title="API Overview" href="/docs/api/overview" />
+  <Card title="Reverting" href="/docs/reverting/revert-traefik" />
+  <Card title="Development" href="/docs/development/dev-guide" />
+</Cards>

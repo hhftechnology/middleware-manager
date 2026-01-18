@@ -1,0 +1,38 @@
+---
+title: Configuration Overview
+description: How Middleware Manager stores settings and where dynamic config is written.
+---
+
+## Storage and paths
+
+- **Database**: SQLite at `DB_PATH` (default `/data/middleware.db`). Persist this volume.
+- **Dynamic rules**: Written to `TRAEFIK_CONF_DIR` (default `/conf`), mounted into Traefik `/rules`.
+- **Static config**: Read from `TRAEFIK_STATIC_CONFIG_PATH` (inside the MM container) for plugin install/remove and mTLS plugin checks.
+- **Templates**: Optional `templates.yaml` and `templates_services.yaml` under `/app/config`.
+
+<Callout type="warning" title="Protect the static config">
+Middleware Manager edits plugin entries inside your Traefik static config. Keep backups and version control for `/etc/traefik/traefik.yml` (or equivalent).
+</Callout>
+
+## What MM manages vs. what it reads
+
+- **Reads**: routers/services/middlewares from the active data source (Pangolin or Traefik API).
+- **Writes**: Traefik file-provider overrides (middlewares, router attachments, custom services, mTLS plugin middlewares).
+- **Static edits**: Adds/removes `experimental.plugins.*` blocks when installing/removing plugins.
+
+## Key flows
+
+<Tabs items={['Middlewares', 'Services', 'mTLS', 'Plugins']}>
+  <Tab value="Middlewares">
+    Stored in DB → emitted into `/conf` only when assigned to a resource. Priorities are preserved.
+  </Tab>
+  <Tab value="Services">
+    Custom services stored in DB; emitted into HTTP/TCP sections based on server addresses.
+  </Tab>
+  <Tab value="mTLS">
+    Uses the `mtlswhitelist` plugin middleware; per-resource overrides are merged; TLS options `mtls-verify` added when mTLS is enabled.
+  </Tab>
+  <Tab value="Plugins">
+    Static config gets `experimental.plugins.<key>` entries. Traefik restart is required to load/unload code.
+  </Tab>
+</Tabs>

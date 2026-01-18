@@ -1,0 +1,81 @@
+---
+title: Reverting Traefik Provider
+description: What happens if you point Traefik back to Pangolin and how to preserve logging/plugins.
+---
+
+<Callout type="warning" title="Provider change resets overrides">
+If you change Traefik’s HTTP provider endpoint from Middleware Manager back to Pangolin, MM overrides stop applying. Custom access log or plugin entries may be lost if you overwrite the static config.
+</Callout>
+
+## Impact
+
+- Routers/services/middlewares emitted by MM via the file provider will no longer be served.
+- Plugin entries in static config remain only if you keep them; reverting with an older Pangolin config can remove them.
+- Access log settings can be overwritten by older Pangolin-provided configs.
+
+## Preserve logging and plugins
+
+If you must revert, merge and keep your logging and plugin blocks. Example (retain or reapply after revert):
+
+```yaml
+accessLog:
+  bufferingSize: 100
+  fields:
+    defaultMode: drop
+    headers:
+      defaultMode: drop
+      names:
+        Authorization: redact
+        Content-Type: keep
+        Cookie: redact
+        User-Agent: keep
+        X-Forwarded-For: keep
+        X-Forwarded-Proto: keep
+        X-Real-Ip: keep
+    names:
+      ClientAddr: keep
+      ClientHost: keep
+      DownstreamContentSize: keep
+      DownstreamStatus: keep
+      Duration: keep
+      RequestMethod: keep
+      RequestPath: keep
+      RequestProtocol: keep
+      RetryAttempts: keep
+      ServiceName: keep
+      StartUTC: keep
+      TLSCipher: keep
+      TLSVersion: keep
+  filePath: /var/log/traefik/access.log
+  filters:
+    minDuration: 100ms
+    retryAttempts: true
+    statusCodes:
+      - 200-299
+      - 400-499
+      - 500-599
+  format: json
+experimental:
+  plugins:
+    badger:
+      moduleName: github.com/fosrl/badger
+      version: v1.2.0
+    crowdsec:
+      moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      version: v1.4.4
+    mtlswhitelist:
+      moduleName: github.com/smerschjohann/mtlswhitelist
+      version: v0.3.0
+```
+
+## Steps to revert safely
+
+1) Back up current Traefik static config and MM DB.  
+2) Point Traefik HTTP provider to Pangolin endpoint.  
+3) Re-merge the logging and plugin sections you want to keep (as above).  
+4) Restart Traefik.  
+5) If returning to MM later, restore the HTTP provider endpoint to MM and invalidate cache (`/api/traefik-config/invalidate`).
+
+<Callout type="info" title="Best practice">
+Keep static config under version control so you can reapply critical blocks (logging, plugins, entrypoints) when switching providers.
+</Callout>

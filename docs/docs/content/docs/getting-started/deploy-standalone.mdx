@@ -1,0 +1,51 @@
+---
+title: Deploy with Traefik (Standalone)
+description: Run Middleware Manager directly against Traefik without Pangolin.
+---
+
+Use this when Traefik is your only provider and you want Middleware Manager to own dynamic config and plugins/mTLS.
+
+## Container layout (summary)
+
+- `traefik`: exposes API/dashboard (secure appropriately), watches `/rules` for dynamic config, static config at `/etc/traefik/traefik.yml`.
+- `middleware-manager`: writes overrides to `/conf` (mounted to Traefik `/rules`) and stores state in `/data/middleware.db`.
+
+## Required volumes and env
+
+```yaml
+traefik:
+  volumes:
+    - ./traefik_config/static:/etc/traefik
+    - ./traefik_config/rules:/rules
+    - ./traefik_config/letsencrypt:/letsencrypt
+    - ./traefik_config/plugins:/plugins-storage
+middleware-manager:
+  volumes:
+    - ./middleware_manager_data:/data
+    - ./traefik_config/rules:/conf
+    - ./traefik_config/static:/etc/traefik
+    - ./middleware_manager_config:/app/config
+  environment:
+    - ACTIVE_DATA_SOURCE=traefik
+    - TRAEFIK_API_URL=http://traefik:8080
+    - TRAEFIK_CONF_DIR=/conf
+    - TRAEFIK_STATIC_CONFIG_PATH=/etc/traefik/traefik.yml
+    - DB_PATH=/data/middleware.db
+    - PORT=3456
+```
+
+## Steps
+
+1) Prepare directories: `./traefik_config/static`, `./traefik_config/rules`, `./traefik_config/letsencrypt`, `./traefik_config/plugins`, `./middleware_manager_data`, `./middleware_manager_config`.  
+2) Ensure Traefik static config includes:
+   - `providers.file.directory=/rules`
+   - `providers.http.endpoint=http://middleware-manager:3456/api/v1/traefik-config` (optional if you want HTTP provider driven by MM)  
+   - `api` and `accessLog` as you require.  
+3) Start containers: `docker compose up -d`.  
+4) Open UI at `http://<host>:3456` and set **Active Data Source → Traefik**.  
+5) Validate with **Traefik Explorer** (routers/services/middlewares) and a test middleware assignment.
+
+## Port/health
+
+- Middleware Manager: `:3456` (UI/API), `GET /health`.
+- Traefik dashboard/API: typically `:8080`; keep access restricted.

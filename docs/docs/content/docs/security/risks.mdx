@@ -1,0 +1,35 @@
+---
+title: Security & Misconfiguration Risks
+description: Critical cautions when modifying middlewares, services, and Traefik config.
+---
+
+<Callout type="warning" title="Live traffic impact">
+Middleware, router, and service changes affect production paths immediately. Use staging hosts and change windows.
+</Callout>
+
+## Common risks
+
+- **ForwardAuth / BasicAuth**: incorrect endpoints or secrets can lock out users.
+- **Headers**: overwriting `Host` or removing security headers can break origin checks or weaken protections.
+- **RateLimit**: too-low thresholds can DOS your own services; too-high can leave you unprotected.
+- **Redirects/Rewrites**: regex errors can create open redirects or bypass auth chains.
+- **Priority changes**: raising priority can route traffic to unintended routers.
+- **Custom services**: mis-typed backends or protocol mismatch (HTTP vs TCP) lead to outages.
+
+## Plugin-specific risks
+
+- Installing untrusted plugins can execute arbitrary code in Traefik.
+- Static config path mistakes mean plugins are “installed” in UI but not loaded, leading to false confidence.
+- Always restart Traefik after plugin changes and monitor logs.
+
+## mTLS risks
+
+- Wrong CA path or missing `mtlswhitelist` plugin breaks TLS handshakes.
+- Over-broad rules or disabled verification can expose internal services.
+
+## Recommended controls
+
+- Version-control Traefik static config and keep backups.
+- Use staged entrypoints/hosts to validate middleware chains before production.
+- Monitor Traefik access/error logs and health after each change.
+- Limit dashboard/API exposure; prefer network-level ACLs.

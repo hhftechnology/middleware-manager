@@ -1,0 +1,50 @@
+---
+title: Templates
+description: Optional middleware and service templates for faster creation.
+---
+
+Place template files in the mounted config directory (default `/app/config`).
+
+## Middleware templates
+
+- File: `templates.yaml`
+- Referenced in the UI when creating a middleware.
+- Useful for common security headers, rate limits, or forward-auth presets.
+
+Example shape:
+
+```yaml
+- name: security-headers
+  type: headers
+  config:
+    headers:
+      customResponseHeaders:
+        X-Frame-Options: DENY
+        X-Content-Type-Options: nosniff
+- name: ratelimit-basic
+  type: ratelimit
+  config:
+    rateLimit:
+      average: 100
+      burst: 50
+```
+
+## Service templates
+
+- File: `templates_services.yaml`
+- Provides presets for load balancers, weighted splits, mirroring, or failover.
+
+Example shape:
+
+```yaml
+- name: lb-default
+  type: loadBalancer
+  config:
+    servers:
+      - url: http://backend:8080
+    passHostHeader: true
+```
+
+<Callout type="info" title="Templates are optional">
+If these files are absent, the UI still works; templates just speed up form filling.
+</Callout>

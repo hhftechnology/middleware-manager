@@ -1,0 +1,82 @@
+---
+title: Development Guide
+description: Project layout, dev commands, and where features live.
+---
+
+## Stack
+
+- Backend: Go (Gin) in `api/`, services in `services/`, DB access in `database/`.
+- Frontend: React + Vite + TanStack Query + Zustand in `ui/`.
+- Docs: Fumadocs (Next.js) in `docs/docs`.
+
+## Commands
+
+```bash
+# Backend
+go run main.go
+# Frontend
+cd ui && npm install && npm run dev
+# Docs
+cd docs/docs && npm install && npm run dev
+```
+
+## API highlights
+
+- Routes defined in `api/server.go`.
+- Handlers under `api/handlers/` (middlewares, services, resources, plugins, mtls, traefik).
+- Config merge logic in `services/config_proxy.go`.
+- Data source management in `services/config_manager.go`.
+
+## UI highlights
+
+- State: `ui/src/stores/*`
+- API client: `ui/src/services/api.ts`
+- Feature pages: `ui/src/components/*`
+- Theme & layout: `ui/src/components/common`, `ui/src/components/ui`
+
+## Repo layout (condensed)
+
+import { File, Folder, Files } from 'fumadocs-ui/components/files';
+
+<Files>
+  <Folder name="api">
+    <File name="server.go" />
+    <Folder name="handlers">
+      <File name="middleware.go" />
+      <File name="service.go" />
+      <File name="plugin_handler.go" />
+      <File name="mtls.go" />
+    </Folder>
+  </Folder>
+  <Folder name="services">
+    <File name="config_manager.go" />
+    <File name="config_proxy.go" />
+  </Folder>
+  <Folder name="ui">
+    <Folder name="src">
+      <File name="App.tsx" />
+      <File name="services/api.ts" />
+      <File name="stores/appStore.ts" />
+      <Folder name="components">
+        <File name="dashboard" />
+        <File name="resources" />
+        <File name="middlewares" />
+        <File name="services" />
+        <File name="plugins" />
+        <File name="security" />
+      </Folder>
+    </Folder>
+  </Folder>
+  <Folder name="docs">
+    <Folder name="docs">
+      <File name="content/docs" />
+      <File name="source.config.ts" />
+    </Folder>
+  </Folder>
+</Files>
+
+## Contributions
+
+- Follow Go fmt/linters; keep handlers thin and service logic in `services/`.
+- Frontend: favor TanStack Query for data, Zustand for UI state; keep API types in `ui/src/types`.
+- Add docs in this Fumadocs site for new features to keep operators aligned.

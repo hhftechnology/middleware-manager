@@ -1,0 +1,26 @@
+---
+title: Middlewares
+description: Create, update, and assign Traefik middlewares with priorities.
+---
+
+## Create / edit
+
+- Choose a **type** (e.g., `headers`, `forwardAuth`, `rateLimit`, `redirectRegex`, `plugin`).
+- Provide JSON config; templates appear if `templates.yaml` is present.
+- Saving stores the middleware in the database; it is emitted to Traefik only when assigned to a resource.
+
+## Assign to resources
+
+- From a resource detail page, add middlewares and set **priority** (higher number runs first).
+- Bulk assignment is supported via the multi-add flow.
+
+## Plugin middlewares
+
+- Use type `plugin` and set the plugin key matching `experimental.plugins.<key>` in Traefik static config.
+- Ensure the plugin is installed via **Plugin Hub** and Traefik restarted.
+
+## Recommendations
+
+- Keep middleware names descriptive (`auth-forward-prod`, `headers-hsts-strict`).
+- Use priorities to ensure auth/logging runs before rewrites or header injection.
+- Validate via **Traefik Explorer → Middlewares** to confirm they appear under the file provider.

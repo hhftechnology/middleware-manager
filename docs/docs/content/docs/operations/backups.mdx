@@ -1,0 +1,22 @@
+---
+title: Backups & Persistence
+description: What to back up and how to restore safely.
+---
+
+## What to back up
+
+- **SQLite DB**: `DB_PATH` (default `/data/middleware.db`) — contains middlewares, services, assignments, mTLS state.
+- **Traefik static config**: `/etc/traefik/traefik*.yml` — plugins, entrypoints, logging, providers.
+- **Dynamic rules directory**: `/conf` (mounted to Traefik `/rules`) — regenerated, but useful for drift inspection.
+- **Templates**: `/app/config/templates.yaml`, `/app/config/templates_services.yaml`.
+
+## Backup cadence
+
+- DB: before major changes; daily for active environments.
+- Static config: any time plugins/entrypoints/logging change; keep under version control.
+
+## Restore guidance
+
+- Stop Middleware Manager before restoring the DB to avoid concurrent writes.
+- After restoring static config, restart Traefik to apply plugins/entrypoints/logging.
+- Invalidate cache (`/api/traefik-config/invalidate`) so regenerated rules match DB state.

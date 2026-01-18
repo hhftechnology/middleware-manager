@@ -1,0 +1,47 @@
+---
+title: Data Sources
+description: Switching between Pangolin and Traefik and how connectivity is validated.
+---
+
+Middleware Manager can pull routers/services from Pangolin or directly from Traefik.
+
+## Active data source
+
+- Set via **Settings → Active Data Source** or `config.json` (`active_data_source`).
+- Pangolin uses `/api/v1/traefik-config`; Traefik uses `/api/version` checks.
+
+## Config file (mounted)
+
+`/app/config/config.json` example:
+
+```json
+{
+  "active_data_source": "traefik",
+  "data_sources": {
+    "pangolin": {
+      "type": "pangolin",
+      "url": "http://pangolin:3001/api/v1",
+      "basic_auth": { "username": "", "password": "" }
+    },
+    "traefik": {
+      "type": "traefik",
+      "url": "http://traefik:8080",
+      "basic_auth": { "username": "", "password": "" }
+    }
+  }
+}
+```
+
+## Connection testing
+
+- Uses a 5s timeout. Pangolin probe: `/status`. Traefik probe: `/api/version`.
+- Basic auth is supported if provided.
+
+## When to switch
+
+- **Pangolin → Traefik**: when you need direct Traefik state or Pangolin is unavailable.
+- **Traefik → Pangolin**: when Pangolin is authoritative and should own router/service definitions.
+
+<Callout type="warning" title="HTTP provider endpoint changes">
+If you change Traefik’s HTTP provider back to Pangolin, Middleware Manager overrides may stop applying until the provider points to MM again. See the Reverting guide.
+</Callout>

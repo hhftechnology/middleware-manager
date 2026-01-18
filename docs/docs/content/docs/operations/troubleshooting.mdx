@@ -1,0 +1,36 @@
+---
+title: Troubleshooting
+description: Common failures and how to resolve them.
+---
+
+## Plugins not taking effect
+
+- Verify `TRAEFIK_STATIC_CONFIG_PATH` inside MM points to the mounted static file.
+- Ensure Traefik was restarted after install/remove.
+- Check Traefik logs for plugin load errors; confirm plugin key matches middleware config.
+
+## Middlewares missing in Traefik
+
+- Confirm the middleware is **assigned** to at least one resource.
+- Check **Traefik Explorer → Middlewares** for provider `@file`.
+- Ensure cache was refreshed (`/api/traefik-config/invalidate`) and wait for regenerate interval.
+
+## Service override not used
+
+- Router must point to the custom service name; reassign if necessary.
+- For TCP/UDP, ensure servers use `address` (not `url`) and correct port/protocol.
+
+## mTLS failures
+
+- Confirm `mtlswhitelist` plugin exists in static config and Traefik was restarted.
+- Check CA path and per-resource overrides (rules/headers) for JSON errors.
+- Look at Traefik TLS handshake errors in logs.
+
+## Data source errors
+
+- Test connection in Settings; verify URLs and basic auth.
+- If Traefik API is behind auth/proxy, ensure credentials are set in `config.json`.
+
+## HTTP provider conflicts
+
+- If Traefik `providers.http.endpoint` no longer points to Middleware Manager, overrides will not apply. Restore the endpoint and invalidate cache.

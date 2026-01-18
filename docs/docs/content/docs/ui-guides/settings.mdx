@@ -1,0 +1,20 @@
+---
+title: Settings & Theme
+description: Active data source, connectivity tests, and dark mode.
+---
+
+## Data source
+
+- Select **Pangolin** or **Traefik**.
+- Test connection (5s timeout). Errors surface in the UI as API errors.
+
+## Theme & UI
+
+- Toggle **Dark mode**; persisted in local storage (`middleware-manager-app` store).
+- Sidebar collapse state is also persisted.
+
+## When to retest
+
+- After Traefik endpoint changes
+- After rotating Pangolin credentials
+- After network topology changes (e.g., new VPN/bridge)

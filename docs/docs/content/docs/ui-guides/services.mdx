@@ -1,0 +1,27 @@
+---
+title: Services
+description: Define custom Traefik services and override resource backends.
+---
+
+## Service types
+
+- **loadBalancer**: HTTP/TCP/UDP backends with optional health checks, sticky sessions, and passHostHeader.
+- **weighted**: distribute across named services with weights.
+- **mirroring**: mirror a percentage of traffic to secondary services.
+- **failover**: primary/fallback pair with health checks.
+
+## Create / edit
+
+- Provide JSON config; templates appear if `templates_services.yaml` exists.
+- For TCP/UDP, use `address` instead of `url`.
+
+## Assign to a resource
+
+- Open a resource → **Service override** → pick a custom service.
+- Removes the default backend for that router; ensure the custom service references valid targets.
+
+## Validation tips
+
+- Use health checks where possible.
+- For weighted/mirroring, ensure referenced services exist (names must include provider suffix when required, e.g., `service-id@file`).
+- Confirm in **Traefik Explorer → Services** that the service appears under the file provider and is healthy.

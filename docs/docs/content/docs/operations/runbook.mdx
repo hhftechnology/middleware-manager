@@ -1,0 +1,31 @@
+---
+title: Operations Runbook
+description: Day-2 actions for Middleware Manager and Traefik.
+---
+
+## Health checks
+
+- Middleware Manager: `GET /health`
+- Data source tests: **Settings → Test Connection**
+
+## Cache & config refresh
+
+- Invalidate Traefik config cache: `POST /api/traefik-config/invalidate` (or `/api/v1/traefik-config/invalidate`).
+- Dynamic config regenerates every `GENERATE_INTERVAL_SECONDS` (default 10s).
+
+## Logs
+
+- Middleware Manager: container stdout/stderr; set `DEBUG=true` for verbose Gin logs.
+- Traefik: see static config; common path `/var/log/traefik/traefik.log` and access log `/var/log/traefik/access.log`.
+
+## Safe change workflow
+
+1) Stage: create/assign middleware or service to a staging host.  
+2) Validate: check **Traefik Explorer** for `@file` objects; tail Traefik access/error logs.  
+3) Promote: apply to production hosts with planned priority ordering.  
+4) Monitor: latency/error rates; Traefik 4xx/5xx; backend health checks.
+
+## Back-pressure controls
+
+- Rate limits and circuit-breaking via middlewares/services (where applicable).
+- Set timeouts on Traefik entrypoints if using long-lived TCP streams.
