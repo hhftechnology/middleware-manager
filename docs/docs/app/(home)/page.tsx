@@ -59,6 +59,18 @@ export default function HomePage() {
                 >
                   Browse Docs
                 </Link>
+                <Link
+                  href="https://github.com/hhftechnology/middleware-manager"
+                  className="px-4 py-2.5 rounded-full border border-white/15 text-white/80 hover:border-white/40 hover:text-white transition"
+                >
+                  GitHub
+                </Link>
+                <Link
+                  href="https://discord.gg/PEGcTJPfJ2"
+                  className="px-4 py-2.5 rounded-full border border-white/15 text-white/80 hover:border-white/40 hover:text-white transition"
+                >
+                  Discord
+                </Link>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-sm text-white/60">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
