@@ -2,12 +2,15 @@
 export interface Plugin {
   // Basic info
   name: string
+  displayName?: string
   moduleName: string
   version: string
   type: string
   description?: string
+  summary?: string
   author?: string
   homepage?: string
+  iconUrl?: string
 
   // Status from Traefik
   status: 'enabled' | 'disabled' | 'error' | 'not_loaded' | 'configured'
@@ -17,6 +20,7 @@ export interface Plugin {
   // Installation info
   isInstalled: boolean
   installedVersion?: string
+  installSource?: 'catalogue' | 'config'
 
   // Usage info
   usageCount: number

@@ -82,6 +82,13 @@ export function PluginHub() {
     fetchConfigPath()
   }, [fetchPlugins, fetchConfigPath])
 
+  // Fetch catalogue in the background so installed cards have metadata
+  useEffect(() => {
+    if (cataloguePlugins.length === 0 && !loadingCatalogue) {
+      fetchCatalogue()
+    }
+  }, [cataloguePlugins.length, loadingCatalogue, fetchCatalogue])
+
   useEffect(() => {
     setNewConfigPath(configPath)
   }, [configPath])
