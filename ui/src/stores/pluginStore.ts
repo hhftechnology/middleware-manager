@@ -5,11 +5,10 @@ import type { Plugin, PluginUsage, CataloguePlugin } from '@/types'
 function derivePluginKey(input?: string): string {
   if (!input) return ''
   const parts = input.split('/')
-  let key = parts[parts.length - 1] ?? ''
-  if (!key && input) {
-    key = input
-  }
-  key = key.split('@')[0]
+  const lastPart = parts[parts.length - 1] ?? ''
+  let key = lastPart || input || ''
+  const splitKey = key.split('@')
+  key = splitKey[0] ?? key
   key = key.replace(/\.git$/, '')
   key = key.replace(/-plugin$/, '')
   return key.toLowerCase()
