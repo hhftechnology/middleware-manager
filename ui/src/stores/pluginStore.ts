@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { pluginApi } from '@/services/api'
 import type { Plugin, PluginUsage, CataloguePlugin } from '@/types'
 
-function derivePluginKey(input?: string) {
+function derivePluginKey(input?: string): string {
   if (!input) return ''
   const parts = input.split('/')
   let key = parts[parts.length - 1] || input
@@ -12,7 +12,7 @@ function derivePluginKey(input?: string) {
   return key.toLowerCase()
 }
 
-function enrichPluginsWithCatalogue(plugins: Plugin[], cataloguePlugins: CataloguePlugin[]) {
+function enrichPluginsWithCatalogue(plugins: Plugin[], cataloguePlugins: CataloguePlugin[]): Plugin[] {
   const catalogueMap = new Map<string, CataloguePlugin>()
   cataloguePlugins.forEach((cp) => {
     const key = derivePluginKey(cp.import) || derivePluginKey(cp.name) || cp.id
@@ -32,16 +32,23 @@ function enrichPluginsWithCatalogue(plugins: Plugin[], cataloguePlugins: Catalog
       .map((key) => (key ? catalogueMap.get(key) : undefined))
       .find(Boolean)
 
-    return {
+    const version =
+      plugin.version ||
+      matchedCatalogue?.latestVersion ||
+      plugin.installedVersion ||
+      ''
+
+    const enriched: Plugin = {
       ...plugin,
       displayName: plugin.displayName || matchedCatalogue?.displayName || matchedCatalogue?.name,
       description: plugin.description || matchedCatalogue?.summary,
       summary: plugin.summary || matchedCatalogue?.summary,
       author: plugin.author || matchedCatalogue?.author,
-      version: plugin.version || matchedCatalogue?.latestVersion,
+      version,
       iconUrl: plugin.iconUrl || matchedCatalogue?.iconUrl,
       installSource: plugin.installSource ?? 'config',
     }
+    return enriched
   })
 }
 
