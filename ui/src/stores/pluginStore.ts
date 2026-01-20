@@ -2,6 +2,58 @@ import { create } from 'zustand'
 import { pluginApi } from '@/services/api'
 import type { Plugin, PluginUsage, CataloguePlugin } from '@/types'
 
+function derivePluginKey(input?: string): string {
+  if (!input) return ''
+  const parts = input.split('/')
+  const lastPart = parts[parts.length - 1] ?? ''
+  let key = lastPart || input || ''
+  const splitKey = key.split('@')
+  key = splitKey[0] ?? key
+  key = key.replace(/\.git$/, '')
+  key = key.replace(/-plugin$/, '')
+  return key.toLowerCase()
+}
+
+function enrichPluginsWithCatalogue(plugins: Plugin[], cataloguePlugins: CataloguePlugin[]): Plugin[] {
+  const catalogueMap = new Map<string, CataloguePlugin>()
+  cataloguePlugins.forEach((cp) => {
+    const key = derivePluginKey(cp.import) || derivePluginKey(cp.name) || cp.id
+    if (key) {
+      catalogueMap.set(key, cp)
+    }
+  })
+
+  return plugins.map((plugin) => {
+    const keyCandidates = [
+      derivePluginKey(plugin.moduleName),
+      derivePluginKey(plugin.name),
+      derivePluginKey(plugin.displayName),
+    ].filter(Boolean)
+
+    const matchedCatalogue = keyCandidates
+      .map((key) => (key ? catalogueMap.get(key) : undefined))
+      .find(Boolean)
+
+    const version =
+      plugin.version ||
+      matchedCatalogue?.latestVersion ||
+      plugin.installedVersion ||
+      ''
+
+    const enriched: Plugin = {
+      ...plugin,
+      displayName: plugin.displayName || matchedCatalogue?.displayName || matchedCatalogue?.name,
+      description: plugin.description || matchedCatalogue?.summary,
+      summary: plugin.summary || matchedCatalogue?.summary,
+      author: plugin.author || matchedCatalogue?.author,
+      version,
+      iconUrl: plugin.iconUrl || matchedCatalogue?.iconUrl,
+      installSource: plugin.installSource ?? 'config',
+    }
+    return enriched
+  })
+}
+
 interface PluginState {
   // Data
   plugins: Plugin[]
@@ -57,7 +109,9 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const plugins = await pluginApi.getAll()
-      set({ plugins, loading: false })
+      const cataloguePlugins = get().cataloguePlugins
+      const enrichedPlugins = enrichPluginsWithCatalogue(plugins, cataloguePlugins)
+      set({ plugins: enrichedPlugins, loading: false })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load plugins from Traefik API',
@@ -71,7 +125,14 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     set({ loadingCatalogue: true, error: null })
     try {
       const cataloguePlugins = await pluginApi.getCatalogue()
-      set({ cataloguePlugins: Array.isArray(cataloguePlugins) ? cataloguePlugins : [], loadingCatalogue: false })
+      set((state) => {
+        const safeCatalogue = Array.isArray(cataloguePlugins) ? cataloguePlugins : []
+        return {
+          cataloguePlugins: safeCatalogue,
+          plugins: enrichPluginsWithCatalogue(state.plugins, safeCatalogue),
+          loadingCatalogue: false,
+        }
+      })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load plugin catalogue from plugins.traefik.io',
@@ -109,10 +170,38 @@ export const usePluginStore = create<PluginState>((set, get) => ({
 
       // Update local state to mark plugin as installed
       set((state) => ({
-        plugins: state.plugins.map((p) =>
-          p.moduleName === moduleName || p.name === response.pluginKey
-            ? { ...p, isInstalled: true, installedVersion: version, status: 'configured' as const }
-            : p
+        plugins: enrichPluginsWithCatalogue(
+          state.plugins.some((p) => p.moduleName === moduleName || p.name === response.pluginKey)
+            ? state.plugins.map((p) =>
+                p.moduleName === moduleName || p.name === response.pluginKey
+                  ? {
+                      ...p,
+                      isInstalled: true,
+                      installedVersion: version,
+                      status: 'configured' as const,
+                      installSource: 'catalogue',
+                    }
+                  : p
+              )
+            : [
+                ...state.plugins,
+                {
+                  name: response.pluginKey || moduleName,
+                  moduleName: response.moduleName || moduleName,
+                  version: response.version || version || '',
+                  type: 'middleware',
+                  description: '',
+                  summary: '',
+                  author: '',
+                  homepage: '',
+                  status: 'configured',
+                  isInstalled: true,
+                  installedVersion: version,
+                  usageCount: 0,
+                  installSource: 'catalogue',
+                },
+              ],
+          state.cataloguePlugins
         ),
         installing: false,
         // Show restart warning after successful installation

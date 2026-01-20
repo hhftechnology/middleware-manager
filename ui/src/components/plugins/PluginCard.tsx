@@ -23,7 +23,12 @@ interface PluginCardProps {
 }
 
 // Get status badge variant and icon
-function getStatusBadge(status: Plugin['status'], isInstalled?: boolean, usageCount?: number) {
+function getStatusBadge(
+  status: Plugin['status'],
+  isInstalled?: boolean,
+  usageCount?: number,
+  installSource?: Plugin['installSource']
+) {
   switch (status) {
     case 'enabled':
       // If enabled and installed via local config, show as "User" (manually installed and active)
@@ -64,10 +69,17 @@ function getStatusBadge(status: Plugin['status'], isInstalled?: boolean, usageCo
       }
       // Plugin is in local config but not yet loaded by Traefik - requires restart
       if (isInstalled) {
+        if (installSource === 'catalogue') {
+          return {
+            variant: 'warning' as const,
+            icon: <Activity className="h-3 w-3" />,
+            label: 'User (Restart Required)',
+          }
+        }
         return {
-          variant: 'warning' as const,
+          variant: 'outline' as const,
           icon: <Activity className="h-3 w-3" />,
-          label: 'User (Restart Required)',
+          label: 'Not Loaded',
         }
       }
       return {
@@ -93,7 +105,14 @@ export function PluginCard({
   removing,
 }: PluginCardProps) {
   const isLoading = installing || removing
-  const statusBadge = getStatusBadge(plugin.status, plugin.isInstalled, plugin.usageCount)
+  const statusBadge = getStatusBadge(
+    plugin.status,
+    plugin.isInstalled,
+    plugin.usageCount,
+    plugin.installSource
+  )
+  const pluginTitle = plugin.displayName || plugin.name
+  const pluginDescription = plugin.description || plugin.summary
 
   return (
     <Card
@@ -103,7 +122,7 @@ export function PluginCard({
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg truncate">{plugin.name}</CardTitle>
+            <CardTitle className="text-lg truncate">{pluginTitle}</CardTitle>
             <CardDescription className="mt-1 truncate">
               {plugin.moduleName}
             </CardDescription>
@@ -123,7 +142,7 @@ export function PluginCard({
       </CardHeader>
       <CardContent className="flex-1">
         <p className="text-sm text-muted-foreground line-clamp-2">
-          {plugin.description || 'No description available'}
+          {pluginDescription || 'No description available'}
         </p>
         {plugin.author && (
           <p className="text-xs text-muted-foreground mt-2">
