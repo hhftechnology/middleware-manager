@@ -2,7 +2,6 @@ export type MiddlewareType =
   | 'basicAuth'
   | 'digestAuth'
   | 'forwardAuth'
-  | 'ipWhiteList'
   | 'ipAllowList'
   | 'rateLimit'
   | 'headers'
@@ -58,7 +57,6 @@ export const MIDDLEWARE_TYPE_LABELS: Record<MiddlewareType, string> = {
   basicAuth: 'Basic Auth',
   digestAuth: 'Digest Auth',
   forwardAuth: 'Forward Auth',
-  ipWhiteList: 'IP Whitelist',
   ipAllowList: 'IP Allowlist',
   rateLimit: 'Rate Limit',
   headers: 'Headers',

@@ -460,6 +460,40 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		}
 	}
 
+	// Check for tls_hardening_enabled column in resources table
+	var hasTLSHardeningColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'tls_hardening_enabled'
+	`).Scan(&hasTLSHardeningColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if tls_hardening_enabled column exists: %w", err)
+	}
+	if !hasTLSHardeningColumn {
+		log.Println("Adding tls_hardening_enabled column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN tls_hardening_enabled INTEGER DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add tls_hardening_enabled column: %w", err)
+		}
+	}
+
+	// Check for secure_headers_enabled column in resources table
+	var hasSecureHeadersColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'secure_headers_enabled'
+	`).Scan(&hasSecureHeadersColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if secure_headers_enabled column exists: %w", err)
+	}
+	if !hasSecureHeadersColumn {
+		log.Println("Adding secure_headers_enabled column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN secure_headers_enabled INTEGER DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add secure_headers_enabled column: %w", err)
+		}
+	}
+
 	// Check for middleware config columns in mtls_config table
 	var hasMTLSMiddlewareRulesColumn bool
 	err = db.QueryRow(`

@@ -42,6 +42,11 @@ import type {
   CreateClientRequest,
   PluginCheckResponse,
   MTLSMiddlewareConfig,
+  SecurityConfig,
+  SecureHeadersConfig,
+  DuplicateCheckResult,
+  DuplicateCheckRequest,
+  UpdateResourceSecurityRequest,
 } from '@/types'
 
 const API_BASE = '/api'
@@ -186,6 +191,18 @@ export const resourceApi = {
     request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/mtlswhitelist`, {
       method: 'PUT',
       body: JSON.stringify(config),
+    }),
+
+  updateTLSHardeningConfig: (resourceId: string, enabled: boolean) =>
+    request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/tls-hardening`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled } as UpdateResourceSecurityRequest),
+    }),
+
+  updateSecureHeadersConfig: (resourceId: string, enabled: boolean) =>
+    request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/config/secure-headers`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled } as UpdateResourceSecurityRequest),
     }),
 }
 
@@ -468,6 +485,47 @@ export const mtlsApi = {
     request<{ message: string }>(`${API_BASE}/mtls/middleware/config`, {
       method: 'PUT',
       body: JSON.stringify(config),
+    }),
+}
+
+// Security API - TLS hardening, secure headers, duplicate detection
+export const securityApi = {
+  // Get security configuration
+  getConfig: () => request<SecurityConfig>(`${API_BASE}/security/config`),
+
+  // TLS Hardening
+  enableTLSHardening: () =>
+    request<{ message: string; enabled: boolean }>(`${API_BASE}/security/tls-hardening/enable`, {
+      method: 'PUT',
+    }),
+
+  disableTLSHardening: () =>
+    request<{ message: string; enabled: boolean }>(`${API_BASE}/security/tls-hardening/disable`, {
+      method: 'PUT',
+    }),
+
+  // Secure Headers
+  enableSecureHeaders: () =>
+    request<{ message: string; enabled: boolean }>(`${API_BASE}/security/secure-headers/enable`, {
+      method: 'PUT',
+    }),
+
+  disableSecureHeaders: () =>
+    request<{ message: string; enabled: boolean }>(`${API_BASE}/security/secure-headers/disable`, {
+      method: 'PUT',
+    }),
+
+  updateSecureHeadersConfig: (config: SecureHeadersConfig) =>
+    request<{ message: string }>(`${API_BASE}/security/secure-headers/config`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  // Duplicate Detection
+  checkDuplicates: (req: DuplicateCheckRequest) =>
+    request<DuplicateCheckResult>(`${API_BASE}/security/check-duplicates`, {
+      method: 'POST',
+      body: JSON.stringify(req),
     }),
 }
 

@@ -174,9 +174,6 @@ export interface TCPMiddleware {
   ipAllowList?: {
     sourceRange: string[]
   }
-  ipWhiteList?: {
-    sourceRange: string[]
-  }
 }
 
 // Entrypoint Configuration

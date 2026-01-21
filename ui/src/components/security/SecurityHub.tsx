@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMTLSStore } from "@/stores/mtlsStore";
+import { useSecurityStore } from "@/stores/securityStore";
 import {
   Card,
   CardContent,
@@ -25,10 +26,13 @@ import {
   CheckCircle,
   XCircle,
   Plug,
+  Lock,
+  FileKey,
 } from "lucide-react";
 import { CAManager } from "./CAManager";
 import { ClientCertList } from "./ClientCertList";
 import { CertImportGuide } from "./CertImportGuide";
+import type { SecureHeadersConfig } from "@/types";
 
 export function SecurityHub() {
   const PLUGIN_VERSION_DISPLAY = "v0.0.4";
@@ -47,21 +51,46 @@ export function SecurityHub() {
     clearError,
   } = useMTLSStore();
 
+  const {
+    config: securityConfig,
+    error: securityError,
+    fetchConfig: fetchSecurityConfig,
+    enableTLSHardening,
+    disableTLSHardening,
+    enableSecureHeaders,
+    disableSecureHeaders,
+    updateSecureHeadersConfig,
+    clearError: clearSecurityError,
+  } = useSecurityStore();
+
   const [showSetupWarning, setShowSetupWarning] = useState(false);
   const [switchLoading, setSwitchLoading] = useState(false);
+  const [tlsHardeningLoading, setTLSHardeningLoading] = useState(false);
+  const [secureHeadersLoading, setSecureHeadersLoading] = useState(false);
   const [middlewareForm, setMiddlewareForm] = useState({
     rules: "",
     request_headers: "",
     reject_message: "Access denied: Valid client certificate required",
     refresh_interval: 300,
   });
+  const [secureHeadersForm, setSecureHeadersForm] = useState<SecureHeadersConfig>({
+    x_content_type_options: "nosniff",
+    x_frame_options: "SAMEORIGIN",
+    x_xss_protection: "1; mode=block",
+    hsts: "max-age=31536000; includeSubDomains",
+    referrer_policy: "strict-origin-when-cross-origin",
+    csp: "",
+    permissions_policy: "",
+  });
   const [savingMiddleware, setSavingMiddleware] = useState(false);
+  const [savingSecureHeaders, setSavingSecureHeaders] = useState(false);
 
   useEffect(() => {
     fetchConfig();
     checkPlugin();
     fetchMiddlewareConfig();
-  }, [fetchConfig, checkPlugin, fetchMiddlewareConfig]);
+    fetchSecurityConfig();
+  }, [fetchConfig, checkPlugin, fetchMiddlewareConfig, fetchSecurityConfig]);
 
   useEffect(() => {
     if (middlewareConfig) {
@@ -75,6 +104,12 @@ export function SecurityHub() {
       });
     }
   }, [middlewareConfig]);
+
+  useEffect(() => {
+    if (securityConfig?.secure_headers) {
+      setSecureHeadersForm(securityConfig.secure_headers);
+    }
+  }, [securityConfig]);
 
   const handleToggleMTLS = async () => {
     // Check if plugin is installed before enabling
@@ -98,6 +133,32 @@ export function SecurityHub() {
     setSavingMiddleware(true);
     await updateMiddlewareConfig(middlewareForm);
     setSavingMiddleware(false);
+  };
+
+  const handleToggleTLSHardening = async () => {
+    setTLSHardeningLoading(true);
+    if (securityConfig?.tls_hardening_enabled) {
+      await disableTLSHardening();
+    } else {
+      await enableTLSHardening();
+    }
+    setTLSHardeningLoading(false);
+  };
+
+  const handleToggleSecureHeaders = async () => {
+    setSecureHeadersLoading(true);
+    if (securityConfig?.secure_headers_enabled) {
+      await disableSecureHeaders();
+    } else {
+      await enableSecureHeaders();
+    }
+    setSecureHeadersLoading(false);
+  };
+
+  const handleSaveSecureHeadersConfig = async () => {
+    setSavingSecureHeaders(true);
+    await updateSecureHeadersConfig(secureHeadersForm);
+    setSavingSecureHeaders(false);
   };
 
   if (loading && !config) {
@@ -189,12 +250,14 @@ export function SecurityHub() {
       )}
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="setup">Setup</TabsTrigger>
           <TabsTrigger value="ca">Certificate Authority</TabsTrigger>
           <TabsTrigger value="clients">Client Certificates</TabsTrigger>
           <TabsTrigger value="advanced">Advanced</TabsTrigger>
+          <TabsTrigger value="tls-hardening">TLS Hardening</TabsTrigger>
+          <TabsTrigger value="secure-headers">Secure Headers</TabsTrigger>
           <TabsTrigger value="guide">Import Guide</TabsTrigger>
         </TabsList>
 
@@ -618,11 +681,296 @@ export function SecurityHub() {
           </Card>
         </TabsContent>
 
+        {/* TLS Hardening Tab */}
+        <TabsContent value="tls-hardening" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5" />
+                TLS Hardening
+              </CardTitle>
+              <CardDescription>
+                Configure TLS security settings for improved protection
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="tls-hardening-toggle">Enable TLS Hardening</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Apply hardened TLS settings to resources (TLS 1.2+, secure ciphers)
+                  </p>
+                </div>
+                <Switch
+                  id="tls-hardening-toggle"
+                  checked={securityConfig?.tls_hardening_enabled ?? false}
+                  onCheckedChange={handleToggleTLSHardening}
+                  disabled={tlsHardeningLoading}
+                />
+              </div>
+
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  TLS Hardening is automatically disabled when mTLS is active on a resource.
+                  mTLS already includes TLS hardening via the <code className="bg-muted px-1 rounded">mtls-verify</code> options.
+                </AlertDescription>
+              </Alert>
+
+              {securityConfig?.tls_hardening_enabled && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h4 className="font-medium">Applied TLS Settings</h4>
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Minimum Version:</span>
+                      <span className="font-mono">TLS 1.2</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Maximum Version:</span>
+                      <span className="font-mono">TLS 1.3</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">SNI Strict:</span>
+                      <span className="font-mono">true</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Cipher Suites:</span>
+                      <ul className="mt-1 ml-4 font-mono text-xs space-y-1">
+                        <li>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256</li>
+                        <li>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256</li>
+                        <li>TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384</li>
+                        <li>TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384</li>
+                        <li>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</li>
+                        <li>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Curve Preferences:</span>
+                      <span className="font-mono ml-2">X25519, CurveP384, CurveP521</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Per-Resource Configuration</CardTitle>
+              <CardDescription>
+                Enable TLS hardening on individual resources
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="prose prose-sm dark:prose-invert max-w-none">
+              <p>
+                After enabling TLS hardening globally, you can enable it on individual
+                resources from the Resources page. Each resource will then use the
+                <code className="bg-muted px-1 rounded">tls-hardened</code> TLS options.
+              </p>
+              <p className="text-muted-foreground">
+                Note: The TLS hardening toggle is hidden for resources with mTLS enabled,
+                as mTLS already provides equivalent security.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Secure Headers Tab */}
+        <TabsContent value="secure-headers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileKey className="h-5 w-5" />
+                Secure Headers
+              </CardTitle>
+              <CardDescription>
+                Configure security response headers for protected resources
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="secure-headers-toggle">Enable Secure Headers</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Add security headers to responses for enabled resources
+                  </p>
+                </div>
+                <Switch
+                  id="secure-headers-toggle"
+                  checked={securityConfig?.secure_headers_enabled ?? false}
+                  onCheckedChange={handleToggleSecureHeaders}
+                  disabled={secureHeadersLoading}
+                />
+              </div>
+
+              {securityConfig?.secure_headers_enabled && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h4 className="font-medium">Header Configuration</h4>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="x-content-type-options">X-Content-Type-Options</Label>
+                      <Input
+                        id="x-content-type-options"
+                        value={secureHeadersForm.x_content_type_options}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            x_content_type_options: e.target.value,
+                          }))
+                        }
+                        placeholder="nosniff"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="x-frame-options">X-Frame-Options</Label>
+                      <Input
+                        id="x-frame-options"
+                        value={secureHeadersForm.x_frame_options}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            x_frame_options: e.target.value,
+                          }))
+                        }
+                        placeholder="SAMEORIGIN"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="x-xss-protection">X-XSS-Protection</Label>
+                      <Input
+                        id="x-xss-protection"
+                        value={secureHeadersForm.x_xss_protection}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            x_xss_protection: e.target.value,
+                          }))
+                        }
+                        placeholder="1; mode=block"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="hsts">Strict-Transport-Security (HSTS)</Label>
+                      <Input
+                        id="hsts"
+                        value={secureHeadersForm.hsts}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            hsts: e.target.value,
+                          }))
+                        }
+                        placeholder="max-age=31536000; includeSubDomains"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="referrer-policy">Referrer-Policy</Label>
+                      <Input
+                        id="referrer-policy"
+                        value={secureHeadersForm.referrer_policy}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            referrer_policy: e.target.value,
+                          }))
+                        }
+                        placeholder="strict-origin-when-cross-origin"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="csp">Content-Security-Policy (optional)</Label>
+                      <Textarea
+                        id="csp"
+                        value={secureHeadersForm.csp}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            csp: e.target.value,
+                          }))
+                        }
+                        placeholder="default-src 'self'; script-src 'self' 'unsafe-inline'"
+                        rows={2}
+                        className="font-mono text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="permissions-policy">Permissions-Policy (optional)</Label>
+                      <Input
+                        id="permissions-policy"
+                        value={secureHeadersForm.permissions_policy}
+                        onChange={(e) =>
+                          setSecureHeadersForm((prev) => ({
+                            ...prev,
+                            permissions_policy: e.target.value,
+                          }))
+                        }
+                        placeholder="geolocation=(), microphone=()"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleSaveSecureHeadersConfig}
+                    disabled={savingSecureHeaders}
+                  >
+                    {savingSecureHeaders ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Configuration"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Per-Resource Configuration</CardTitle>
+              <CardDescription>
+                Enable secure headers on individual resources
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="prose prose-sm dark:prose-invert max-w-none">
+              <p>
+                After enabling secure headers globally and configuring the header values,
+                you can enable it on individual resources from the Resources page.
+                Each enabled resource will have the configured security headers added
+                to all responses.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Import Guide Tab */}
         <TabsContent value="guide">
           <CertImportGuide />
         </TabsContent>
       </Tabs>
+
+      {/* Security Error Alert */}
+      {securityError && (
+        <Alert variant="destructive" className="mt-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Security Error</AlertTitle>
+          <AlertDescription className="flex justify-between items-center">
+            {securityError}
+            <Button variant="outline" size="sm" onClick={clearSecurityError}>
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

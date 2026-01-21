@@ -575,18 +575,6 @@ func SaveTemplateFile(templatesDir string) error {
 			
 			// Security middlewares
 			{
-				ID:   "ip-whitelist",
-				Name: "IP Whitelist",
-				Type: "ipWhiteList",
-				Config: map[string]interface{}{
-					"sourceRange": []string{
-						"127.0.0.1/32",
-						"192.168.1.0/24",
-						"10.0.0.0/8",
-					},
-				},
-			},
-			{
 				ID:   "ip-allowlist",
 				Name: "IP Allow List",
 				Type: "ipAllowList",

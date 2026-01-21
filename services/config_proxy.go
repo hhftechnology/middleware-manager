@@ -90,23 +90,32 @@ type mtlsConfigData struct {
 }
 
 type resourceData struct {
-	ID              string
-	Host            string
-	ServiceID       string
-	Entrypoints     string
-	TLSDomains      string
-	CustomHeaders   string
-	RouterPriority  int
-	SourceType      string
-	MTLSEnabled     bool
-	MTLSRules       sql.NullString
-	MTLSRequestHdrs sql.NullString
-	MTLSRejectMsg   sql.NullString
-	MTLSRejectCode  sql.NullInt64
-	MTLSRefresh     sql.NullString
-	MTLSExternal    sql.NullString
-	Middlewares     []middlewareWithPriority
-	CustomServiceID sql.NullString
+	ID                   string
+	Host                 string
+	ServiceID            string
+	Entrypoints          string
+	TLSDomains           string
+	CustomHeaders        string
+	RouterPriority       int
+	SourceType           string
+	MTLSEnabled          bool
+	MTLSRules            sql.NullString
+	MTLSRequestHdrs      sql.NullString
+	MTLSRejectMsg        sql.NullString
+	MTLSRejectCode       sql.NullInt64
+	MTLSRefresh          sql.NullString
+	MTLSExternal         sql.NullString
+	TLSHardeningEnabled  bool
+	SecureHeadersEnabled bool
+	Middlewares          []middlewareWithPriority
+	CustomServiceID      sql.NullString
+}
+
+// securityConfigData holds global security settings from the database
+type securityConfigData struct {
+	TLSHardeningEnabled  bool
+	SecureHeadersEnabled bool
+	SecureHeaders        models.SecureHeadersConfig
 }
 
 // ConfigProxy fetches config from Pangolin and merges MW-manager additions
@@ -321,12 +330,23 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 		return fmt.Errorf("failed to fetch resources: %w", err)
 	}
 
+	// Load global security config
+	securityCfg, err := cp.loadSecurityConfig()
+	if err != nil {
+		log.Printf("Warning: failed to load security config: %v", err)
+		securityCfg = nil
+	}
+
 	assignedMiddlewareIDs := make(map[string]struct{})
 	hasMTLSResources := false
+	hasTLSHardeningResources := false
 
 	for _, res := range resources {
 		if res.MTLSEnabled {
 			hasMTLSResources = true
+		}
+		if res.TLSHardeningEnabled && !res.MTLSEnabled {
+			hasTLSHardeningResources = true
 		}
 		for _, mw := range res.Middlewares {
 			assignedMiddlewareIDs[mw.ID] = struct{}{}
@@ -345,6 +365,11 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 		}
 	}
 
+	// Apply TLS hardening options if any resource has it enabled (and not mTLS)
+	if hasTLSHardeningResources {
+		cp.applyTLSHardeningOptions(config)
+	}
+
 	// Only add MW-manager middlewares that are assigned to resources/routers
 	if len(assignedMiddlewareIDs) > 0 {
 		if err := cp.applyMiddlewares(config, assignedMiddlewareIDs); err != nil {
@@ -352,9 +377,9 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 		}
 	}
 
-	// Apply resource-specific overrides (middleware attachments, priorities, headers, mtls)
+	// Apply resource-specific overrides (middleware attachments, priorities, headers, mtls, security)
 	if len(resources) > 0 {
-		if err := cp.applyResourceOverrides(config, resources, mtlsCfg); err != nil {
+		if err := cp.applyResourceOverrides(config, resources, mtlsCfg, securityCfg); err != nil {
 			return fmt.Errorf("failed to apply resource overrides: %w", err)
 		}
 	}
@@ -456,7 +481,7 @@ func (cp *ConfigProxy) applyServices(config *ProxiedTraefikConfig) error {
 }
 
 // applyResourceOverrides applies middleware assignments and other overrides to routers
-func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, resources []*resourceData, mtlsCfg *mtlsConfigData) error {
+func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, resources []*resourceData, mtlsCfg *mtlsConfigData, securityCfg *securityConfigData) error {
 	for _, resource := range resources {
 		// Find matching router by host
 		routerKey, router := cp.findMatchingRouter(config.HTTP.Routers, resource.Host)
@@ -474,7 +499,7 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 			return resource.Middlewares[i].Priority > resource.Middlewares[j].Priority
 		})
 
-		// Build middleware list (mTLS first, then custom headers, then assigned)
+		// Build middleware list (mTLS first, then secure headers, then custom headers, then assigned)
 		var newMiddlewares []string
 
 		if resource.MTLSEnabled && mtlsCfg != nil {
@@ -494,6 +519,26 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 						"options": "mtls-verify",
 					}
 				}
+			}
+		}
+
+		// Apply TLS hardening if enabled for this resource AND mTLS is NOT enabled
+		// (mTLS already includes TLS hardening via mtls-verify options)
+		if resource.TLSHardeningEnabled && !resource.MTLSEnabled {
+			if tlsConfig, ok := router["tls"].(map[string]interface{}); ok {
+				tlsConfig["options"] = "tls-hardened"
+			} else {
+				router["tls"] = map[string]interface{}{
+					"options": "tls-hardened",
+				}
+			}
+		}
+
+		// Add secure headers middleware if enabled for this resource
+		if resource.SecureHeadersEnabled && securityCfg != nil && securityCfg.SecureHeadersEnabled {
+			secureHeadersMiddlewareName := cp.ensureSecureHeadersMiddleware(config, resource, securityCfg)
+			if secureHeadersMiddlewareName != "" {
+				newMiddlewares = append(newMiddlewares, secureHeadersMiddlewareName)
 			}
 		}
 
@@ -658,6 +703,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 		       r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
 		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
 		       r.mtls_refresh_interval, r.mtls_external_data,
+		       COALESCE(r.tls_hardening_enabled, 0), COALESCE(r.secure_headers_enabled, 0),
 		       rm.middleware_id, rm.priority,
 		       rs.service_id as custom_service_id
 		FROM resources r
@@ -677,7 +723,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	for rows.Next() {
 		var rID, host, serviceID, entrypoints, tlsDomains, customHeaders, sourceType string
 		var routerPriority sql.NullInt64
-		var mtlsEnabled int
+		var mtlsEnabled, tlsHardeningEnabled, secureHeadersEnabled int
 		var middlewareID sql.NullString
 		var middlewarePriority sql.NullInt64
 		var customServiceID sql.NullString
@@ -689,6 +735,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 			&customHeaders, &routerPriority, &sourceType, &mtlsEnabled,
 			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
 			&mtlsRefreshInterval, &mtlsExternalData,
+			&tlsHardeningEnabled, &secureHeadersEnabled,
 			&middlewareID, &middlewarePriority, &customServiceID,
 		)
 		if err != nil {
@@ -703,22 +750,24 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 				priority = int(routerPriority.Int64)
 			}
 			data = &resourceData{
-				ID:              rID,
-				Host:            host,
-				ServiceID:       serviceID,
-				Entrypoints:     entrypoints,
-				TLSDomains:      tlsDomains,
-				CustomHeaders:   customHeaders,
-				RouterPriority:  priority,
-				SourceType:      sourceType,
-				MTLSEnabled:     mtlsEnabled == 1,
-				CustomServiceID: customServiceID,
-				MTLSRules:       mtlsRules,
-				MTLSRequestHdrs: mtlsRequestHeaders,
-				MTLSRejectMsg:   mtlsRejectMessage,
-				MTLSRejectCode:  mtlsRejectCode,
-				MTLSRefresh:     mtlsRefreshInterval,
-				MTLSExternal:    mtlsExternalData,
+				ID:                   rID,
+				Host:                 host,
+				ServiceID:            serviceID,
+				Entrypoints:          entrypoints,
+				TLSDomains:           tlsDomains,
+				CustomHeaders:        customHeaders,
+				RouterPriority:       priority,
+				SourceType:           sourceType,
+				MTLSEnabled:          mtlsEnabled == 1,
+				TLSHardeningEnabled:  tlsHardeningEnabled == 1,
+				SecureHeadersEnabled: secureHeadersEnabled == 1,
+				CustomServiceID:      customServiceID,
+				MTLSRules:            mtlsRules,
+				MTLSRequestHdrs:      mtlsRequestHeaders,
+				MTLSRejectMsg:        mtlsRejectMessage,
+				MTLSRejectCode:       mtlsRejectCode,
+				MTLSRefresh:          mtlsRefreshInterval,
+				MTLSExternal:         mtlsExternalData,
 			}
 			resourceMap[rID] = data
 		}
@@ -1109,4 +1158,102 @@ func (cp *ConfigProxy) mapToOrderedMiddleware(mw map[string]interface{}) *Ordere
 	}
 
 	return ordered
+}
+
+// loadSecurityConfig loads global security configuration from the database
+func (cp *ConfigProxy) loadSecurityConfig() (*securityConfigData, error) {
+	var tlsHardeningEnabled, secureHeadersEnabled int
+	var xContentTypeOptions, xFrameOptions, xXSSProtection, hsts, referrerPolicy, csp, permissionsPolicy string
+
+	err := cp.db.QueryRow(`
+		SELECT tls_hardening_enabled, secure_headers_enabled,
+		       secure_headers_x_content_type_options, secure_headers_x_frame_options,
+		       secure_headers_x_xss_protection, secure_headers_hsts,
+		       secure_headers_referrer_policy, secure_headers_csp,
+		       secure_headers_permissions_policy
+		FROM security_config WHERE id = 1
+	`).Scan(
+		&tlsHardeningEnabled, &secureHeadersEnabled,
+		&xContentTypeOptions, &xFrameOptions,
+		&xXSSProtection, &hsts,
+		&referrerPolicy, &csp,
+		&permissionsPolicy,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Return defaults
+			return &securityConfigData{
+				TLSHardeningEnabled:  false,
+				SecureHeadersEnabled: false,
+				SecureHeaders:        models.DefaultSecureHeaders(),
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to load security config: %w", err)
+	}
+
+	return &securityConfigData{
+		TLSHardeningEnabled:  tlsHardeningEnabled == 1,
+		SecureHeadersEnabled: secureHeadersEnabled == 1,
+		SecureHeaders: models.SecureHeadersConfig{
+			XContentTypeOptions: xContentTypeOptions,
+			XFrameOptions:       xFrameOptions,
+			XXSSProtection:      xXSSProtection,
+			HSTS:                hsts,
+			ReferrerPolicy:      referrerPolicy,
+			CSP:                 csp,
+			PermissionsPolicy:   permissionsPolicy,
+		},
+	}, nil
+}
+
+// applyTLSHardeningOptions adds TLS options for hardened security (without client auth)
+func (cp *ConfigProxy) applyTLSHardeningOptions(config *ProxiedTraefikConfig) {
+	config.TLS.Options["tls-hardened"] = models.TLSHardeningOptions()
+}
+
+// ensureSecureHeadersMiddleware creates and registers a secure headers middleware for a resource
+func (cp *ConfigProxy) ensureSecureHeadersMiddleware(config *ProxiedTraefikConfig, resource *resourceData, securityCfg *securityConfigData) string {
+	if securityCfg == nil {
+		return ""
+	}
+
+	customResponseHeaders := make(map[string]string)
+
+	// Only add headers that have values configured
+	if securityCfg.SecureHeaders.XContentTypeOptions != "" {
+		customResponseHeaders["X-Content-Type-Options"] = securityCfg.SecureHeaders.XContentTypeOptions
+	}
+	if securityCfg.SecureHeaders.XFrameOptions != "" {
+		customResponseHeaders["X-Frame-Options"] = securityCfg.SecureHeaders.XFrameOptions
+	}
+	if securityCfg.SecureHeaders.XXSSProtection != "" {
+		customResponseHeaders["X-XSS-Protection"] = securityCfg.SecureHeaders.XXSSProtection
+	}
+	if securityCfg.SecureHeaders.HSTS != "" {
+		customResponseHeaders["Strict-Transport-Security"] = securityCfg.SecureHeaders.HSTS
+	}
+	if securityCfg.SecureHeaders.ReferrerPolicy != "" {
+		customResponseHeaders["Referrer-Policy"] = securityCfg.SecureHeaders.ReferrerPolicy
+	}
+	if securityCfg.SecureHeaders.CSP != "" {
+		customResponseHeaders["Content-Security-Policy"] = securityCfg.SecureHeaders.CSP
+	}
+	if securityCfg.SecureHeaders.PermissionsPolicy != "" {
+		customResponseHeaders["Permissions-Policy"] = securityCfg.SecureHeaders.PermissionsPolicy
+	}
+
+	// Skip if no headers configured
+	if len(customResponseHeaders) == 0 {
+		return ""
+	}
+
+	middlewareName := fmt.Sprintf("%s-secureheaders", resource.ID)
+	config.HTTP.Middlewares[middlewareName] = map[string]interface{}{
+		"headers": map[string]interface{}{
+			"customResponseHeaders": customResponseHeaders,
+		},
+	}
+
+	return middlewareName
 }

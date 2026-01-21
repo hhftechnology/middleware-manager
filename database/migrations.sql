@@ -132,3 +132,22 @@ CREATE TABLE IF NOT EXISTS mtls_clients (
 
 -- Initialize mTLS config singleton row
 INSERT OR IGNORE INTO mtls_config (id) VALUES (1);
+
+-- Security Configuration (singleton table for TLS hardening and secure headers)
+CREATE TABLE IF NOT EXISTS security_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    tls_hardening_enabled INTEGER DEFAULT 0,
+    secure_headers_enabled INTEGER DEFAULT 0,
+    secure_headers_x_content_type_options TEXT DEFAULT 'nosniff',
+    secure_headers_x_frame_options TEXT DEFAULT 'SAMEORIGIN',
+    secure_headers_x_xss_protection TEXT DEFAULT '1; mode=block',
+    secure_headers_hsts TEXT DEFAULT 'max-age=31536000; includeSubDomains',
+    secure_headers_referrer_policy TEXT DEFAULT 'strict-origin-when-cross-origin',
+    secure_headers_csp TEXT DEFAULT '',
+    secure_headers_permissions_policy TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Initialize security config singleton row
+INSERT OR IGNORE INTO security_config (id) VALUES (1);

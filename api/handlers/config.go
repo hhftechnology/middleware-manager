@@ -462,10 +462,19 @@ func (h *ConfigHandler) UpdateMTLSConfig(c *gin.Context) {
 
 	log.Printf("Updating mTLS config for resource %s: enabled=%t", id, input.MTLSEnabled)
 
-	result, txErr := tx.Exec(
-		"UPDATE resources SET mtls_enabled = ?, updated_at = ? WHERE id = ?",
-		mtlsEnabled, time.Now(), id,
-	)
+	// If enabling mTLS, automatically disable TLS hardening (mTLS includes TLS hardening)
+	var result sql.Result
+	if input.MTLSEnabled {
+		result, txErr = tx.Exec(
+			"UPDATE resources SET mtls_enabled = ?, tls_hardening_enabled = 0, updated_at = ? WHERE id = ?",
+			mtlsEnabled, time.Now(), id,
+		)
+	} else {
+		result, txErr = tx.Exec(
+			"UPDATE resources SET mtls_enabled = ?, updated_at = ? WHERE id = ?",
+			mtlsEnabled, time.Now(), id,
+		)
+	}
 
 	if txErr != nil {
 		log.Printf("Error updating mTLS config: %v", txErr)
@@ -489,10 +498,16 @@ func (h *ConfigHandler) UpdateMTLSConfig(c *gin.Context) {
 	}
 
 	log.Printf("Successfully updated mTLS configuration for resource %s", id)
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"id":           id,
 		"mtls_enabled": input.MTLSEnabled,
-	})
+	}
+	// If mTLS was enabled, also report that TLS hardening was disabled
+	if input.MTLSEnabled {
+		response["tls_hardening_enabled"] = false
+		response["message"] = "mTLS enabled. TLS hardening automatically disabled (mTLS includes TLS hardening)."
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // UpdateMTLSWhitelistConfig updates per-resource mtlswhitelist plugin configuration

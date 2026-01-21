@@ -20,6 +20,8 @@ export interface Resource {
   mtls_reject_code?: number
   mtls_refresh_interval?: string
   mtls_external_data?: string
+  tls_hardening_enabled: boolean
+  secure_headers_enabled: boolean
   middlewares: string
   created_at?: string
   updated_at?: string

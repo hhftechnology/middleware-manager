@@ -320,7 +320,7 @@ func detectMiddlewareType(config map[string]interface{}) string {
 	// Check for known middleware type keys
 	typeKeys := []string{
 		"basicAuth", "digestAuth", "forwardAuth",
-		"ipWhiteList", "ipAllowList",
+		"ipAllowList",
 		"rateLimit", "headers",
 		"stripPrefix", "stripPrefixRegex",
 		"addPrefix", "redirectRegex", "redirectScheme",

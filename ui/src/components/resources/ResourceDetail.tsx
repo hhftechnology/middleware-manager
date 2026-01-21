@@ -3,7 +3,9 @@ import { useResourceStore } from '@/stores/resourceStore'
 import { useMiddlewareStore } from '@/stores/middlewareStore'
 import { useServiceStore } from '@/stores/serviceStore'
 import { useMTLSStore } from '@/stores/mtlsStore'
+import { useSecurityStore } from '@/stores/securityStore'
 import { useAppStore } from '@/stores/appStore'
+import { resourceApi } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +76,7 @@ export function ResourceDetail() {
   const { middlewares, fetchMiddlewares } = useMiddlewareStore()
   const { services, fetchServices } = useServiceStore()
   const { config: mtlsConfig, fetchConfig: fetchMTLSConfig } = useMTLSStore()
+  const { config: securityConfig, fetchConfig: fetchSecurityConfig } = useSecurityStore()
   const { updateMTLSConfig, updateMTLSWhitelistConfig } = useResourceStore()
 
   const [selectedMiddlewareId, setSelectedMiddlewareId] = useState('')
@@ -105,6 +108,8 @@ export function ResourceDetail() {
   const [externalHeaderEntries, setExternalHeaderEntries] = useState<Array<{ key: string; value: string }>>([])
   const [savingWhitelist, setSavingWhitelist] = useState(false)
   const [whitelistError, setWhitelistError] = useState<string | null>(null)
+  const [tlsHardeningLoading, setTLSHardeningLoading] = useState(false)
+  const [secureHeadersLoading, setSecureHeadersLoading] = useState(false)
 
   useEffect(() => {
     if (resourceId) {
@@ -112,8 +117,9 @@ export function ResourceDetail() {
       fetchMiddlewares()
       fetchServices()
       fetchMTLSConfig()
+      fetchSecurityConfig()
     }
-  }, [resourceId, fetchResource, fetchMiddlewares, fetchServices, fetchMTLSConfig])
+  }, [resourceId, fetchResource, fetchMiddlewares, fetchServices, fetchMTLSConfig, fetchSecurityConfig])
 
   useEffect(() => {
     if (!selectedResource) return
@@ -336,6 +342,34 @@ export function ResourceDetail() {
       await updateMTLSWhitelistConfig(resourceId, payload)
     } finally {
       setSavingWhitelist(false)
+    }
+  }
+
+  // Handle TLS hardening toggle
+  const handleTLSHardeningToggle = async () => {
+    if (!resourceId) return
+    setTLSHardeningLoading(true)
+    try {
+      await resourceApi.updateTLSHardeningConfig(resourceId, !selectedResource?.tls_hardening_enabled)
+      await fetchResource(resourceId)
+    } catch (err) {
+      console.error('Failed to update TLS hardening:', err)
+    } finally {
+      setTLSHardeningLoading(false)
+    }
+  }
+
+  // Handle secure headers toggle
+  const handleSecureHeadersToggle = async () => {
+    if (!resourceId) return
+    setSecureHeadersLoading(true)
+    try {
+      await resourceApi.updateSecureHeadersConfig(resourceId, !selectedResource?.secure_headers_enabled)
+      await fetchResource(resourceId)
+    } catch (err) {
+      console.error('Failed to update secure headers:', err)
+    } finally {
+      setSecureHeadersLoading(false)
     }
   }
 
@@ -809,6 +843,81 @@ export function ResourceDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Security Settings Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Security Settings
+          </CardTitle>
+          <CardDescription>
+            TLS hardening and secure headers configuration
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* TLS Hardening Toggle - hidden when mTLS is enabled */}
+          {!selectedResource?.mtls_enabled && securityConfig?.tls_hardening_enabled && (
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="space-y-0.5">
+                <Label htmlFor="tls-hardening-toggle" className="text-base">TLS Hardening</Label>
+                <p className="text-sm text-muted-foreground">
+                  Apply hardened TLS settings (TLS 1.2+, secure ciphers)
+                </p>
+              </div>
+              <Switch
+                id="tls-hardening-toggle"
+                checked={selectedResource?.tls_hardening_enabled ?? false}
+                onCheckedChange={handleTLSHardeningToggle}
+                disabled={tlsHardeningLoading}
+              />
+            </div>
+          )}
+
+          {selectedResource?.mtls_enabled && (
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              <p className="font-medium">TLS Hardening via mTLS</p>
+              <p className="text-muted-foreground mt-1">
+                mTLS is enabled, which already includes TLS hardening via the mtls-verify options.
+              </p>
+            </div>
+          )}
+
+          {!securityConfig?.tls_hardening_enabled && !selectedResource?.mtls_enabled && (
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              <p className="text-muted-foreground">
+                TLS Hardening is disabled globally. Enable it in the Security tab first.
+              </p>
+            </div>
+          )}
+
+          {/* Secure Headers Toggle */}
+          {securityConfig?.secure_headers_enabled && (
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="space-y-0.5">
+                <Label htmlFor="secure-headers-toggle" className="text-base">Secure Headers</Label>
+                <p className="text-sm text-muted-foreground">
+                  Add security response headers to this resource
+                </p>
+              </div>
+              <Switch
+                id="secure-headers-toggle"
+                checked={selectedResource?.secure_headers_enabled ?? false}
+                onCheckedChange={handleSecureHeadersToggle}
+                disabled={secureHeadersLoading}
+              />
+            </div>
+          )}
+
+          {!securityConfig?.secure_headers_enabled && (
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              <p className="text-muted-foreground">
+                Secure Headers are disabled globally. Enable and configure them in the Security tab first.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Middlewares Card */}
       <Card>
