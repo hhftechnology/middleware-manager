@@ -801,7 +801,7 @@ func (cp *ConfigProxy) loadGlobalMTLSConfig() (*mtlsConfigData, error) {
 	return cfg, nil
 }
 
-// applyTLSOptions adds TLS options for mTLS verification
+// applyTLSOptions adds TLS options for mTLS verification with hardened security settings
 func (cp *ConfigProxy) applyTLSOptions(config *ProxiedTraefikConfig, mtlsCfg *mtlsConfigData) {
 	if mtlsCfg == nil || mtlsCfg.CACertPath == "" {
 		return
@@ -813,7 +813,21 @@ func (cp *ConfigProxy) applyTLSOptions(config *ProxiedTraefikConfig, mtlsCfg *mt
 			"clientAuthType": "VerifyClientCertIfGiven",
 		},
 		"minVersion": "VersionTLS12",
+		"maxVersion": "VersionTLS13",
 		"sniStrict":  true,
+		"cipherSuites": []string{
+			"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+			"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+			"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+			"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+		},
+		"curvePreferences": []string{
+			"X25519",
+			"CurveP384",
+			"CurveP521",
+		},
 	}
 }
 
