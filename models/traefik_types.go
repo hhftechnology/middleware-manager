@@ -85,9 +85,6 @@ type TCPMiddleware struct {
 	IPAllowList *struct {
 		SourceRange []string `json:"sourceRange"`
 	} `json:"ipAllowList,omitempty"`
-	IPWhiteList *struct {
-		SourceRange []string `json:"sourceRange"`
-	} `json:"ipWhiteList,omitempty"`
 }
 
 // HTTPRouter is a type alias for TraefikRouter with SQL driver support

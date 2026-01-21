@@ -32,7 +32,6 @@ func isValidMiddlewareType(typ string) bool {
 		"basicAuth":         true,
 		"digestAuth":        true,
 		"forwardAuth":       true,
-		"ipWhiteList":       true,
 		"ipAllowList":       true,
 		"rateLimit":         true,
 		"headers":           true,

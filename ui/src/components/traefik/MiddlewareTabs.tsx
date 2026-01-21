@@ -108,7 +108,7 @@ function TCPMiddlewareTable({ middlewares }: { middlewares: TCPMiddleware[] }) {
                 <Badge variant="secondary">{middleware.type}</Badge>
               ) : middleware.inFlightConn ? (
                 <Badge variant="secondary">InFlightConn</Badge>
-              ) : middleware.ipAllowList || middleware.ipWhiteList ? (
+              ) : middleware.ipAllowList ? (
                 <Badge variant="secondary">IPAllowList</Badge>
               ) : (
                 <span className="text-muted-foreground">-</span>

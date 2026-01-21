@@ -58,15 +58,6 @@ middlewares:
         - "X-JWT-Email"
 
   # Security middlewares
-  - id: ip-whitelist
-    name: IP Whitelist
-    type: ipWhiteList
-    config:
-      sourceRange:
-        - "127.0.0.1/32"
-        - "192.168.1.0/24"
-        - "10.0.0.0/8"
-
   - id: ip-allowlist
     name: IP Allow List
     type: ipAllowList
