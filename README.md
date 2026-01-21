@@ -11,30 +11,40 @@
 
 <div align="center">
   <h5>
-<img src="screenshots/plugin_hubV3.png" alt="plugin_hubV3"/>  
-<img src="screenshots/dashboardV3.png" alt="dashboardV3"/>
-<img src="screenshots/Resources_ManageV3.png" alt="Resources_ManageV3"/>  
-<img src="screenshots/Resources_Manage_HTTP_RouterV3.png" alt="Resources_Manage_HTTP_RouterV3"/>
-<img src="screenshots/Resources_Manage_TLS_CertificateV3.png" alt="Resources_Manage_TLS_CertificateV3"/>
-<img src="screenshots/Resources_Manage_TCP_SNI_RoutingV3.png" alt="Resources_Manage_TCP_SNI_RoutingV3"/>
-<img src="screenshots/Resources_Manage_Assign_Custom_ServiceV3.png" alt="Resources_Manage_Assign_Custom_ServiceV3"/>
-<img src="screenshots/Resources_Manage_Assign_Custom_MiddlewareV3.png" alt="Resources_Manage_Assign_Custom_MiddlewareV3"/>
-<img src="screenshots/middleware-listV3.png" alt="middleware-listV3"/>
-<img src="screenshots/services-listV3.png" alt="services-listV3"/>
-<img src="screenshots/data_source_settingV3.png" alt="data_source_settingV3"/>
+
+<img width="1920" height="1440" alt="dashboardV4" src="https://github.com/user-attachments/assets/3d05dc41-94a5-4167-a2d0-f0561c113902" />
+<img width="1920" height="1440" alt="resources" src="https://github.com/user-attachments/assets/07efdb25-b012-4fd3-b0a4-32044806b9f2" />
+<img width="1920" height="1440" alt="Resource-Manage-1_so" src="https://github.com/user-attachments/assets/0091c6a9-a3f4-4801-bacf-7a16915cfa13" />
+<img width="1920" height="1440" alt="Resource-Manage_so" src="https://github.com/user-attachments/assets/904eae11-d79a-40f0-ba6b-edbbbe53a926" />
+<img width="1920" height="1440" alt="Middleware_ManageV4" src="https://github.com/user-attachments/assets/0fd2b5f9-8f59-4f8d-a40d-a8243466a605" />
+<img width="1920" height="1440" alt="Middleware-Config_so" src="https://github.com/user-attachments/assets/f35a6cd6-43f5-4a03-9000-14d98c5ffdab" />
+<img width="1920" height="1440" alt="Services_ManageV4" src="https://github.com/user-attachments/assets/032d4cda-04d0-4957-95b7-7291c3a18228" />
+<img width="1920" height="1440" alt="Security-Main_so" src="https://github.com/user-attachments/assets/31013be9-e6ed-4d8d-b316-49d4ccf6ef90" />
+<img width="1920" height="1440" alt="Security-Setup_so" src="https://github.com/user-attachments/assets/6e903478-e5b9-4415-9b7d-7f00eea9aa43" />
+<img width="1920" height="1440" alt="Security-1_so" src="https://github.com/user-attachments/assets/a6de3b5e-8317-45b8-be40-dd690f6990ac" />
+<img width="1920" height="1440" alt="Security-2_so" src="https://github.com/user-attachments/assets/e31be3ea-6a02-4ac0-aa36-53fe0c112660" />
+<img width="1920" height="1440" alt="Security-3_so" src="https://github.com/user-attachments/assets/553a2299-d25f-466f-a1d6-7088de65c8c8" />
+<img width="1920" height="1440" alt="Security-4_so" src="https://github.com/user-attachments/assets/1a9697a6-9b17-4daa-ae4a-a9ad915e0864" />
+<img width="1920" height="1440" alt="Security-5_so" src="https://github.com/user-attachments/assets/f724608f-8a17-4e73-a1b7-db7ea1cd1f80" />
+<img width="1920" height="1440" alt="plugin_hubV4-1" src="https://github.com/user-attachments/assets/f45cecb9-3c9a-4d1b-a3b6-d9662bfc7ca8" />
+<img width="1920" height="1440" alt="plugin_hubV4-2" src="https://github.com/user-attachments/assets/9389dd41-438f-423f-a5b6-4ccc109d2e80" />
+<img width="1920" height="1440" alt="648shots_so" src="https://github.com/user-attachments/assets/27cfe275-df09-4cf9-a7e8-d7265cfc76ad" />
 <img width="5852" height="2740" alt="diagram" src="https://github.com/user-attachments/assets/d69eecbd-0502-4057-94eb-97027c6c7202" />
+
       
   </h5>
 </div>
 
 ## Overview
 
-Middleware Manager lets you attach Traefik middlewares, manage custom services, tune routers, and control plugins/mTLS from a single UI. It works with **Pangolin** or directly with **Traefik** as the data source and automatically generates Traefik dynamic configuration (e.g., `resource-overrides.yml`).
+Middleware Manager lets you attach Traefik middlewares, manage custom services, tune routers, and control plugins/mTLS from a single UI. It works with **Pangolin** or directly with **Traefik** as the data source and automatically generates Traefik dynamic configuration in api and creates an override api. it will not disturb the original api(if you revert the original api in the traefik file it will restore all default router and services.
+
+## Middleware-Manager container has to be kept running in order to keep the overide middleware deployed. 
 
 ### Who this is for
 
 *   Operators deploying with Pangolin or standalone Traefik.
-*   Platform/SRE teams managing routers, services, plugins, and mTLS.
+*   Platform teams managing routers, services, plugins, and mTLS.
 *   Contributors extending the Go API or React/Vite UI.
 
 ### What you can do
@@ -64,7 +74,7 @@ Use this when Pangolin already manages Traefik and you want Middleware Manager t
 
 ```yaml
 middleware-manager:
-  image: hhftechnology/middleware-manager:v3.0.0
+  image: hhftechnology/middleware-manager:latest
   volumes:
     - ./data:/data
     - ./config/middleware-manager:/app/config
@@ -86,7 +96,7 @@ Use this when Traefik is your only provider and you want Middleware Manager to o
 
 ```yaml
 middleware-manager:
-  image: hhftechnology/middleware-manager:traefik-int
+  image: hhftechnology/middleware-manager:latest
   volumes:
     - ./middleware_manager_data:/data
     - ./traefik_config/static:/etc/traefik  # Must match Traefik's static config dir
@@ -229,8 +239,7 @@ ping:
     entryPoint: web
 providers:
     file:
-        directory: /rules
-        watch: true
+        filename: "/etc/traefik/dynamic_config.yml"
     http:
         endpoint: http://172.17.1.3:3456/api/v1/traefik-config
         pollInterval: 5s
