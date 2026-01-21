@@ -50,6 +50,31 @@ type TLSConfig struct {
 	Options map[string]interface{} `json:"options,omitempty"`
 }
 
+// OrderedRouter represents a Traefik HTTP router with fields in Pangolin's order.
+// The JSON field order matches Pangolin API output for consistency.
+type OrderedRouter struct {
+	EntryPoints []string               `json:"entryPoints,omitempty"`
+	Middlewares []string               `json:"middlewares,omitempty"`
+	Service     string                 `json:"service,omitempty"`
+	Rule        string                 `json:"rule,omitempty"`
+	Priority    int                    `json:"priority,omitempty"`
+	TLS         *OrderedTLSConfig      `json:"tls,omitempty"`
+}
+
+// OrderedTLSConfig represents TLS config for a router with Pangolin's field order.
+type OrderedTLSConfig struct {
+	CertResolver string   `json:"certResolver,omitempty"`
+	Domains      []string `json:"domains,omitempty"`
+	Options      string   `json:"options,omitempty"`
+}
+
+// OrderedMiddleware represents a middleware with Pangolin's field order.
+type OrderedMiddleware struct {
+	RedirectScheme map[string]interface{} `json:"redirectScheme,omitempty"`
+	Plugin         map[string]interface{} `json:"plugin,omitempty"`
+	Headers        map[string]interface{} `json:"headers,omitempty"`
+}
+
 type middlewareWithPriority struct {
 	ID       string
 	Priority int
@@ -148,6 +173,12 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 
 	// Remove empty protocol sections so Traefik doesn't reject blank configs
 	cp.pruneEmptySections(config)
+
+	// Normalize router field ordering to match Pangolin's JSON format
+	cp.normalizeRouterOrder(config)
+
+	// Normalize middleware field ordering to match Pangolin's JSON format
+	cp.normalizeMiddlewareOrder(config)
 
 	// Update cache
 	cp.cache = config
@@ -910,4 +941,158 @@ func (cp *ConfigProxy) SetPangolinURL(url string) {
 // SetCacheDuration updates the cache duration
 func (cp *ConfigProxy) SetCacheDuration(duration time.Duration) {
 	cp.cacheDuration = duration
+}
+
+// normalizeRouterOrder converts all HTTP routers to OrderedRouter structs
+// to ensure consistent JSON field ordering matching Pangolin's output.
+func (cp *ConfigProxy) normalizeRouterOrder(config *ProxiedTraefikConfig) {
+	if config == nil || config.HTTP == nil || config.HTTP.Routers == nil {
+		return
+	}
+
+	for routerKey, routerVal := range config.HTTP.Routers {
+		router, ok := routerVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		ordered := cp.mapToOrderedRouter(router)
+		config.HTTP.Routers[routerKey] = ordered
+	}
+}
+
+// mapToOrderedRouter converts a map[string]interface{} router to OrderedRouter
+func (cp *ConfigProxy) mapToOrderedRouter(router map[string]interface{}) *OrderedRouter {
+	ordered := &OrderedRouter{}
+
+	// EntryPoints
+	if eps, ok := router["entryPoints"]; ok {
+		switch v := eps.(type) {
+		case []interface{}:
+			for _, ep := range v {
+				if s, ok := ep.(string); ok {
+					ordered.EntryPoints = append(ordered.EntryPoints, s)
+				}
+			}
+		case []string:
+			ordered.EntryPoints = v
+		}
+	}
+
+	// Middlewares
+	if mws, ok := router["middlewares"]; ok {
+		switch v := mws.(type) {
+		case []interface{}:
+			for _, mw := range v {
+				if s, ok := mw.(string); ok {
+					ordered.Middlewares = append(ordered.Middlewares, s)
+				}
+			}
+		case []string:
+			ordered.Middlewares = v
+		}
+	}
+
+	// Service
+	if svc, ok := router["service"].(string); ok {
+		ordered.Service = svc
+	}
+
+	// Rule
+	if rule, ok := router["rule"].(string); ok {
+		ordered.Rule = rule
+	}
+
+	// Priority
+	if priority, ok := router["priority"]; ok {
+		switch v := priority.(type) {
+		case int:
+			ordered.Priority = v
+		case float64:
+			ordered.Priority = int(v)
+		case int64:
+			ordered.Priority = int(v)
+		}
+	}
+
+	// TLS
+	if tlsVal, ok := router["tls"]; ok {
+		switch tls := tlsVal.(type) {
+		case map[string]interface{}:
+			ordered.TLS = cp.mapToOrderedTLS(tls)
+		}
+	}
+
+	return ordered
+}
+
+// mapToOrderedTLS converts a map[string]interface{} TLS config to OrderedTLSConfig
+func (cp *ConfigProxy) mapToOrderedTLS(tls map[string]interface{}) *OrderedTLSConfig {
+	ordered := &OrderedTLSConfig{}
+
+	// CertResolver
+	if cr, ok := tls["certResolver"].(string); ok {
+		ordered.CertResolver = cr
+	}
+
+	// Domains
+	if domains, ok := tls["domains"]; ok {
+		switch v := domains.(type) {
+		case []interface{}:
+			for _, d := range v {
+				if s, ok := d.(string); ok {
+					ordered.Domains = append(ordered.Domains, s)
+				}
+			}
+		case []string:
+			ordered.Domains = v
+		}
+	}
+
+	// Options
+	if opts, ok := tls["options"].(string); ok {
+		ordered.Options = opts
+	}
+
+	return ordered
+}
+
+// normalizeMiddlewareOrder converts all HTTP middlewares to OrderedMiddleware structs
+// to ensure consistent JSON field ordering matching Pangolin's output.
+func (cp *ConfigProxy) normalizeMiddlewareOrder(config *ProxiedTraefikConfig) {
+	if config == nil || config.HTTP == nil || config.HTTP.Middlewares == nil {
+		return
+	}
+
+	for mwKey, mwVal := range config.HTTP.Middlewares {
+		mw, ok := mwVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		ordered := cp.mapToOrderedMiddleware(mw)
+		config.HTTP.Middlewares[mwKey] = ordered
+	}
+}
+
+// mapToOrderedMiddleware converts a map[string]interface{} middleware to OrderedMiddleware
+func (cp *ConfigProxy) mapToOrderedMiddleware(mw map[string]interface{}) *OrderedMiddleware {
+	ordered := &OrderedMiddleware{}
+
+	// RedirectScheme (comes first in Pangolin output)
+	if rs, ok := mw["redirectScheme"].(map[string]interface{}); ok {
+		ordered.RedirectScheme = rs
+	}
+
+	// Plugin (comes second in Pangolin output)
+	if plugin, ok := mw["plugin"].(map[string]interface{}); ok {
+		ordered.Plugin = plugin
+	}
+
+	// Headers (for custom headers middleware)
+	if headers, ok := mw["headers"].(map[string]interface{}); ok {
+		ordered.Headers = headers
+	}
+
+	return ordered
 }
