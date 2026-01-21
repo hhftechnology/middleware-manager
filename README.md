@@ -4,6 +4,7 @@
 [![Docker](https://img.shields.io/docker/pulls/hhftechnology/middleware-manager?style=flat-square)](https://hub.docker.com/r/hhftechnology/middleware-manager)
 ![Stars](https://img.shields.io/github/stars/hhftechnology/middleware-manager?style=flat-square)
 [![Discord](https://img.shields.io/discord/994247717368909884?logo=discord&style=flat-square)](https://discord.gg/HDCt9MjyMJ)
+![Documentation](https://img.shields.io/website?url=https%3A%2F%2Fmiddleware-manager.hhf.technology&up_message=Please%20Visit%20the%20docs%20for%20in%20depth%20details&up_color=Green&down_message=Docs%20are%20getting%20Updated&down_color=pink&style=flat-square)
 
 </div>
 
@@ -279,3 +280,9 @@ npm start
 ## License
 
 MIT License
+
+## Documentation
+
+![Documentation](https://img.shields.io/website?url=https%3A%2F%2Fmiddleware-manager.hhf.technology&up_message=Please%20Visit%20the%20docs%20for%20in%20depth%20details&up_color=Green&down_message=Docs%20are%20getting%20Updated&down_color=pink&style=flat-square)
+
+
