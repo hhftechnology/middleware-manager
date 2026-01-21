@@ -352,6 +352,8 @@ export function ResourceDetail() {
     try {
       await resourceApi.updateTLSHardeningConfig(resourceId, !selectedResource?.tls_hardening_enabled)
       await fetchResource(resourceId)
+    } catch (err) {
+      console.error('Failed to update TLS hardening:', err)
     } finally {
       setTLSHardeningLoading(false)
     }
@@ -364,6 +366,8 @@ export function ResourceDetail() {
     try {
       await resourceApi.updateSecureHeadersConfig(resourceId, !selectedResource?.secure_headers_enabled)
       await fetchResource(resourceId)
+    } catch (err) {
+      console.error('Failed to update secure headers:', err)
     } finally {
       setSecureHeadersLoading(false)
     }

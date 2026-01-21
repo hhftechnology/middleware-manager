@@ -69,6 +69,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		       r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
 		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
 		       r.mtls_refresh_interval, r.mtls_external_data,
+		       COALESCE(r.tls_hardening_enabled, 0), COALESCE(r.secure_headers_enabled, 0),
 		       GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
 		FROM resources r
 		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
@@ -101,6 +102,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		var id, host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
 		var tcpEnabled int
 		var mtlsEnabled int
+		var tlsHardeningEnabled, secureHeadersEnabled int
 		var routerPriority sql.NullInt64
 		var middlewares sql.NullString
 		var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
@@ -111,6 +113,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 			&customHeaders, &mtlsEnabled, &routerPriority, &sourceType,
 			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
 			&mtlsRefreshInterval, &mtlsExternalData,
+			&tlsHardeningEnabled, &secureHeadersEnabled,
 			&middlewares); err != nil {
 			log.Printf("Error scanning resource row: %v", err)
 			continue
@@ -122,21 +125,23 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		}
 
 		resource := map[string]interface{}{
-			"id":              id,
-			"host":            host,
-			"service_id":      serviceID,
-			"org_id":          orgID,
-			"site_id":         siteID,
-			"status":          status,
-			"entrypoints":     entrypoints,
-			"tls_domains":     tlsDomains,
-			"tcp_enabled":     tcpEnabled > 0,
-			"tcp_entrypoints": tcpEntrypoints,
-			"tcp_sni_rule":    tcpSNIRule,
-			"custom_headers":  customHeaders,
-			"mtls_enabled":    mtlsEnabled > 0,
-			"router_priority": priority,
-			"source_type":     sourceType,
+			"id":                     id,
+			"host":                   host,
+			"service_id":             serviceID,
+			"org_id":                 orgID,
+			"site_id":                siteID,
+			"status":                 status,
+			"entrypoints":            entrypoints,
+			"tls_domains":            tlsDomains,
+			"tcp_enabled":            tcpEnabled > 0,
+			"tcp_entrypoints":        tcpEntrypoints,
+			"tcp_sni_rule":           tcpSNIRule,
+			"custom_headers":         customHeaders,
+			"mtls_enabled":           mtlsEnabled > 0,
+			"router_priority":        priority,
+			"source_type":            sourceType,
+			"tls_hardening_enabled":  tlsHardeningEnabled > 0,
+			"secure_headers_enabled": secureHeadersEnabled > 0,
 		}
 
 		if mtlsRules.Valid {
@@ -182,7 +187,6 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 }
 
 // GetResource returns a specific resource
-// GetResource returns a specific resource
 func (h *ResourceHandler) GetResource(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -193,6 +197,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 	var host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
 	var tcpEnabled int
 	var mtlsEnabled int
+	var tlsHardeningEnabled, secureHeadersEnabled int
 	var routerPriority sql.NullInt64
 	var middlewares sql.NullString
 	var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
@@ -204,6 +209,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
                r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
                r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
                r.mtls_refresh_interval, r.mtls_external_data,
+               COALESCE(r.tls_hardening_enabled, 0), COALESCE(r.secure_headers_enabled, 0),
                GROUP_CONCAT(m.id || ':' || m.name || ':' || rm.priority, ',') as middlewares
         FROM resources r
         LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
@@ -215,6 +221,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 		&customHeaders, &mtlsEnabled, &routerPriority, &sourceType,
 		&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
 		&mtlsRefreshInterval, &mtlsExternalData,
+		&tlsHardeningEnabled, &secureHeadersEnabled,
 		&middlewares)
 
 	if err == sql.ErrNoRows {
@@ -233,21 +240,23 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 	}
 
 	resource := map[string]interface{}{
-		"id":              id,
-		"host":            host,
-		"service_id":      serviceID,
-		"org_id":          orgID,
-		"site_id":         siteID,
-		"status":          status,
-		"entrypoints":     entrypoints,
-		"tls_domains":     tlsDomains,
-		"tcp_enabled":     tcpEnabled > 0,
-		"tcp_entrypoints": tcpEntrypoints,
-		"tcp_sni_rule":    tcpSNIRule,
-		"custom_headers":  customHeaders,
-		"mtls_enabled":    mtlsEnabled > 0,
-		"router_priority": priority,
-		"source_type":     sourceType, // Make sure this is included
+		"id":                     id,
+		"host":                   host,
+		"service_id":             serviceID,
+		"org_id":                 orgID,
+		"site_id":                siteID,
+		"status":                 status,
+		"entrypoints":            entrypoints,
+		"tls_domains":            tlsDomains,
+		"tcp_enabled":            tcpEnabled > 0,
+		"tcp_entrypoints":        tcpEntrypoints,
+		"tcp_sni_rule":           tcpSNIRule,
+		"custom_headers":         customHeaders,
+		"mtls_enabled":           mtlsEnabled > 0,
+		"router_priority":        priority,
+		"source_type":            sourceType,
+		"tls_hardening_enabled":  tlsHardeningEnabled > 0,
+		"secure_headers_enabled": secureHeadersEnabled > 0,
 	}
 
 	if mtlsRules.Valid {
