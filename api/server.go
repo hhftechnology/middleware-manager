@@ -31,6 +31,7 @@ type Server struct {
 	pluginHandler           *handlers.PluginHandler
 	traefikHandler          *handlers.TraefikHandler
 	mtlsHandler             *handlers.MTLSHandler
+	securityHandler         *handlers.SecurityHandler
 	proxyHandler            *handlers.ProxyHandler
 	configManager           *services.ConfigManager
 	configProxy             *services.ConfigProxy
@@ -102,6 +103,9 @@ func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *servi
 	mtlsHandler := handlers.NewMTLSHandler(db)
 	mtlsHandler.SetTraefikConfigPath(traefikStaticConfigPath)
 
+	// Initialize SecurityHandler for security features (TLS hardening, secure headers, duplicate detection)
+	securityHandler := handlers.NewSecurityHandler(db, configManager)
+
 	// Initialize ConfigProxy for Traefik config proxying
 	configProxy := services.NewConfigProxy(dbWrapper, configManager, config.PangolinURL)
 	proxyHandler := handlers.NewProxyHandler(configProxy)
@@ -118,6 +122,7 @@ func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *servi
 		pluginHandler:           pluginHandler,
 		traefikHandler:          traefikHandler,
 		mtlsHandler:             mtlsHandler,
+		securityHandler:         securityHandler,
 		proxyHandler:            proxyHandler,
 		configManager:           configManager,
 		configProxy:             configProxy,
@@ -193,6 +198,9 @@ func (s *Server) setupRoutes(uiPath string) {
 			resources.PUT("/:id/config/priority", s.configHandler.UpdateRouterPriority)
 			resources.PUT("/:id/config/mtls", s.configHandler.UpdateMTLSConfig)
 			resources.PUT("/:id/config/mtlswhitelist", s.configHandler.UpdateMTLSWhitelistConfig)
+			// Per-resource security configuration
+			resources.PUT("/:id/config/tls-hardening", s.securityHandler.UpdateResourceTLSHardening)
+			resources.PUT("/:id/config/secure-headers", s.securityHandler.UpdateResourceSecureHeaders)
 		}
 
 		// Data source routes
@@ -249,6 +257,18 @@ func (s *Server) setupRoutes(uiPath string) {
 			mtls.GET("/plugin/check", s.mtlsHandler.CheckPlugin)
 			mtls.GET("/middleware/config", s.mtlsHandler.GetMiddlewareConfig)
 			mtls.PUT("/middleware/config", s.mtlsHandler.UpdateMiddlewareConfig)
+		}
+
+		// Security Routes - TLS hardening, secure headers, duplicate detection
+		security := api.Group("/security")
+		{
+			security.GET("/config", s.securityHandler.GetConfig)
+			security.PUT("/tls-hardening/enable", s.securityHandler.EnableTLSHardening)
+			security.PUT("/tls-hardening/disable", s.securityHandler.DisableTLSHardening)
+			security.PUT("/secure-headers/enable", s.securityHandler.EnableSecureHeaders)
+			security.PUT("/secure-headers/disable", s.securityHandler.DisableSecureHeaders)
+			security.PUT("/secure-headers/config", s.securityHandler.UpdateSecureHeadersConfig)
+			security.POST("/check-duplicates", s.securityHandler.CheckMiddlewareDuplicates)
 		}
 
 		// Config Proxy Routes - Proxies Pangolin config with MW-manager additions

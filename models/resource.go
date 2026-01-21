@@ -36,6 +36,12 @@ type Resource struct {
 	// mTLS configuration
 	MTLSEnabled    bool      `json:"mtls_enabled"`
 
+	// TLS Hardening configuration (standalone, disabled when mTLS is active)
+	TLSHardeningEnabled bool `json:"tls_hardening_enabled"`
+
+	// Secure Headers configuration
+	SecureHeadersEnabled bool `json:"secure_headers_enabled"`
+
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

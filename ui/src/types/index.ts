@@ -69,6 +69,17 @@ export type {
   MTLSMiddlewareConfig,
 } from './mtls'
 
+// Security types
+export type {
+  SecurityConfig,
+  SecureHeadersConfig,
+  DuplicateCheckResult,
+  Duplicate,
+  DuplicateCheckRequest,
+  UpdateResourceSecurityRequest,
+} from './security'
+export { defaultSecureHeaders } from './security'
+
 // Traefik API types
 export type {
   TraefikOverview,
