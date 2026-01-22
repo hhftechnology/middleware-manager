@@ -1,15 +1,15 @@
 package handlers
 
 import (
-    "context"
-    "fmt"
-    "log"
-    "net/http"
-    "time"
-    
-    "github.com/gin-gonic/gin"
-    "github.com/hhftechnology/middleware-manager/models"
-    "github.com/hhftechnology/middleware-manager/services"
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/hhftechnology/middleware-manager/models"
+	"github.com/hhftechnology/middleware-manager/services"
 )
 
 // DataSourceHandler handles data source configuration requests
@@ -117,8 +117,19 @@ func (h *DataSourceHandler) TestDataSourceConnection(c *gin.Context) {
     
     var config models.DataSourceConfig
     if err := c.ShouldBindJSON(&config); err != nil {
-        ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
-        return
+        if err.Error() == "EOF" {
+            // Request body is empty, try to get existing config
+            sources := h.ConfigManager.GetDataSources()
+            if source, ok := sources[name]; ok {
+                config = source
+            } else {
+                ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Data source '%s' not found", name))
+                return
+            }
+        } else {
+            ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+            return
+        }
     }
     
     // Create a context with timeout
