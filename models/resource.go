@@ -69,6 +69,7 @@ type PangolinRouter struct {
 	Service     string   `json:"service"`
 	EntryPoints []string `json:"entryPoints"`
 	Middlewares []string `json:"middlewares"`
+	Priority    int      `json:"priority,omitempty"`
 	TLS         struct {
 		CertResolver string `json:"certResolver"`
 	} `json:"tls"`

@@ -174,6 +174,12 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 			continue
 		}
 
+		// Use Pangolin's priority if provided, otherwise default to 100
+		priority := router.Priority
+		if priority == 0 {
+			priority = 100
+		}
+
 		resource := models.Resource{
 			ID:             id,
 			Host:           host,
@@ -181,7 +187,7 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 			Status:         "active",
 			SourceType:     string(models.PangolinAPI),
 			Entrypoints:    strings.Join(router.EntryPoints, ","),
-			RouterPriority: 100, // Default
+			RouterPriority: priority,
 		}
 
 		resources.Resources = append(resources.Resources, resource)

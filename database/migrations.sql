@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS resources (
     
     -- Router priority configuration
     router_priority INTEGER DEFAULT 100,
-    
+    -- Flag to indicate if router_priority was manually set by user (1) or from Pangolin (0)
+    router_priority_manual INTEGER DEFAULT 0,
+
     -- Source type for tracking data origin
     source_type TEXT DEFAULT '',
     

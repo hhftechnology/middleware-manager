@@ -526,6 +526,25 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		log.Println("Successfully added middleware config columns")
 	}
 
+	// Check for router_priority_manual column in resources table
+	// This tracks whether the priority was manually set by user (1) or from Pangolin (0)
+	var hasRouterPriorityManualColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'router_priority_manual'
+	`).Scan(&hasRouterPriorityManualColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if router_priority_manual column exists: %w", err)
+	}
+	if !hasRouterPriorityManualColumn {
+		log.Println("Adding router_priority_manual column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN router_priority_manual INTEGER DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add router_priority_manual column: %w", err)
+		}
+		log.Println("Successfully added router_priority_manual column")
+	}
+
 	return nil
 }
 

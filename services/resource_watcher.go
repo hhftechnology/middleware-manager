@@ -287,23 +287,39 @@ func (rw *ResourceWatcher) updateExistingResource(id string, resource models.Res
     // Use a transaction for the update
     return rw.db.WithTransaction(func(tx *sql.Tx) error {
         log.Printf("Updating resource %s using existing ID %s in database", resource.ID, id)
-        
+
         // Update essential fields but preserve custom configuration
         _, err := tx.Exec(`
-            UPDATE resources 
-            SET host = ?, service_id = ?, status = 'active', 
-                source_type = ?, updated_at = ? 
+            UPDATE resources
+            SET host = ?, service_id = ?, status = 'active',
+                source_type = ?, updated_at = ?
             WHERE id = ?
         `, resource.Host, resource.ServiceID, resource.SourceType, time.Now(), id)
-        
+
         if err != nil {
             return fmt.Errorf("failed to update resource %s: %w", id, err)
         }
-        
+
+        // Update router_priority from Pangolin only if not manually overridden
+        // router_priority_manual = 0 means priority came from Pangolin (or default)
+        // router_priority_manual = 1 means user explicitly set it via UI
+        if resource.RouterPriority > 0 {
+            _, err = tx.Exec(`
+                UPDATE resources
+                SET router_priority = ?
+                WHERE id = ? AND COALESCE(router_priority_manual, 0) = 0
+            `, resource.RouterPriority, id)
+
+            if err != nil {
+                log.Printf("Warning: failed to update router_priority for resource %s: %v", id, err)
+                // Don't fail the whole update, just log the warning
+            }
+        }
+
         if status == "disabled" {
             log.Printf("Resource %s was disabled but is now active again", id)
         }
-        
+
         return nil
     })
 }

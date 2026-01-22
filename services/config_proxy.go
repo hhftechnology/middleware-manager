@@ -880,10 +880,19 @@ func (cp *ConfigProxy) applyTLSOptions(config *ProxiedTraefikConfig, mtlsCfg *mt
 	}
 }
 
-// findMatchingRouter finds a router that matches the given host
+// findMatchingRouter finds a router that matches the given host.
+// Prefers the main websecure router over redirect routers (-redirect suffix).
+// This ensures middlewares are applied to the HTTPS router, not the HTTP->HTTPS redirect router.
 func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host string) (string, map[string]interface{}) {
 	// Host matching regex
 	hostRegex := regexp.MustCompile(`Host\(\x60([^` + "`" + `]+)\x60\)`)
+
+	// Collect all matching routers first
+	type matchedRouter struct {
+		name   string
+		router map[string]interface{}
+	}
+	var matches []matchedRouter
 
 	for routerName, routerConfig := range routers {
 		router, ok := routerConfig.(map[string]interface{})
@@ -897,13 +906,58 @@ func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host s
 		}
 
 		// Extract host from rule
-		matches := hostRegex.FindStringSubmatch(rule)
-		if len(matches) > 1 && matches[1] == host {
-			return routerName, router
+		hostMatches := hostRegex.FindStringSubmatch(rule)
+		if len(hostMatches) > 1 && hostMatches[1] == host {
+			matches = append(matches, matchedRouter{name: routerName, router: router})
 		}
 	}
 
-	return "", nil
+	if len(matches) == 0 {
+		return "", nil
+	}
+
+	// Prefer the main router (websecure) over redirect routers
+	// Main routers don't have the "-redirect" suffix
+	for _, m := range matches {
+		if !strings.HasSuffix(m.name, "-redirect") {
+			// Also verify it has websecure entrypoint for extra safety
+			if eps := cp.getRouterEntryPoints(m.router); len(eps) > 0 {
+				for _, ep := range eps {
+					if ep == "websecure" {
+						return m.name, m.router
+					}
+				}
+			}
+			// Even without websecure check, prefer non-redirect routers
+			return m.name, m.router
+		}
+	}
+
+	// Fallback to first match if no non-redirect router found
+	return matches[0].name, matches[0].router
+}
+
+// getRouterEntryPoints extracts the entryPoints list from a router config
+func (cp *ConfigProxy) getRouterEntryPoints(router map[string]interface{}) []string {
+	entryPoints, ok := router["entryPoints"]
+	if !ok {
+		return nil
+	}
+
+	switch v := entryPoints.(type) {
+	case []interface{}:
+		result := make([]string, 0, len(v))
+		for _, ep := range v {
+			if s, ok := ep.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	case []string:
+		return v
+	default:
+		return nil
+	}
 }
 
 // getRouterMiddlewares extracts the middleware list from a router config
