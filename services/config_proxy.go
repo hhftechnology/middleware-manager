@@ -90,7 +90,8 @@ type mtlsConfigData struct {
 }
 
 type resourceData struct {
-	ID                   string
+	ID                   string // Internal UUID (stable)
+	PangolinRouterID     string // Pangolin's router ID (can change)
 	Host                 string
 	ServiceID            string
 	Entrypoints          string
@@ -483,13 +484,19 @@ func (cp *ConfigProxy) applyServices(config *ProxiedTraefikConfig) error {
 // applyResourceOverrides applies middleware assignments and other overrides to routers
 func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, resources []*resourceData, mtlsCfg *mtlsConfigData, securityCfg *securityConfigData) error {
 	for _, resource := range resources {
-		// Find matching router by host
-		routerKey, router := cp.findMatchingRouter(config.HTTP.Routers, resource.Host)
+		// First try to find router by pangolin_router_id (direct match)
+		routerKey, router := cp.findRouterByPangolinID(config.HTTP.Routers, resource.PangolinRouterID)
+
+		// Fall back to host matching if no direct match found
+		if routerKey == "" {
+			routerKey, router = cp.findMatchingRouter(config.HTTP.Routers, resource.Host)
+		}
 
 		if routerKey == "" {
 			// No matching router found, might need to create one
 			if shouldLog() {
-				log.Printf("No matching router found for resource %s (host: %s)", resource.ID, resource.Host)
+				log.Printf("No matching router found for resource %s (pangolin: %s, host: %s)",
+					resource.ID, resource.PangolinRouterID, resource.Host)
 			}
 			continue
 		}
@@ -699,7 +706,7 @@ func (cp *ConfigProxy) ensureResourceMTLSMiddleware(config *ProxiedTraefikConfig
 // fetchResourceData loads active resources and their middleware assignments
 func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	query := `
-		SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
+		SELECT r.id, COALESCE(r.pangolin_router_id, r.id), r.host, r.service_id, r.entrypoints, r.tls_domains,
 		       r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
 		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
 		       r.mtls_refresh_interval, r.mtls_external_data,
@@ -721,7 +728,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	resourceMap := make(map[string]*resourceData)
 
 	for rows.Next() {
-		var rID, host, serviceID, entrypoints, tlsDomains, customHeaders, sourceType string
+		var rID, pangolinRouterID, host, serviceID, entrypoints, tlsDomains, customHeaders, sourceType string
 		var routerPriority sql.NullInt64
 		var mtlsEnabled, tlsHardeningEnabled, secureHeadersEnabled int
 		var middlewareID sql.NullString
@@ -731,7 +738,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 		var mtlsRejectCode sql.NullInt64
 
 		err := rows.Scan(
-			&rID, &host, &serviceID, &entrypoints, &tlsDomains,
+			&rID, &pangolinRouterID, &host, &serviceID, &entrypoints, &tlsDomains,
 			&customHeaders, &routerPriority, &sourceType, &mtlsEnabled,
 			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
 			&mtlsRefreshInterval, &mtlsExternalData,
@@ -751,6 +758,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 			}
 			data = &resourceData{
 				ID:                   rID,
+				PangolinRouterID:     pangolinRouterID,
 				Host:                 host,
 				ServiceID:            serviceID,
 				Entrypoints:          entrypoints,
@@ -878,6 +886,55 @@ func (cp *ConfigProxy) applyTLSOptions(config *ProxiedTraefikConfig, mtlsCfg *mt
 			"CurveP521",
 		},
 	}
+}
+
+// findRouterByPangolinID finds a router by its Pangolin router ID (direct name match).
+// Prefers the main websecure router over redirect routers (-redirect suffix).
+func (cp *ConfigProxy) findRouterByPangolinID(routers map[string]interface{}, pangolinRouterID string) (string, map[string]interface{}) {
+	if pangolinRouterID == "" {
+		return "", nil
+	}
+
+	// Try direct match first
+	if routerConfig, ok := routers[pangolinRouterID]; ok {
+		if router, ok := routerConfig.(map[string]interface{}); ok {
+			// Verify it's not a redirect router - prefer websecure
+			if !strings.HasSuffix(pangolinRouterID, "-redirect") {
+				return pangolinRouterID, router
+			}
+		}
+	}
+
+	// Try to find the non-redirect version
+	// If pangolinRouterID ends with "-redirect", try the base name
+	baseName := strings.TrimSuffix(pangolinRouterID, "-redirect")
+	if baseName != pangolinRouterID {
+		if routerConfig, ok := routers[baseName]; ok {
+			if router, ok := routerConfig.(map[string]interface{}); ok {
+				return baseName, router
+			}
+		}
+	}
+
+	// Try the -redirect version if we have the base name
+	redirectName := pangolinRouterID + "-redirect"
+	if routerConfig, ok := routers[redirectName]; ok {
+		if router, ok := routerConfig.(map[string]interface{}); ok {
+			// But only return redirect router if we can't find the main one
+			if _, ok := routers[pangolinRouterID]; !ok {
+				return redirectName, router
+			}
+		}
+	}
+
+	// Return direct match even if it's a redirect router (better than nothing)
+	if routerConfig, ok := routers[pangolinRouterID]; ok {
+		if router, ok := routerConfig.(map[string]interface{}); ok {
+			return pangolinRouterID, router
+		}
+	}
+
+	return "", nil
 }
 
 // findMatchingRouter finds a router that matches the given host.

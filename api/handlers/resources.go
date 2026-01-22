@@ -64,7 +64,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 
 	// Build query with optional pagination and filters
 	query := `
-		SELECT r.id, r.host, r.service_id, r.org_id, r.site_id, r.status,
+		SELECT r.id, COALESCE(r.pangolin_router_id, r.id), r.host, r.service_id, r.org_id, r.site_id, r.status,
 		       r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
 		       r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
 		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
@@ -99,7 +99,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 
 	var resources []map[string]interface{}
 	for rows.Next() {
-		var id, host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
+		var id, pangolinRouterID, host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
 		var tcpEnabled int
 		var mtlsEnabled int
 		var tlsHardeningEnabled, secureHeadersEnabled int
@@ -108,7 +108,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
 		var mtlsRejectCode sql.NullInt64
 
-		if err := rows.Scan(&id, &host, &serviceID, &orgID, &siteID, &status,
+		if err := rows.Scan(&id, &pangolinRouterID, &host, &serviceID, &orgID, &siteID, &status,
 			&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
 			&customHeaders, &mtlsEnabled, &routerPriority, &sourceType,
 			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
@@ -126,6 +126,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 
 		resource := map[string]interface{}{
 			"id":                     id,
+			"pangolin_router_id":     pangolinRouterID,
 			"host":                   host,
 			"service_id":             serviceID,
 			"org_id":                 orgID,
@@ -194,7 +195,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 		return
 	}
 
-	var host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
+	var pangolinRouterID, host, serviceID, orgID, siteID, status, entrypoints, tlsDomains, tcpEntrypoints, tcpSNIRule, customHeaders, sourceType string
 	var tcpEnabled int
 	var mtlsEnabled int
 	var tlsHardeningEnabled, secureHeadersEnabled int
@@ -204,7 +205,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 	var mtlsRejectCode sql.NullInt64
 
 	err := h.DB.QueryRow(`
-        SELECT r.host, r.service_id, r.org_id, r.site_id, r.status,
+        SELECT COALESCE(r.pangolin_router_id, r.id), r.host, r.service_id, r.org_id, r.site_id, r.status,
                r.entrypoints, r.tls_domains, r.tcp_enabled, r.tcp_entrypoints, r.tcp_sni_rule,
                r.custom_headers, r.mtls_enabled, r.router_priority, r.source_type,
                r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
@@ -216,7 +217,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
         LEFT JOIN middlewares m ON rm.middleware_id = m.id
         WHERE r.id = ?
         GROUP BY r.id
-    `, id).Scan(&host, &serviceID, &orgID, &siteID, &status,
+    `, id).Scan(&pangolinRouterID, &host, &serviceID, &orgID, &siteID, &status,
 		&entrypoints, &tlsDomains, &tcpEnabled, &tcpEntrypoints, &tcpSNIRule,
 		&customHeaders, &mtlsEnabled, &routerPriority, &sourceType,
 		&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
@@ -241,6 +242,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 
 	resource := map[string]interface{}{
 		"id":                     id,
+		"pangolin_router_id":     pangolinRouterID,
 		"host":                   host,
 		"service_id":             serviceID,
 		"org_id":                 orgID,
