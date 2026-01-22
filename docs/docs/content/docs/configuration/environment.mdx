@@ -10,12 +10,10 @@ Key variables (defaults shown where applicable):
 - `TRAEFIK_CONF_DIR` — directory to write dynamic rules (default `/conf`)
 - `TRAEFIK_STATIC_CONFIG_PATH` — path to Traefik static config inside MM container (required for plugin install)
 - `ACTIVE_DATA_SOURCE` — `pangolin` or `traefik` (default `pangolin`)
-- `PANGOLIN_API_URL` — Pangolin API base when active
+- `PANGOLIN_API_URL` — Pangolin API base when active (`http://pangolin:3001/api/v1` if empty)
 - `TRAEFIK_API_URL` — Traefik API base when active (`http://host.docker.internal:8080` if empty)
-- `PLUGINS_JSON_URL` — catalogue source (default Traefik plugins list)
 - `CHECK_INTERVAL_SECONDS` — resource poll interval (default `30`)
 - `SERVICE_INTERVAL_SECONDS` — service poll interval (default `30`)
-- `GENERATE_INTERVAL_SECONDS` — dynamic config refresh (default `10`)
 - `DEBUG` — `true/false` toggles Gin logger
 - `ALLOW_CORS` — enable CORS; `CORS_ORIGIN` to scope
 
