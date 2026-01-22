@@ -1,20 +1,20 @@
 package services
 
 import (
-    "context"
-    "database/sql"
-    "encoding/json"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "strings"
-    "time"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"time"
 
-    "github.com/google/uuid"
-    "github.com/hhftechnology/middleware-manager/database"
-    "github.com/hhftechnology/middleware-manager/models"
-    "github.com/hhftechnology/middleware-manager/util"
+	"github.com/google/uuid"
+	"github.com/hhftechnology/middleware-manager/database"
+	"github.com/hhftechnology/middleware-manager/models"
+	"github.com/hhftechnology/middleware-manager/util"
 )
 
 // ResourceWatcher watches for resources using configured data source
@@ -148,8 +148,8 @@ func (rw *ResourceWatcher) checkResources() error {
     }
     rows.Close()
     
-    // Keep track of resources we find
-    foundResources := make(map[string]bool)
+    // Keep track of resources we find (by internal ID)
+    foundInternalIDs := make(map[string]bool)
 
     // Check if there are any resources
     if len(resources.Resources) == 0 {
@@ -168,8 +168,6 @@ func (rw *ResourceWatcher) checkResources() error {
         return nil
     }
 
-    // Build a map of normalized IDs to original resources
-    normalizedMap := make(map[string]models.Resource)
     // Process resources
     for _, resource := range resources.Resources {
         // Skip invalid resources
@@ -177,24 +175,22 @@ func (rw *ResourceWatcher) checkResources() error {
             continue
         }
 
-        normalizedID := util.NormalizeID(resource.ID)
-        normalizedMap[normalizedID] = resource
-        
-        // Process resource
-        if err := rw.updateOrCreateResource(resource); err != nil {
+        // Process resource and get its internal ID
+        internalID, err := rw.updateOrCreateResource(resource)
+        if err != nil {
             log.Printf("Error processing resource %s: %v", resource.ID, err)
             // Continue processing other resources even if one fails
             continue
         }
         
-        // Mark this resource as found (using normalized ID)
-        foundResources[normalizedID] = true
+        // Mark this internal resource ID as found
+        foundInternalIDs[internalID] = true
     }
     
     // Mark resources as disabled if they no longer exist in the data source
+    // Now we compare internal UUIDs, which is correct
     for _, resourceID := range existingResources {
-        normalizedID := util.NormalizeID(resourceID)
-        if !foundResources[normalizedID] {
+        if !foundInternalIDs[resourceID] {
             log.Printf("Resource %s no longer exists, marking as disabled", resourceID)
             _, err := rw.db.Exec(
                 "UPDATE resources SET status = 'disabled', updated_at = ? WHERE id = ?",
@@ -211,7 +207,8 @@ func (rw *ResourceWatcher) checkResources() error {
 
 // updateOrCreateResource updates an existing resource or creates a new one
 // Uses internal UUID for stable tracking, pangolin_router_id for Pangolin reference
-func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) error {
+// Returns the internal UUID of the resource
+func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) (string, error) {
     pangolinRouterID := util.NormalizeID(resource.ID)
 
     // Step 1: Try to find existing resource by pangolin_router_id
@@ -224,7 +221,10 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) erro
     if err == nil {
         // Found by pangolin_router_id - update it
         log.Printf("Found resource by pangolin_router_id %s (internal: %s)", pangolinRouterID, internalID)
-        return rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource)
+        if err := rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource); err != nil {
+            return "", err
+        }
+        return internalID, nil
     }
 
     // Step 2: Try to find by host (handles Pangolin router ID changes)
@@ -237,7 +237,10 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) erro
         // Found by host - Pangolin changed the router ID, just update pangolin_router_id
         log.Printf("Found resource by host %s (internal: %s), updating pangolin_router_id from old to %s",
             resource.Host, internalID, pangolinRouterID)
-        return rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource)
+        if err := rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource); err != nil {
+            return "", err
+        }
+        return internalID, nil
     }
 
     // Step 3: Check for legacy resources (where id = pangolin_router_id, no internal UUID yet)
@@ -249,7 +252,10 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) erro
     if err == nil {
         // Found legacy resource - update it
         log.Printf("Found legacy resource %s, updating", internalID)
-        return rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource)
+        if err := rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource); err != nil {
+            return "", err
+        }
+        return internalID, nil
     }
 
     // Step 4: No existing resource found, create a new one with UUID
@@ -293,7 +299,8 @@ func (rw *ResourceWatcher) updateExistingResourceByInternalID(internalID, pangol
 
 // createNewResourceWithUUID creates a new resource with a stable internal UUID
 // The UUID remains constant even if Pangolin changes the router ID
-func (rw *ResourceWatcher) createNewResourceWithUUID(resource models.Resource, pangolinRouterID string) error {
+// Returns the new internal UUID
+func (rw *ResourceWatcher) createNewResourceWithUUID(resource models.Resource, pangolinRouterID string) (string, error) {
     // Generate a new UUID for internal tracking
     internalID := uuid.New().String()
 
@@ -324,7 +331,7 @@ func (rw *ResourceWatcher) createNewResourceWithUUID(resource models.Resource, p
         routerPriority = 100 // Default priority
     }
 
-    return rw.db.WithTransaction(func(tx *sql.Tx) error {
+    err := rw.db.WithTransaction(func(tx *sql.Tx) error {
         log.Printf("Creating new resource: internal=%s, pangolin=%s, host=%s",
             internalID, pangolinRouterID, resource.Host)
 
@@ -348,6 +355,12 @@ func (rw *ResourceWatcher) createNewResourceWithUUID(resource models.Resource, p
             resource.Host, internalID, pangolinRouterID)
         return nil
     })
+
+    if err != nil {
+        return "", err
+    }
+
+    return internalID, nil
 }
 
 
