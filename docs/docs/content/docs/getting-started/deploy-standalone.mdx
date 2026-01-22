@@ -8,7 +8,7 @@ Use this when Traefik is your only provider and you want Middleware Manager to o
 ## Container layout (summary)
 
 - `traefik`: exposes API/dashboard (secure appropriately), watches `/rules` for dynamic config, static config at `/etc/traefik/traefik.yml`.
-- `middleware-manager`: writes overrides to `/conf` (mounted to Traefik `/rules`) and stores state in `/data/middleware.db`.
+- `middleware-manager`: writes overrides to `api` (mounted to Traefik `http endpoint`) and stores state in `/data/middleware.db`.
 
 ## Required volumes and env
 
@@ -37,10 +37,25 @@ middleware-manager:
 ## Steps
 
 1) Prepare directories: `./traefik_config/static`, `./traefik_config/rules`, `./traefik_config/letsencrypt`, `./traefik_config/plugins`, `./middleware_manager_data`, `./middleware_manager_config`.  
-2) Ensure Traefik static config includes:
-   - `providers.file.directory=/rules`
-   - `providers.http.endpoint=http://middleware-manager:3456/api/v1/traefik-config` (optional if you want HTTP provider driven by MM)  
-   - `api` and `accessLog` as you require.  
+2) Ensure Traefik static config includes the HTTP provider pointing to Middleware Manager:
+   - Update your static configuration (e.g., `traefik.yml`):
+    ```yaml
+    providers:
+      file:
+        directory: /rules
+      http:
+        endpoint: "http://middleware-manager:3456/api/v1/traefik-config"
+        pollInterval: 5s
+    ```
+    **Troubleshooting Connection:**
+    If the container name `middleware-manager` is not reachable (e.g., DNS issues), find the container's IP address:
+    ```bash
+    docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' middleware-manager
+    ```
+    Then use the IP in your config:
+    ```yaml
+    endpoint: "http://172.17.1.3:3456/api/v1/traefik-config"
+    ```
 3) Start containers: `docker compose up -d`.  
 4) Open UI at `http://<host>:3456` and set **Active Data Source → Traefik**.  
 5) Validate with **Traefik Explorer** (routers/services/middlewares) and a test middleware assignment.

@@ -1120,8 +1120,10 @@ func (cp *ConfigProxy) mapToOrderedTLS(tls map[string]interface{}) *OrderedTLSCo
 	return ordered
 }
 
-// normalizeMiddlewareOrder converts all HTTP middlewares to OrderedMiddleware structs
+// normalizeMiddlewareOrder converts HTTP middlewares to OrderedMiddleware structs
 // to ensure consistent JSON field ordering matching Pangolin's output.
+// Only converts middlewares with known field structures (redirectScheme, plugin, headers).
+// Other middleware types are preserved as-is to avoid losing their configuration.
 func (cp *ConfigProxy) normalizeMiddlewareOrder(config *ProxiedTraefikConfig) {
 	if config == nil || config.HTTP == nil || config.HTTP.Middlewares == nil {
 		return
@@ -1133,9 +1135,30 @@ func (cp *ConfigProxy) normalizeMiddlewareOrder(config *ProxiedTraefikConfig) {
 			continue
 		}
 
-		ordered := cp.mapToOrderedMiddleware(mw)
-		config.HTTP.Middlewares[mwKey] = ordered
+		// Only convert middlewares that have fields we support in OrderedMiddleware
+		// This preserves other middleware types (basicAuth, rateLimit, ipAllowList, etc.)
+		if cp.isOrderableMiddleware(mw) {
+			ordered := cp.mapToOrderedMiddleware(mw)
+			config.HTTP.Middlewares[mwKey] = ordered
+		}
+		// Otherwise, keep the middleware as-is (map[string]interface{})
 	}
+}
+
+// isOrderableMiddleware checks if a middleware has fields that can be converted
+// to OrderedMiddleware without losing data.
+func (cp *ConfigProxy) isOrderableMiddleware(mw map[string]interface{}) bool {
+	// Only convert if it ONLY contains fields we support
+	for key := range mw {
+		switch key {
+		case "redirectScheme", "plugin", "headers":
+			// These are supported
+		default:
+			// Contains unsupported field, don't convert
+			return false
+		}
+	}
+	return true
 }
 
 // mapToOrderedMiddleware converts a map[string]interface{} middleware to OrderedMiddleware
