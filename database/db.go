@@ -526,6 +526,58 @@ func runPostMigrationUpdates(db *sql.DB) error {
 		log.Println("Successfully added middleware config columns")
 	}
 
+	// Check for router_priority_manual column in resources table
+	// This tracks whether the priority was manually set by user (1) or from Pangolin (0)
+	var hasRouterPriorityManualColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'router_priority_manual'
+	`).Scan(&hasRouterPriorityManualColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if router_priority_manual column exists: %w", err)
+	}
+	if !hasRouterPriorityManualColumn {
+		log.Println("Adding router_priority_manual column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN router_priority_manual INTEGER DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add router_priority_manual column: %w", err)
+		}
+		log.Println("Successfully added router_priority_manual column")
+	}
+
+	// Check for pangolin_router_id column in resources table
+	// This stores the Pangolin router ID separately from our internal UUID
+	var hasPangolinRouterIDColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('resources')
+		WHERE name = 'pangolin_router_id'
+	`).Scan(&hasPangolinRouterIDColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if pangolin_router_id column exists: %w", err)
+	}
+	if !hasPangolinRouterIDColumn {
+		log.Println("Adding pangolin_router_id column to resources table")
+		if _, err := db.Exec("ALTER TABLE resources ADD COLUMN pangolin_router_id TEXT"); err != nil {
+			return fmt.Errorf("failed to add pangolin_router_id column: %w", err)
+		}
+
+		// Migrate existing data: copy current id to pangolin_router_id
+		// This preserves the Pangolin router ID for existing resources
+		log.Println("Migrating existing resources: copying id to pangolin_router_id")
+		if _, err := db.Exec("UPDATE resources SET pangolin_router_id = id WHERE pangolin_router_id IS NULL"); err != nil {
+			log.Printf("Warning: Could not migrate existing pangolin_router_id: %v", err)
+		}
+
+		log.Println("Successfully added pangolin_router_id column and migrated existing data")
+	}
+
+	// Create index on pangolin_router_id for faster lookups
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_resources_pangolin_router_id ON resources(pangolin_router_id)")
+
+	// Create index on host for faster lookups when matching by host
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_resources_host ON resources(host)")
+
 	return nil
 }
 

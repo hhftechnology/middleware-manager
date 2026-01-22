@@ -73,10 +73,12 @@ func (h *ConfigHandler) UpdateRouterPriority(c *gin.Context) {
 		}
 	}()
 
-	log.Printf("Updating router priority for resource %s to %d", id, input.RouterPriority)
+	log.Printf("Updating router priority for resource %s to %d (marking as manually set)", id, input.RouterPriority)
 
+	// Set router_priority_manual = 1 to indicate this was set by the user
+	// This prevents Pangolin sync from overwriting user-configured priorities
 	result, txErr := tx.Exec(
-		"UPDATE resources SET router_priority = ?, updated_at = ? WHERE id = ?",
+		"UPDATE resources SET router_priority = ?, router_priority_manual = 1, updated_at = ? WHERE id = ?",
 		input.RouterPriority, time.Now(), id,
 	)
 

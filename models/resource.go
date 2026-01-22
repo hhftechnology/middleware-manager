@@ -6,13 +6,14 @@ import (
 
 // Resource represents a Pangolin resource
 type Resource struct {
-	ID             string    `json:"id"`
-	Host           string    `json:"host"`
-	ServiceID      string    `json:"service_id"`
-	OrgID          string    `json:"org_id"`
-	SiteID         string    `json:"site_id"`
-	Status         string    `json:"status"`
-	
+	ID               string    `json:"id"`                 // Internal UUID (stable, never changes)
+	PangolinRouterID string    `json:"pangolin_router_id"` // Pangolin's router ID (can change)
+	Host             string    `json:"host"`
+	ServiceID        string    `json:"service_id"`
+	OrgID            string    `json:"org_id"`
+	SiteID           string    `json:"site_id"`
+	Status           string    `json:"status"`
+
 	// HTTP router configuration
 	Entrypoints    string    `json:"entrypoints"`
 	
@@ -69,6 +70,7 @@ type PangolinRouter struct {
 	Service     string   `json:"service"`
 	EntryPoints []string `json:"entryPoints"`
 	Middlewares []string `json:"middlewares"`
+	Priority    int      `json:"priority,omitempty"`
 	TLS         struct {
 		CertResolver string `json:"certResolver"`
 	} `json:"tls"`

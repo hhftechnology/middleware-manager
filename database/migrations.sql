@@ -9,15 +9,16 @@ CREATE TABLE IF NOT EXISTS middlewares (
 );
 
 -- Resources table stores Pangolin resources
--- Includes all configuration columns including the router_priority column
+-- Uses internal UUID for stable tracking, pangolin_router_id for Pangolin reference
 CREATE TABLE IF NOT EXISTS resources (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY,                    -- Internal UUID (stable, never changes)
+    pangolin_router_id TEXT,                -- Pangolin's router ID (can change)
     host TEXT NOT NULL,
     service_id TEXT NOT NULL,
     org_id TEXT NOT NULL,
     site_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
-    
+
     -- HTTP router configuration
     entrypoints TEXT DEFAULT 'websecure',
     
@@ -42,7 +43,9 @@ CREATE TABLE IF NOT EXISTS resources (
     
     -- Router priority configuration
     router_priority INTEGER DEFAULT 100,
-    
+    -- Flag to indicate if router_priority was manually set by user (1) or from Pangolin (0)
+    router_priority_manual INTEGER DEFAULT 0,
+
     -- Source type for tracking data origin
     source_type TEXT DEFAULT '',
     
