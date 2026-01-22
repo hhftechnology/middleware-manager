@@ -33,7 +33,7 @@ go.work
 
 # Node modules and builds
 ui/node_modules/
-ui/build/
+ui/dist/
 
 # SQLite database
 *.db

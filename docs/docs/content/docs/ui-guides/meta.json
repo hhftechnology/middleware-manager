@@ -1,0 +1,13 @@
+{
+  "title": "UI Guides",
+  "pages": [
+    "dashboard",
+    "resources",
+    "middlewares",
+    "services",
+    "plugin-hub",
+    "security-mtls",
+    "traefik-explorer",
+    "settings"
+  ]
+}

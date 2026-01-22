@@ -8,20 +8,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	apierrors "github.com/hhftechnology/middleware-manager/api/errors"
 )
 
-// APIError represents a standardized error response
-type APIError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
 // ResponseWithError sends a standardized error response
+// This is a convenience wrapper around the errors package
 func ResponseWithError(c *gin.Context, statusCode int, message string) {
-	c.JSON(statusCode, APIError{
-		Code:    statusCode,
-		Message: message,
-	})
+	apierrors.HandleAPIError(c, statusCode, message, nil)
 }
 
 // generateID generates a random 16-character hex string
@@ -34,38 +27,37 @@ func generateID() (string, error) {
 }
 
 // isValidMiddlewareType checks if a middleware type is valid
-// isValidMiddlewareType checks if a middleware type is valid
 func isValidMiddlewareType(typ string) bool {
-    validTypes := map[string]bool{
-        "basicAuth":         true,
-        "digestAuth":        true,
-        "forwardAuth":       true,
-        "ipWhiteList":       true,
-        "ipAllowList":       true,
-        "rateLimit":         true,
-        "headers":           true,
-        "stripPrefix":       true,
-        "stripPrefixRegex":  true,
-        "addPrefix":         true,
-        "redirectRegex":     true,
-        "redirectScheme":    true,
-        "replacePath":       true,
-        "replacePathRegex":  true,
-        "chain":             true,
-        "plugin":            true,
-        "buffering":         true,
-        "circuitBreaker":    true,
-        "compress":          true,
-        "contentType":       true,
-        "errors":            true,
-        "grpcWeb":           true,
-        "inFlightReq":       true,
-        "passTLSClientCert": true,
-        "retry":             true,
-    }
-    
-    return validTypes[typ]
+	validTypes := map[string]bool{
+		"basicAuth":         true,
+		"digestAuth":        true,
+		"forwardAuth":       true,
+		"ipAllowList":       true,
+		"rateLimit":         true,
+		"headers":           true,
+		"stripPrefix":       true,
+		"stripPrefixRegex":  true,
+		"addPrefix":         true,
+		"redirectRegex":     true,
+		"redirectScheme":    true,
+		"replacePath":       true,
+		"replacePathRegex":  true,
+		"chain":             true,
+		"plugin":            true,
+		"buffering":         true,
+		"circuitBreaker":    true,
+		"compress":          true,
+		"contentType":       true,
+		"errors":            true,
+		"grpcWeb":           true,
+		"inFlightReq":       true,
+		"passTLSClientCert": true,
+		"retry":             true,
+	}
+
+	return validTypes[typ]
 }
+
 // sanitizeMiddlewareConfig ensures proper formatting of duration values and strings
 func sanitizeMiddlewareConfig(config map[string]interface{}) {
 	// List of keys that should be treated as duration values

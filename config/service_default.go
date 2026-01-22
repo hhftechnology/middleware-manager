@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -54,7 +53,7 @@ func LoadDefaultServiceTemplates(db *database.DB) error {
 	}
 	
 	// Read the templates file
-	data, err := ioutil.ReadFile(templatesFile)
+	data, err := os.ReadFile(templatesFile)
 	if err != nil {
 		return err
 	}
@@ -92,28 +91,36 @@ func LoadDefaultServiceTemplates(db *database.DB) error {
 			// Service exists, skip
 			continue
 		}
-		
+
+		// Check if user has explicitly deleted this template - don't re-create it
+		var deleted int
+		err = db.QueryRow("SELECT 1 FROM deleted_templates WHERE id = ? AND type = 'service'", service.ID).Scan(&deleted)
+		if err == nil {
+			// User deleted this template, skip
+			continue
+		}
+
 		// Convert config to JSON string
 		configJSON, err := json.Marshal(service.Config)
 		if err != nil {
 			log.Printf("Failed to marshal config for %s: %v", service.Name, err)
 			continue
 		}
-		
+
 		// Insert into database
 		_, err = db.Exec(
 			"INSERT INTO services (id, name, type, config) VALUES (?, ?, ?, ?)",
 			service.ID, service.Name, service.Type, string(configJSON),
 		)
-		
+
 		if err != nil {
 			log.Printf("Failed to insert service %s: %v", service.Name, err)
 			continue
 		}
-		
+
 		log.Printf("Added default service: %s", service.Name)
 	}
-	
+
 	return nil
 }
 
@@ -528,5 +535,5 @@ func SaveTemplateServicesFile(templatesDir string) error {
 	}
 	
 	// Write to file
-	return ioutil.WriteFile(templatesFile, data, 0644)
+	return os.WriteFile(templatesFile, data, 0644)
 }

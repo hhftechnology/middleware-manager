@@ -1,35 +1,56 @@
 package util
 
 import (
-	"strings"
 	"regexp"
+	"strings"
+	"sync"
 )
 
 var (
 	// Regular expression to match cascading auth suffixes
 	authCascadeRegex = regexp.MustCompile(`(-auth)+$`)
-	
+
 	// Regular expression for router suffix with auth patterns
 	routerAuthRegex = regexp.MustCompile(`-router(-auth)*$`)
+
+	// Memoization cache for normalized IDs
+	normalizedIDCache sync.Map
 )
 
 // NormalizeID provides a standard way to normalize any ID across the application
 // It removes provider suffixes and handles special cases like auth cascades
+// Uses memoization for improved performance on repeated calls
 func NormalizeID(id string) string {
+	// Check cache first
+	if cached, ok := normalizedIDCache.Load(id); ok {
+		return cached.(string)
+	}
+
+	// Perform normalization
+	normalized := normalizeIDInternal(id)
+
+	// Store in cache
+	normalizedIDCache.Store(id, normalized)
+
+	return normalized
+}
+
+// normalizeIDInternal performs the actual normalization logic
+func normalizeIDInternal(id string) string {
 	// First, remove any provider suffix (if present)
 	baseName := id
 	if idx := strings.Index(baseName, "@"); idx > 0 {
 		baseName = baseName[:idx]
 	}
-	
+
 	// Handle cascading auth patterns
 	baseName = authCascadeRegex.ReplaceAllString(baseName, "-auth")
-	
+
 	// Special handling for router resources
 	if strings.Contains(baseName, "-router") {
 		// For router-auth, router-auth-auth patterns, normalize to router-auth
 		baseName = routerAuthRegex.ReplaceAllString(baseName, "-router-auth")
-		
+
 		// Handle redirect suffixes in routers
 		if strings.Contains(baseName, "-redirect") {
 			// Normalize router-redirect-auth to router-redirect
@@ -38,8 +59,17 @@ func NormalizeID(id string) string {
 			}
 		}
 	}
-	
+
 	return baseName
+}
+
+// ClearNormalizationCache clears the ID normalization cache
+// Useful for testing or when IDs change
+func ClearNormalizationCache() {
+	normalizedIDCache.Range(func(key, value interface{}) bool {
+		normalizedIDCache.Delete(key)
+		return true
+	})
 }
 
 // GetProviderSuffix extracts the provider suffix from an ID

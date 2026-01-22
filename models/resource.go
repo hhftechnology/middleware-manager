@@ -29,10 +29,19 @@ type Resource struct {
 	
 	// Router priority configuration
 	RouterPriority int       `json:"router_priority"`
-	
+
 	// Source type for tracking data origin
 	SourceType     string    `json:"source_type"`
-	
+
+	// mTLS configuration
+	MTLSEnabled    bool      `json:"mtls_enabled"`
+
+	// TLS Hardening configuration (standalone, disabled when mTLS is active)
+	TLSHardeningEnabled bool `json:"tls_hardening_enabled"`
+
+	// Secure Headers configuration
+	SecureHeadersEnabled bool `json:"secure_headers_enabled"`
+
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -48,8 +57,9 @@ type PangolinResource struct {
 // PangolinTraefikConfig represents the Traefik configuration from Pangolin API
 type PangolinTraefikConfig struct {
 	HTTP struct {
-		Routers  map[string]PangolinRouter  `json:"routers"`
-		Services map[string]PangolinService `json:"services"`
+		Routers     map[string]PangolinRouter         `json:"routers"`
+		Services    map[string]PangolinService        `json:"services"`
+		Middlewares map[string]map[string]interface{} `json:"middlewares"`
 	} `json:"http"`
 }
 

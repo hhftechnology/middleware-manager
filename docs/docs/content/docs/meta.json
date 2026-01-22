@@ -1,0 +1,29 @@
+{
+  "title": "Middleware Manager Docs",
+  "icon": "BookOpen",
+  "pages": [
+    "index",
+    "getting-started/onboarding",
+    "getting-started/deploy-pangolin",
+    "getting-started/deploy-standalone",
+    "configuration/config-overview",
+    "configuration/data-sources",
+    "configuration/templates",
+    "configuration/environment",
+    "ui-guides/dashboard",
+    "ui-guides/resources",
+    "ui-guides/middlewares",
+    "ui-guides/services",
+    "ui-guides/plugin-hub",
+    "ui-guides/security-mtls",
+    "ui-guides/traefik-explorer",
+    "ui-guides/settings",
+    "security/risks",
+    "operations/runbook",
+    "operations/troubleshooting",
+    "operations/backups",
+    "api/overview",
+    "reverting/revert-traefik",
+    "development/dev-guide"
+  ]
+}

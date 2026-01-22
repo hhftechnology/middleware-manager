@@ -1,174 +1,215 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io/ioutil" // TODO: Replace ioutil with io and os packages for Go 1.16+ (Standard library evolution)
+	"io"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath" // For path cleaning
+	"path/filepath"
 	"strings"
-	"time" // Imported for backup file naming
-	"io" // For file copying
-
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3" // For YAML manipulation
+	"github.com/hhftechnology/middleware-manager/models"
+	"github.com/hhftechnology/middleware-manager/services"
+	"gopkg.in/yaml.v3"
 )
-
-// Plugin struct remains the same
-type Plugin struct {
-	DisplayName string `json:"displayName"`
-	Type        string `json:"type"`
-	IconPath    string `json:"iconPath"`
-	Import      string `json:"import"`
-	Summary     string `json:"summary"`
-	Author      string `json:"author,omitempty"`
-	Version     string `json:"version,omitempty"`
-	TestedWith  string `json:"tested_with,omitempty"`
-	Stars       int    `json:"stars,omitempty"`
-	Homepage    string `json:"homepage,omitempty"`
-	Docs        string `json:"docs,omitempty"`
-}
 
 // PluginHandler handles plugin-related requests
 type PluginHandler struct {
 	DB                      *sql.DB
 	TraefikStaticConfigPath string
-	PluginsJSONURL          string
+	ConfigManager           *services.ConfigManager
+	pluginFetcher           *services.PluginFetcher
 }
 
 // NewPluginHandler creates a new plugin handler
-func NewPluginHandler(db *sql.DB, traefikStaticConfigPath string, pluginsJSONURL string) *PluginHandler {
-	return &PluginHandler{
+func NewPluginHandler(db *sql.DB, traefikStaticConfigPath string, configManager *services.ConfigManager) *PluginHandler {
+	handler := &PluginHandler{
 		DB:                      db,
 		TraefikStaticConfigPath: traefikStaticConfigPath,
-		PluginsJSONURL:          pluginsJSONURL,
-	}
-}
-
-// GetPlugins fetches the list of plugins from the configured JSON URL
-func (h *PluginHandler) GetPlugins(c *gin.Context) {
-	if h.PluginsJSONURL == "" {
-		ResponseWithError(c, http.StatusInternalServerError, "Plugins JSON URL is not configured in Middleware Manager.")
-		return
+		ConfigManager:           configManager,
 	}
 
-	resp, err := http.Get(h.PluginsJSONURL)
-	if err != nil {
-		LogError("fetching plugins JSON", err)
-		ResponseWithError(c, http.StatusServiceUnavailable, "Failed to fetch plugins list from external source.")
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := ioutil.ReadAll(resp.Body)
-		LogError("fetching plugins JSON status", fmt.Errorf("received status code %d. Body: %s", resp.StatusCode, string(bodyBytes)))
-		ResponseWithError(c, http.StatusServiceUnavailable, fmt.Sprintf("Failed to fetch plugins list: External source returned status %d.", resp.StatusCode))
-		return
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		LogError("reading plugins JSON response body", err)
-		ResponseWithError(c, http.StatusInternalServerError, "Failed to read plugins list data from the external source.")
-		return
-	}
-
-	var plugins []Plugin
-	if err := json.Unmarshal(body, &plugins); err != nil {
-		LogError("unmarshaling plugins JSON", fmt.Errorf("%w. Body received for unmarshaling: %s", err, string(body)))
-		ResponseWithError(c, http.StatusInternalServerError, "Failed to parse plugins list data from the external source. Ensure it's valid JSON.")
-		return
-	}
-
-	// Check local Traefik config to mark installed plugins
-	installedPlugins, err := h.getLocalInstalledPlugins()
-	if err != nil {
-		// Log the error but don't fail the entire request, frontend can still show plugins
-		LogInfo(fmt.Sprintf("Could not read local Traefik config to determine installed plugins: %v", err))
-	}
-
-	type PluginWithStatus struct {
-		Plugin
-		IsInstalled bool   `json:"isInstalled"`
-		InstalledVersion string `json:"installedVersion,omitempty"`
-	}
-
-	pluginsWithStatus := make([]PluginWithStatus, len(plugins))
-	for i, p := range plugins {
-		status := PluginWithStatus{Plugin: p, IsInstalled: false}
-		if localPlugin, ok := installedPlugins[getPluginKey(p.Import)]; ok {
-			status.IsInstalled = true
-			if version, vOk := localPlugin["version"].(string); vOk {
-				status.InstalledVersion = version
-			}
+	// Initialize plugin fetcher with data source config
+	if configManager != nil {
+		dsConfig, err := configManager.GetActiveDataSourceConfig()
+		if err == nil && dsConfig.Type == models.TraefikAPI {
+			handler.pluginFetcher = services.NewPluginFetcher(dsConfig)
 		}
-		pluginsWithStatus[i] = status
 	}
 
-	c.JSON(http.StatusOK, pluginsWithStatus)
+	return handler
 }
 
-// InstallPluginBody defines the expected request body for installing a plugin
-type InstallPluginBody struct {
-	ModuleName string `json:"moduleName" binding:"required"`
-	Version    string `json:"version,omitempty"`
-}
+// RefreshPluginFetcher refreshes the plugin fetcher with current config
+func (h *PluginHandler) RefreshPluginFetcher() error {
+	if h.ConfigManager == nil {
+		return fmt.Errorf("config manager not initialized")
+	}
 
-// readTraefikStaticConfig is a helper to read and unmarshal the static config
-func (h *PluginHandler) readTraefikStaticConfig(filePath string) (map[string]interface{}, error) {
-	yamlFile, err := ioutil.ReadFile(filePath) // TODO: Replace ioutil with os.ReadFile
+	dsConfig, err := h.ConfigManager.GetActiveDataSourceConfig()
 	if err != nil {
-		return nil, err // Error will be handled by the caller
+		return fmt.Errorf("failed to get data source config: %w", err)
 	}
 
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(yamlFile, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse Traefik static configuration (YAML format error): %w", err)
-	}
-	return config, nil
-}
-
-// writeTraefikStaticConfig is a helper to marshal and write the static config
-func (h *PluginHandler) writeTraefikStaticConfig(filePath string, config map[string]interface{}) error {
-	updatedYaml, err := yaml.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to prepare updated Traefik configuration for saving: %w", err)
-	}
-
-	backupPath := filePath + ".bak." + time.Now().Format("20060102150405")
-	if err := copyFile(filePath, backupPath); err != nil {
-		LogInfo(fmt.Sprintf("Warning: Could not create backup of %s to %s: %v. Proceeding with writing the main file.", filePath, backupPath, err))
+	// Only create fetcher for Traefik API type
+	if dsConfig.Type == models.TraefikAPI {
+		h.pluginFetcher = services.NewPluginFetcher(dsConfig)
 	} else {
-		LogInfo(fmt.Sprintf("Created backup of Traefik static config at %s", backupPath))
+		// For Pangolin, we can also fetch plugins from the config
+		h.pluginFetcher = services.NewPluginFetcher(dsConfig)
 	}
 
-	tempFile := filePath + ".tmp"
-	if err := ioutil.WriteFile(tempFile, updatedYaml, 0644); err != nil { // TODO: Replace ioutil with os.WriteFile
-		_ = os.Remove(tempFile)
-		return fmt.Errorf("failed to write updated Traefik configuration to a temporary file: %w", err)
-	}
-
-	if err := os.Rename(tempFile, filePath); err != nil {
-		return fmt.Errorf("failed to finalize updated Traefik configuration file. Check file permissions and if a temporary file '.tmp' exists: %w", err)
-	}
 	return nil
 }
 
-// getLocalInstalledPlugins reads the Traefik static config and returns a map of installed plugin configurations.
+// GetPlugins fetches plugins from Traefik API
+func (h *PluginHandler) GetPlugins(c *gin.Context) {
+	// Refresh fetcher if needed
+	if h.pluginFetcher == nil {
+		if err := h.RefreshPluginFetcher(); err != nil {
+			log.Printf("Warning: Failed to refresh plugin fetcher: %v", err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	var plugins []models.PluginResponse
+
+	// Try to fetch from Traefik API
+	if h.pluginFetcher != nil {
+		var err error
+		plugins, err = h.pluginFetcher.FetchPlugins(ctx)
+		if err != nil {
+			log.Printf("Error fetching plugins from Traefik API: %v", err)
+			// Fall back to local config check
+			plugins = h.getPluginsFromLocalConfig()
+		}
+	} else {
+		// No fetcher available, check local config
+		plugins = h.getPluginsFromLocalConfig()
+	}
+
+	// Merge with local config to get installation status
+	localPlugins, err := h.getLocalInstalledPlugins()
+	if err != nil {
+		log.Printf("Warning: Could not read local Traefik config: %v", err)
+	} else {
+		plugins = h.mergeWithLocalConfig(plugins, localPlugins)
+	}
+
+	c.JSON(http.StatusOK, plugins)
+}
+
+// getPluginsFromLocalConfig reads plugins from local Traefik static config
+func (h *PluginHandler) getPluginsFromLocalConfig() []models.PluginResponse {
+	plugins := []models.PluginResponse{}
+
+	localPlugins, err := h.getLocalInstalledPlugins()
+	if err != nil {
+		return plugins
+	}
+
+	for key, config := range localPlugins {
+		plugin := models.PluginResponse{
+			Name:        key,
+			Type:        "middleware",
+			Status:      "configured",
+			IsInstalled: true,
+		}
+
+		if moduleName, ok := config["moduleName"].(string); ok {
+			plugin.ModuleName = moduleName
+		} else {
+			plugin.ModuleName = key
+		}
+
+		if version, ok := config["version"].(string); ok {
+			plugin.Version = version
+			plugin.InstalledVersion = version
+		}
+
+		plugins = append(plugins, plugin)
+	}
+
+	return plugins
+}
+
+// mergeWithLocalConfig merges API plugins with local config info
+func (h *PluginHandler) mergeWithLocalConfig(apiPlugins []models.PluginResponse, localPlugins map[string]map[string]interface{}) []models.PluginResponse {
+	// Create a map for quick lookup by name
+	apiPluginMap := make(map[string]*models.PluginResponse)
+	for i := range apiPlugins {
+		apiPluginMap[apiPlugins[i].Name] = &apiPlugins[i]
+	}
+	
+	// Also track which plugins are confirmed enabled (from API with status=enabled)
+	enabledPlugins := make(map[string]bool)
+	for _, plugin := range apiPlugins {
+		if plugin.Status == "enabled" {
+			enabledPlugins[plugin.Name] = true
+		}
+	}
+
+	// Update API plugins with local config info
+	for key, localConfig := range localPlugins {
+		if plugin, exists := apiPluginMap[key]; exists {
+			plugin.IsInstalled = true
+			if version, ok := localConfig["version"].(string); ok {
+				plugin.InstalledVersion = version
+			}
+		} else {
+			// Plugin exists in local config but not directly in API
+			// Check if it might be enabled under a different detection method
+			// If plugin is in enabledPlugins map, it's actually running
+			newPlugin := models.PluginResponse{
+				Name:        key,
+				Type:        "middleware",
+				IsInstalled: true,
+			}
+			
+			// Check if this plugin is actually enabled (might be detected via middleware usage)
+			if enabledPlugins[key] {
+				newPlugin.Status = "enabled"
+			} else {
+				// Plugin is configured but not detected as loaded - needs restart
+				newPlugin.Status = "not_loaded"
+			}
+
+			if moduleName, ok := localConfig["moduleName"].(string); ok {
+				newPlugin.ModuleName = moduleName
+			} else {
+				newPlugin.ModuleName = key
+			}
+
+			if version, ok := localConfig["version"].(string); ok {
+				newPlugin.Version = version
+				newPlugin.InstalledVersion = version
+			}
+
+			apiPlugins = append(apiPlugins, newPlugin)
+		}
+	}
+
+	return apiPlugins
+}
+
+// getLocalInstalledPlugins reads the Traefik static config and returns installed plugins
 func (h *PluginHandler) getLocalInstalledPlugins() (map[string]map[string]interface{}, error) {
 	if h.TraefikStaticConfigPath == "" {
 		return nil, fmt.Errorf("Traefik static configuration path is not set")
 	}
+
 	cleanPath := filepath.Clean(h.TraefikStaticConfigPath)
 
 	config, err := h.readTraefikStaticConfig(cleanPath)
 	if err != nil {
-		if os.IsNotExist(err) { // If file doesn't exist, no plugins are installed
+		if os.IsNotExist(err) {
 			return make(map[string]map[string]interface{}), nil
 		}
 		return nil, fmt.Errorf("reading traefik static config: %w", err)
@@ -184,9 +225,15 @@ func (h *PluginHandler) getLocalInstalledPlugins() (map[string]map[string]interf
 			}
 		}
 	}
+
 	return installedPlugins, nil
 }
 
+// InstallPluginBody defines the expected request body for installing a plugin
+type InstallPluginBody struct {
+	ModuleName string `json:"moduleName" binding:"required"`
+	Version    string `json:"version,omitempty"`
+}
 
 // InstallPlugin adds a plugin to the Traefik static configuration
 func (h *PluginHandler) InstallPlugin(c *gin.Context) {
@@ -197,15 +244,15 @@ func (h *PluginHandler) InstallPlugin(c *gin.Context) {
 	}
 
 	if h.TraefikStaticConfigPath == "" {
-		ResponseWithError(c, http.StatusInternalServerError, "Traefik static configuration file path is not configured in Middleware Manager. Please set it in settings.")
+		ResponseWithError(c, http.StatusInternalServerError, "Traefik static configuration file path is not configured. Please set it in settings.")
 		return
 	}
+
 	cleanPath := filepath.Clean(h.TraefikStaticConfigPath)
 
 	traefikStaticConfig, err := h.readTraefikStaticConfig(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// If file doesn't exist, create a new config structure
 			traefikStaticConfig = make(map[string]interface{})
 			LogInfo(fmt.Sprintf("Traefik static config file not found at %s, will create a new one.", cleanPath))
 		} else {
@@ -241,13 +288,6 @@ func (h *PluginHandler) InstallPlugin(c *gin.Context) {
 		return
 	}
 
-	if _, exists := pluginsConfig[pluginKey]; exists {
-		// LogInfo(fmt.Sprintf("Plugin '%s' (key: '%s') already exists in configuration. Overwriting.", body.ModuleName, pluginKey))
-		// Allow overwrite for update purposes, or return a conflict error:
-		// ResponseWithError(c, http.StatusConflict, fmt.Sprintf("Plugin '%s' is already configured.", body.ModuleName))
-		// return
-	}
-
 	pluginEntry := map[string]interface{}{
 		"moduleName": body.ModuleName,
 	}
@@ -258,12 +298,22 @@ func (h *PluginHandler) InstallPlugin(c *gin.Context) {
 
 	if err := h.writeTraefikStaticConfig(cleanPath, traefikStaticConfig); err != nil {
 		LogError("writing traefik static config", err)
-		ResponseWithError(c, http.StatusInternalServerError, err.Error()) // Provide more specific error from write
+		ResponseWithError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	// Invalidate plugin cache
+	if h.pluginFetcher != nil {
+		h.pluginFetcher.InvalidateCache()
+	}
+
 	log.Printf("Successfully configured plugin '%s' (key: '%s') in %s", body.ModuleName, pluginKey, cleanPath)
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Plugin %s configured in %s. A Traefik restart is required to load the plugin.", body.ModuleName, filepath.Base(cleanPath))})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    fmt.Sprintf("Plugin %s configured. A Traefik restart is required to load the plugin.", body.ModuleName),
+		"pluginKey":  pluginKey,
+		"moduleName": body.ModuleName,
+		"version":    body.Version,
+	})
 }
 
 // RemovePluginBody defines the expected request body for removing a plugin
@@ -283,12 +333,13 @@ func (h *PluginHandler) RemovePlugin(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Traefik static configuration file path is not configured.")
 		return
 	}
+
 	cleanPath := filepath.Clean(h.TraefikStaticConfigPath)
 
 	traefikStaticConfig, err := h.readTraefikStaticConfig(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Traefik static configuration file not found at: %s. Cannot remove plugin.", cleanPath))
+			ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Traefik static configuration file not found at: %s", cleanPath))
 		} else {
 			LogError(fmt.Sprintf("reading traefik static config file %s for removal", cleanPath), err)
 			ResponseWithError(c, http.StatusInternalServerError, "Failed to read Traefik static configuration file.")
@@ -304,11 +355,10 @@ func (h *PluginHandler) RemovePlugin(c *gin.Context) {
 			if _, exists := pluginsConfig[pluginKey]; exists {
 				delete(pluginsConfig, pluginKey)
 				pluginRemoved = true
-				// If pluginsConfig becomes empty, optionally remove it
+
 				if len(pluginsConfig) == 0 {
 					delete(experimentalSection, "plugins")
 				}
-				// If experimentalSection becomes empty, optionally remove it
 				if len(experimentalSection) == 0 {
 					delete(traefikStaticConfig, "experimental")
 				}
@@ -317,7 +367,7 @@ func (h *PluginHandler) RemovePlugin(c *gin.Context) {
 	}
 
 	if !pluginRemoved {
-		LogInfo(fmt.Sprintf("Plugin '%s' (key: '%s') not found in Traefik static configuration. Nothing to remove.", body.ModuleName, pluginKey))
+		LogInfo(fmt.Sprintf("Plugin '%s' (key: '%s') not found in Traefik static configuration.", body.ModuleName, pluginKey))
 		ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Plugin '%s' not found in configuration.", body.ModuleName))
 		return
 	}
@@ -328,12 +378,143 @@ func (h *PluginHandler) RemovePlugin(c *gin.Context) {
 		return
 	}
 
+	// Invalidate plugin cache
+	if h.pluginFetcher != nil {
+		h.pluginFetcher.InvalidateCache()
+	}
+
 	log.Printf("Successfully removed plugin '%s' (key: '%s') from %s", body.ModuleName, pluginKey, cleanPath)
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Plugin %s removed from configuration in %s. A Traefik restart is required for changes to take effect.", body.ModuleName, filepath.Base(cleanPath))})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    fmt.Sprintf("Plugin %s removed. A Traefik restart is required for changes to take effect.", body.ModuleName),
+		"pluginKey":  pluginKey,
+		"moduleName": body.ModuleName,
+	})
 }
 
+// GetTraefikStaticConfigPath returns the current Traefik static config path
+func (h *PluginHandler) GetTraefikStaticConfigPath(c *gin.Context) {
+	if h.TraefikStaticConfigPath == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"path":    "",
+			"message": "Traefik static config path is not currently set.",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"path": h.TraefikStaticConfigPath})
+}
 
-// getPluginKey function remains the same
+// UpdatePathBody defines the request body for updating config path
+type UpdatePathBody struct {
+	Path string `json:"path" binding:"required"`
+}
+
+// UpdateTraefikStaticConfigPath updates the Traefik static config path
+func (h *PluginHandler) UpdateTraefikStaticConfigPath(c *gin.Context) {
+	var body UpdatePathBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
+		return
+	}
+
+	cleanPath := filepath.Clean(body.Path)
+	if cleanPath == "" || cleanPath == "." || cleanPath == "/" || strings.HasSuffix(cleanPath, "/") {
+		ResponseWithError(c, http.StatusBadRequest, "Invalid configuration path provided.")
+		return
+	}
+
+	oldPath := h.TraefikStaticConfigPath
+	h.TraefikStaticConfigPath = cleanPath
+	log.Printf("Traefik static config path updated from '%s' to: '%s'", oldPath, cleanPath)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Traefik static config path updated.",
+		"path":    cleanPath,
+	})
+}
+
+// GetPluginUsage returns usage information for a specific plugin
+func (h *PluginHandler) GetPluginUsage(c *gin.Context) {
+	pluginName := c.Param("name")
+	if pluginName == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Plugin name is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	if h.pluginFetcher == nil {
+		if err := h.RefreshPluginFetcher(); err != nil {
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to initialize plugin fetcher")
+			return
+		}
+	}
+
+	plugins, err := h.pluginFetcher.FetchPlugins(ctx)
+	if err != nil {
+		ResponseWithError(c, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch plugins: %v", err))
+		return
+	}
+
+	for _, plugin := range plugins {
+		if plugin.Name == pluginName {
+			c.JSON(http.StatusOK, gin.H{
+				"name":       plugin.Name,
+				"usageCount": plugin.UsageCount,
+				"usedBy":     plugin.UsedBy,
+				"status":     plugin.Status,
+			})
+			return
+		}
+	}
+
+	ResponseWithError(c, http.StatusNotFound, fmt.Sprintf("Plugin '%s' not found", pluginName))
+}
+
+// Helper functions
+
+func (h *PluginHandler) readTraefikStaticConfig(filePath string) (map[string]interface{}, error) {
+	yamlFile, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(yamlFile, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse Traefik static configuration: %w", err)
+	}
+	return config, nil
+}
+
+func (h *PluginHandler) writeTraefikStaticConfig(filePath string, config map[string]interface{}) error {
+	updatedYaml, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to prepare updated Traefik configuration: %w", err)
+	}
+
+	// Create backup
+	backupPath := filePath + ".bak." + time.Now().Format("20060102150405")
+	if err := copyFile(filePath, backupPath); err != nil {
+		LogInfo(fmt.Sprintf("Warning: Could not create backup: %v", err))
+	} else {
+		LogInfo(fmt.Sprintf("Created backup at %s", backupPath))
+	}
+
+	// Write to temp file first
+	tempFile := filePath + ".tmp"
+	if err := os.WriteFile(tempFile, updatedYaml, 0644); err != nil {
+		_ = os.Remove(tempFile)
+		return fmt.Errorf("failed to write configuration: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tempFile, filePath); err != nil {
+		return fmt.Errorf("failed to finalize configuration: %w", err)
+	}
+
+	return nil
+}
+
 func getPluginKey(moduleName string) string {
 	if moduleName == "" {
 		return ""
@@ -352,44 +533,6 @@ func getPluginKey(moduleName string) string {
 	return strings.ToLower(key)
 }
 
-// GetTraefikStaticConfigPath function remains the same
-func (h *PluginHandler) GetTraefikStaticConfigPath(c *gin.Context) {
-	if h.TraefikStaticConfigPath == "" {
-		c.JSON(http.StatusOK, gin.H{"path": "", "message": "Traefik static config path is not currently set in Middleware Manager's environment configuration."})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"path": h.TraefikStaticConfigPath})
-}
-
-// UpdatePathBody struct remains the same
-type UpdatePathBody struct {
-	Path string `json:"path" binding:"required"`
-}
-
-// UpdateTraefikStaticConfigPath function remains the same (with persistence TODO)
-func (h *PluginHandler) UpdateTraefikStaticConfigPath(c *gin.Context) {
-	var body UpdatePathBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
-		return
-	}
-
-	cleanPath := filepath.Clean(body.Path)
-	if cleanPath == "" || cleanPath == "." || cleanPath == "/" || strings.HasSuffix(cleanPath, "/") {
-		ResponseWithError(c, http.StatusBadRequest, "Invalid configuration path provided. Path cannot be empty, root, relative, or end with a slash.")
-		return
-	}
-	
-	// TODO: PERSISTENCE OF TRAEFIK_STATIC_CONFIG_PATH (Critical for this endpoint to be useful across restarts)
-	oldPath := h.TraefikStaticConfigPath
-	h.TraefikStaticConfigPath = cleanPath // In-memory update
-	log.Printf("Traefik static config path updated in memory for this session from '%s' to: '%s'. Persistence requires saving this to the main application configuration.", oldPath, cleanPath)
-
-	c.JSON(http.StatusOK, gin.H{"message": "Traefik static config path updated in memory for the current session. Ensure this change is made persistent in the application's startup configuration (e.g., environment variable or main config file) to survive restarts.", "path": cleanPath})
-}
-
-
-// copyFile function remains the same
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -397,20 +540,66 @@ func copyFile(src, dst string) error {
 	}
 	defer sourceFile.Close()
 
-	destinationFile, err := os.Create(dst) 
+	destinationFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("could not create destination file %s: %w", dst, err)
 	}
 	defer destinationFile.Close()
 
-	_, err = io.Copy(destinationFile, sourceFile) 
+	_, err = io.Copy(destinationFile, sourceFile)
 	if err != nil {
-		return fmt.Errorf("could not copy content from %s to %s: %w", src, dst, err)
+		return fmt.Errorf("could not copy content: %w", err)
 	}
 	return destinationFile.Sync()
 }
 
-// LogInfo function remains the same
 func LogInfo(message string) {
 	log.Println("INFO:", message)
+}
+
+// GetPluginCatalogue fetches the full plugin catalogue from plugins.traefik.io
+func (h *PluginHandler) GetPluginCatalogue(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+
+	plugins, err := services.FetchPluginCatalogue(ctx)
+	if err != nil {
+		log.Printf("Error fetching plugin catalogue: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch plugin catalogue: %v", err))
+		return
+	}
+
+	// Also get installed plugins to mark them
+	installedPlugins, _ := h.getLocalInstalledPlugins()
+
+	// Mark installed plugins in the catalogue
+	result := make([]map[string]interface{}, len(plugins))
+	for i, plugin := range plugins {
+		entry := map[string]interface{}{
+			"id":            plugin.ID,
+			"name":          plugin.Name,
+			"displayName":   plugin.DisplayName,
+			"author":        plugin.Author,
+			"type":          plugin.Type,
+			"import":        plugin.Import,
+			"summary":       plugin.Summary,
+			"iconUrl":       plugin.IconURL,
+			"bannerUrl":     plugin.BannerURL,
+			"latestVersion": plugin.LatestVersion,
+			"versions":      plugin.Versions,
+			"stars":         plugin.Stars,
+			"snippet":       plugin.Snippet,
+			"isInstalled":   false,
+		}
+
+		// Check if plugin is installed by looking up the module name in local plugins
+		pluginKey := getPluginKey(plugin.Import)
+		if _, installed := installedPlugins[pluginKey]; installed {
+			entry["isInstalled"] = true
+		}
+
+		result[i] = entry
+	}
+
+	c.JSON(http.StatusOK, result)
 }

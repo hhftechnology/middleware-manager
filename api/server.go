@@ -14,43 +14,52 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/hhftechnology/middleware-manager/api/handlers"
+	"github.com/hhftechnology/middleware-manager/database"
 	"github.com/hhftechnology/middleware-manager/services"
 )
 
 // Server represents the API server
 type Server struct {
-	db                *sql.DB
-	router            *gin.Engine
-	srv               *http.Server
-	middlewareHandler *handlers.MiddlewareHandler
-	resourceHandler   *handlers.ResourceHandler
-	configHandler     *handlers.ConfigHandler
-	dataSourceHandler *handlers.DataSourceHandler
-	serviceHandler    *handlers.ServiceHandler
-	pluginHandler     *handlers.PluginHandler // New handler
-	configManager     *services.ConfigManager
-	traefikStaticConfigPath string                 // New
-	pluginsJSONURL          string                 // New
+	db                      *sql.DB
+	router                  *gin.Engine
+	srv                     *http.Server
+	middlewareHandler       *handlers.MiddlewareHandler
+	resourceHandler         *handlers.ResourceHandler
+	configHandler           *handlers.ConfigHandler
+	dataSourceHandler       *handlers.DataSourceHandler
+	serviceHandler          *handlers.ServiceHandler
+	pluginHandler           *handlers.PluginHandler
+	traefikHandler          *handlers.TraefikHandler
+	mtlsHandler             *handlers.MTLSHandler
+	securityHandler         *handlers.SecurityHandler
+	proxyHandler            *handlers.ProxyHandler
+	configManager           *services.ConfigManager
+	configProxy             *services.ConfigProxy
+	traefikStaticConfigPath string
 }
 
 // ServerConfig contains configuration options for the server
 type ServerConfig struct {
-	Port       string
-	UIPath     string
-	Debug      bool
-	AllowCORS  bool
-	CORSOrigin string
+	Port        string
+	UIPath      string
+	Debug       bool
+	AllowCORS   bool
+	CORSOrigin  string
+	PangolinURL string // URL for Pangolin API (for config proxy)
 }
 
 // NewServer creates a new API server
-func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigManager, traefikStaticConfigPath string, pluginsJSONURL string) *Server {
+func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *services.ConfigManager, traefikStaticConfigPath string) *Server {
+	// Get the underlying sql.DB for handlers that need it
+	db := dbWrapper.DB
+
 	// Set gin mode based on debug flag
 	if !config.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	
+
 	router := gin.New()
-	
+
 	// Use recovery and logger middleware
 	router.Use(gin.Recovery())
 	if config.Debug {
@@ -63,20 +72,20 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	// CORS middleware if enabled
 	if config.AllowCORS {
 		corsConfig := cors.DefaultConfig()
-		
+
 		// If a specific origin is provided, use it
 		if config.CORSOrigin != "" {
 			corsConfig.AllowOrigins = []string{config.CORSOrigin}
 		} else {
 			corsConfig.AllowAllOrigins = true
 		}
-		
+
 		corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 		corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 		corsConfig.ExposeHeaders = []string{"Content-Length"}
 		corsConfig.AllowCredentials = true
 		corsConfig.MaxAge = 12 * time.Hour
-		
+
 		router.Use(cors.New(corsConfig))
 	}
 
@@ -86,22 +95,38 @@ func NewServer(db *sql.DB, config ServerConfig, configManager *services.ConfigMa
 	configHandler := handlers.NewConfigHandler(db)
 	dataSourceHandler := handlers.NewDataSourceHandler(configManager)
 	serviceHandler := handlers.NewServiceHandler(db)
-	// Initialize PluginHandler, passing the path to traefik.yml and the plugins.json URL
-	pluginHandler := handlers.NewPluginHandler(db, traefikStaticConfigPath, pluginsJSONURL)
+	// Initialize PluginHandler with ConfigManager for Traefik API access
+	pluginHandler := handlers.NewPluginHandler(db, traefikStaticConfigPath, configManager)
+	// Initialize TraefikHandler for direct Traefik API access
+	traefikHandler := handlers.NewTraefikHandler(db, configManager)
+	// Initialize MTLSHandler for mTLS certificate management
+	mtlsHandler := handlers.NewMTLSHandler(db)
+	mtlsHandler.SetTraefikConfigPath(traefikStaticConfigPath)
+
+	// Initialize SecurityHandler for security features (TLS hardening, secure headers, duplicate detection)
+	securityHandler := handlers.NewSecurityHandler(db, configManager)
+
+	// Initialize ConfigProxy for Traefik config proxying
+	configProxy := services.NewConfigProxy(dbWrapper, configManager, config.PangolinURL)
+	proxyHandler := handlers.NewProxyHandler(configProxy)
 
 	// Setup server with all handlers
 	server := &Server{
-		db:                db,
-		router:            router,
-		middlewareHandler: middlewareHandler,
-		resourceHandler:   resourceHandler,
-		configHandler:     configHandler,
-		dataSourceHandler: dataSourceHandler,
-		serviceHandler:    serviceHandler,
-		pluginHandler:     pluginHandler, // Add to server struct
-		configManager:     configManager,
-		traefikStaticConfigPath: traefikStaticConfigPath, // Store the path
-		pluginsJSONURL:          pluginsJSONURL,          // Store the URL
+		db:                      db,
+		router:                  router,
+		middlewareHandler:       middlewareHandler,
+		resourceHandler:         resourceHandler,
+		configHandler:           configHandler,
+		dataSourceHandler:       dataSourceHandler,
+		serviceHandler:          serviceHandler,
+		pluginHandler:           pluginHandler,
+		traefikHandler:          traefikHandler,
+		mtlsHandler:             mtlsHandler,
+		securityHandler:         securityHandler,
+		proxyHandler:            proxyHandler,
+		configManager:           configManager,
+		configProxy:             configProxy,
+		traefikStaticConfigPath: traefikStaticConfigPath,
 		srv: &http.Server{
 			Addr:              ":" + config.Port,
 			Handler:           router,
@@ -171,6 +196,11 @@ func (s *Server) setupRoutes(uiPath string) {
 			resources.PUT("/:id/config/tcp", s.configHandler.UpdateTCPConfig)
 			resources.PUT("/:id/config/headers", s.configHandler.UpdateHeadersConfig)
 			resources.PUT("/:id/config/priority", s.configHandler.UpdateRouterPriority)
+			resources.PUT("/:id/config/mtls", s.configHandler.UpdateMTLSConfig)
+			resources.PUT("/:id/config/mtlswhitelist", s.configHandler.UpdateMTLSWhitelistConfig)
+			// Per-resource security configuration
+			resources.PUT("/:id/config/tls-hardening", s.securityHandler.UpdateResourceTLSHardening)
+			resources.PUT("/:id/config/secure-headers", s.securityHandler.UpdateResourceSecureHeaders)
 		}
 
 		// Data source routes
@@ -183,23 +213,86 @@ func (s *Server) setupRoutes(uiPath string) {
 			datasource.POST("/:name/test", s.dataSourceHandler.TestDataSourceConnection)
 		}
 
-		// Plugin Hub Routes
+		// Plugin Hub Routes - fetches plugins from Traefik API
 		pluginsGroup := api.Group("/plugins")
-				{
-					pluginsGroup.GET("", s.pluginHandler.GetPlugins) // Endpoint to list plugins
-					pluginsGroup.POST("/install", s.pluginHandler.InstallPlugin) // Endpoint to install a plugin
-					pluginsGroup.DELETE("/remove", s.pluginHandler.RemovePlugin) // New Remove Endpoint
-					pluginsGroup.GET("/configpath", s.pluginHandler.GetTraefikStaticConfigPath) // Endpoint to get current path
-					pluginsGroup.PUT("/configpath", s.pluginHandler.UpdateTraefikStaticConfigPath) // Endpoint to update path
-		
-				}
+		{
+			pluginsGroup.GET("", s.pluginHandler.GetPlugins)
+			pluginsGroup.GET("/catalogue", s.pluginHandler.GetPluginCatalogue) // Fetch from plugins.traefik.io
+			pluginsGroup.GET("/:name/usage", s.pluginHandler.GetPluginUsage)
+			pluginsGroup.POST("/install", s.pluginHandler.InstallPlugin)
+			pluginsGroup.DELETE("/remove", s.pluginHandler.RemovePlugin)
+			pluginsGroup.GET("/configpath", s.pluginHandler.GetTraefikStaticConfigPath)
+			pluginsGroup.PUT("/configpath", s.pluginHandler.UpdateTraefikStaticConfigPath)
+		}
+
+		// Traefik API Routes - direct access to Traefik data
+		// Following Mantrae pattern for comprehensive Traefik API access
+		traefik := api.Group("/traefik")
+		{
+			traefik.GET("/overview", s.traefikHandler.GetOverview)
+			traefik.GET("/version", s.traefikHandler.GetVersion)
+			traefik.GET("/entrypoints", s.traefikHandler.GetEntrypoints)
+			traefik.GET("/routers", s.traefikHandler.GetRouters)
+			traefik.GET("/services", s.traefikHandler.GetServices)
+			traefik.GET("/middlewares", s.traefikHandler.GetMiddlewares)
+			traefik.GET("/data", s.traefikHandler.GetFullData)
+		}
+
+		// mTLS Routes - Certificate Authority and client certificate management
+		mtls := api.Group("/mtls")
+		{
+			mtls.GET("/config", s.mtlsHandler.GetConfig)
+			mtls.PUT("/enable", s.mtlsHandler.EnableMTLS)
+			mtls.PUT("/disable", s.mtlsHandler.DisableMTLS)
+			mtls.POST("/ca", s.mtlsHandler.CreateCA)
+			mtls.DELETE("/ca", s.mtlsHandler.DeleteCA)
+			mtls.PUT("/config/path", s.mtlsHandler.UpdateCertsBasePath)
+			mtls.GET("/clients", s.mtlsHandler.GetClients)
+			mtls.POST("/clients", s.mtlsHandler.CreateClient)
+			mtls.GET("/clients/:id", s.mtlsHandler.GetClient)
+			mtls.GET("/clients/:id/download", s.mtlsHandler.DownloadClientP12)
+			mtls.PUT("/clients/:id/revoke", s.mtlsHandler.RevokeClient)
+			mtls.DELETE("/clients/:id", s.mtlsHandler.DeleteClient)
+			// Plugin detection and middleware configuration
+			mtls.GET("/plugin/check", s.mtlsHandler.CheckPlugin)
+			mtls.GET("/middleware/config", s.mtlsHandler.GetMiddlewareConfig)
+			mtls.PUT("/middleware/config", s.mtlsHandler.UpdateMiddlewareConfig)
+		}
+
+		// Security Routes - TLS hardening, secure headers, duplicate detection
+		security := api.Group("/security")
+		{
+			security.GET("/config", s.securityHandler.GetConfig)
+			security.PUT("/tls-hardening/enable", s.securityHandler.EnableTLSHardening)
+			security.PUT("/tls-hardening/disable", s.securityHandler.DisableTLSHardening)
+			security.PUT("/secure-headers/enable", s.securityHandler.EnableSecureHeaders)
+			security.PUT("/secure-headers/disable", s.securityHandler.DisableSecureHeaders)
+			security.PUT("/secure-headers/config", s.securityHandler.UpdateSecureHeadersConfig)
+			security.POST("/check-duplicates", s.securityHandler.CheckMiddlewareDuplicates)
+		}
+
+		// Config Proxy Routes - Proxies Pangolin config with MW-manager additions
+		// This endpoint is designed for Traefik's HTTP provider
+		api.GET("/traefik-config", s.proxyHandler.GetTraefikConfig)
+		api.POST("/traefik-config/invalidate", s.proxyHandler.InvalidateCache)
+		api.GET("/traefik-config/status", s.proxyHandler.GetProxyStatus)
 	}
 
-	// Serve the React app
+	// API v1 routes - for Traefik HTTP provider compatibility
+	// Traefik expects the endpoint at /api/v1/traefik-config (same as Pangolin)
+	v1 := s.router.Group("/api/v1")
+	{
+		// Config Proxy endpoint - replaces Pangolin's /api/v1/traefik-config
+		v1.GET("/traefik-config", s.proxyHandler.GetTraefikConfig)
+		v1.POST("/traefik-config/invalidate", s.proxyHandler.InvalidateCache)
+		v1.GET("/traefik-config/status", s.proxyHandler.GetProxyStatus)
+	}
+
+	// Serve the React app (Vite build output)
 	uiPathToUse := uiPath
 	if uiPathToUse == "" {
 		// Default UI path
-		uiPathToUse = "/app/ui/build"
+		uiPathToUse = "/app/ui/dist"
 	}
 	
 	// Check if UI path exists and is a directory

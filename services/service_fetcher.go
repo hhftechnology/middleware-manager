@@ -4,12 +4,12 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "log"
     "net/http"
     "strings"
     "time"
-    
+
     "github.com/hhftechnology/middleware-manager/models"
 )
 
@@ -72,7 +72,7 @@ func (f *PangolinServiceFetcher) FetchServices(ctx context.Context) (*models.Ser
     }
     
     // Process response
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
@@ -314,7 +314,7 @@ func (f *TraefikServiceFetcher) fetchHTTPServices(ctx context.Context, baseURL s
     }
     
     // Read and parse response body
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
@@ -393,7 +393,7 @@ func (f *TraefikServiceFetcher) fetchTCPServices(ctx context.Context, baseURL st
     }
     
     // Read and parse response body
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }
@@ -523,7 +523,7 @@ func (f *TraefikServiceFetcher) fetchUDPServices(ctx context.Context, baseURL st
     }
     
     // Read and parse response body
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("failed to read response: %w", err)
     }

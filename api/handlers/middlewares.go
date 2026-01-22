@@ -22,8 +22,32 @@ func NewMiddlewareHandler(db *sql.DB) *MiddlewareHandler {
 }
 
 // GetMiddlewares returns all middleware configurations
+// Supports pagination via ?page=N&page_size=M query parameters
 func (h *MiddlewareHandler) GetMiddlewares(c *gin.Context) {
-	rows, err := h.DB.Query("SELECT id, name, type, config FROM middlewares")
+	usePagination := IsPaginationRequested(c)
+	params := GetPaginationParams(c)
+
+	var total int
+	if usePagination {
+		err := h.DB.QueryRow("SELECT COUNT(*) FROM middlewares").Scan(&total)
+		if err != nil {
+			log.Printf("Error counting middlewares: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Failed to count middlewares")
+			return
+		}
+	}
+
+	query := "SELECT id, name, type, config FROM middlewares ORDER BY name"
+	var rows *sql.Rows
+	var err error
+
+	if usePagination {
+		query += " LIMIT ? OFFSET ?"
+		rows, err = h.DB.Query(query, params.PageSize, params.Offset)
+	} else {
+		rows, err = h.DB.Query(query)
+	}
+
 	if err != nil {
 		log.Printf("Error fetching middlewares: %v", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch middlewares")
@@ -59,7 +83,11 @@ func (h *MiddlewareHandler) GetMiddlewares(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, middlewares)
+	if usePagination {
+		c.JSON(http.StatusOK, NewPaginatedResponse(middlewares, total, params))
+	} else {
+		c.JSON(http.StatusOK, middlewares)
+	}
 }
 
 // CreateMiddleware creates a new middleware configuration
@@ -132,7 +160,10 @@ func (h *MiddlewareHandler) CreateMiddleware(c *gin.Context) {
 	if err == nil {
 		log.Printf("Insert affected %d rows", rowsAffected)
 	}
-	
+
+	// Remove from deleted_templates if it was previously deleted (user is re-creating it)
+	_, _ = tx.Exec("DELETE FROM deleted_templates WHERE id = ? AND type = 'middleware'", id)
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -333,7 +364,7 @@ func (h *MiddlewareHandler) DeleteMiddleware(c *gin.Context) {
 	}()
 	
 	log.Printf("Attempting to delete middleware %s", id)
-	
+
 	result, txErr := tx.Exec("DELETE FROM middlewares WHERE id = ?", id)
 	if txErr != nil {
 		log.Printf("Error deleting middleware: %v", txErr)
@@ -347,14 +378,21 @@ func (h *MiddlewareHandler) DeleteMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	if rowsAffected == 0 {
 		ResponseWithError(c, http.StatusNotFound, "Middleware not found")
 		return
 	}
-	
+
+	// Track deletion to prevent template from being re-created on restart
+	_, txErr = tx.Exec("INSERT OR REPLACE INTO deleted_templates (id, type) VALUES (?, 'middleware')", id)
+	if txErr != nil {
+		log.Printf("Warning: Failed to track deleted template: %v", txErr)
+		// Continue anyway - this is not critical
+	}
+
 	log.Printf("Delete affected %d rows", rowsAffected)
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)

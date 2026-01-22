@@ -1,0 +1,53 @@
+---
+title: Onboarding
+description: First-time setup, picking a data source, and key UI steps.
+---
+
+## Goal
+
+Get Middleware Manager running with a chosen data source (Pangolin or Traefik), confirm connectivity, and complete first UI actions.
+
+<Callout type="warning" title="Misconfiguration risk">
+Routers and middlewares directly affect live traffic. Start in a staging environment, then promote tested changes.
+</Callout>
+
+## Prerequisites
+
+- Traefik v2/v3 reachable from Middleware Manager
+- Docker runtime for the provided containers
+- Mount points for database and Traefik rules (see Deploy pages)
+
+## Middleware-Manager container has to be kept running in order to keep the overide middleware deployed.
+
+## First boot checklist
+
+1) Start the stack (Pangolin or standalone) using the Deploy guides.  
+2) Open the UI: `http://<host>:3456`.  
+3) Run **Settings → Test Connection** for the active data source; switch to Traefik or Pangolin as needed.  
+4) Verify **Dashboard** loads counts for Routers/Services/Middlewares.  
+5) Visit **Resources** and open any resource to confirm router details.  
+6) Enable **Dark mode** if preferred (persists in local storage).
+
+## Initial data-source selection
+
+- **Pangolin**: use when Pangolin already owns the authoritative Traefik config.
+- **Traefik**: use when Traefik is the primary provider and you want direct control.
+
+Switch via **Settings → Active Data Source**. Middleware Manager writes overrides to Traefik’s file provider directory (default `/conf`).
+
+## Safe first changes
+
+- Create a non-critical middleware (e.g., `headers` with `X-Debug: 1`) and assign it to a staging router.
+- Create a small custom service (load balancer with one backend) and assign it to a staging host.
+- Use **Traefik Explorer** to confirm the router/service/middleware exists and is healthy.
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — onboarding walkthrough (dashboard + settings test).
+</div>
+
+## What’s next
+
+- Pick your deployment path:  
+  - <Card title="With Pangolin" href="/docs/getting-started/deploy-pangolin" />  
+  - <Card title="Standalone Traefik" href="/docs/getting-started/deploy-standalone" />  
+- Then review configuration details: <Card title="Configuration" href="/docs/configuration/config-overview" />.

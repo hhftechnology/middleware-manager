@@ -16,9 +16,10 @@ const (
 
 // DataSourceConfig represents configuration for a data source
 type DataSourceConfig struct {
-    Type      DataSourceType `json:"type"`
-    URL       string         `json:"url"`
-    BasicAuth struct {
+    Type          DataSourceType `json:"type"`
+    URL           string         `json:"url"`
+    SkipTLSVerify bool           `json:"skip_tls_verify,omitempty"`
+    BasicAuth     struct {
         Username string `json:"username"`
         Password string `json:"password"`
     } `json:"basic_auth,omitempty"`
@@ -53,6 +54,15 @@ type TraefikTLSConfig struct {
 type TraefikTLSDomain struct {
     Main  string   `json:"main"`
     Sans  []string `json:"sans"`
+}
+
+// TraefikMiddleware represents a middleware from Traefik API or Pangolin config
+type TraefikMiddleware struct {
+    Name     string                 `json:"name"`
+    Type     string                 `json:"type,omitempty"`
+    Provider string                 `json:"provider,omitempty"`
+    Status   string                 `json:"status,omitempty"`
+    Config   map[string]interface{} `json:"config,omitempty"`
 }
 
 // ResourceCollection represents a collection of resources

@@ -58,15 +58,6 @@ middlewares:
         - "X-JWT-Email"
 
   # Security middlewares
-  - id: ip-whitelist
-    name: IP Whitelist
-    type: ipWhiteList
-    config:
-      sourceRange:
-        - "127.0.0.1/32"
-        - "192.168.1.0/24"
-        - "10.0.0.0/8"
-
   - id: ip-allowlist
     name: IP Allow List
     type: ipAllowList
@@ -310,3 +301,47 @@ middlewares:
           - "172.16.0.0/12"
           - "192.168.0.0/16"
           - "100.89.137.0/20"
+  
+  # MCP middlewares
+  - id: mcp-auth
+    name: MCP Auth (Forward Authentication)
+    type: forwardAuth
+    config:
+      address: "http://mcpauth:11000/auth"
+      authResponseHeaders:
+        - "X-Forwarded-User"
+
+  - id: mcp-cors-headers
+    name: MCP CORS Headers
+    type: headers
+    config:
+      accessControlAllowCredentials: true
+      accessControlAllowHeaders:
+        - "Authorization"
+        - "Content-Type"
+        - "mcp-protocol-version"
+      accessControlAllowMethods:
+        - "GET"
+        - "POST"
+        - "OPTIONS"
+      accessControlAllowOriginList:
+        - "*"
+      accessControlMaxAge: 86400
+      addVaryHeader: true
+
+  - id: mcp-redirect-regex
+    name: MCP Redirect Regex
+    type: redirectRegex
+    config:
+      permanent: true
+      regex: "^https://([a-z0-9-]+)\\.(.+)/\\.well-known/(oauth-authorization-server|openid-configuration)(.*)?"
+      replacement: "https://oauth.${2}/.well-known/${3}${4}"
+
+  - id: mcp-security-chain
+    name: MCP Security Chain
+    type: chain
+    config:
+      middlewares:
+        - "mcp-cors-headers@file"
+        - "mcp-redirect-regex@file"
+        - "mcp-auth@file"

@@ -71,9 +71,13 @@ func (h *DataSourceHandler) SetActiveDataSource(c *gin.Context) {
         return
     }
     
+    // Log the data source change
+    log.Printf("Active data source changed to: %s", request.Name)
+    
     c.JSON(http.StatusOK, gin.H{
-        "message": "Data source updated successfully",
-        "name":    request.Name,
+        "message":        "Data source updated successfully",
+        "name":           request.Name,
+        "refresh_needed": true,
     })
 }
 

@@ -51,7 +51,6 @@ var middlewareProcessors = map[string]MiddlewareProcessor{
 	"plugin":          &PluginProcessor{},
 	"rateLimit":       &RateLimitProcessor{},
 	"inFlightReq":     &RateLimitProcessor{},
-	"ipWhiteList":     &IPFilterProcessor{},
 	"ipAllowList":     &IPFilterProcessor{},
 	"buffering":       &BufferingProcessor{}, // ADD THIS LINE
 	// Add more middleware types as needed

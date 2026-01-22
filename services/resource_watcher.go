@@ -6,7 +6,6 @@ import (
     "encoding/json"
     "fmt"
     "io"
-    "io/ioutil"
     "log"
     "net/http"
     "strings"
@@ -34,18 +33,16 @@ func NewResourceWatcher(db *database.DB, configManager *ConfigManager) (*Resourc
     if err != nil {
         return nil, fmt.Errorf("failed to get active data source config: %w", err)
     }
-    
+
     // Create the fetcher
     fetcher, err := NewResourceFetcher(dsConfig)
     if err != nil {
         return nil, fmt.Errorf("failed to create resource fetcher: %w", err)
     }
-    
-    // Create HTTP client with timeout
-    httpClient := &http.Client{
-        Timeout: 10 * time.Second, // Set reasonable timeout
-    }
-    
+
+    // Use the shared HTTP client pool for better connection reuse
+    httpClient := GetHTTPClient()
+
     return &ResourceWatcher{
         db:             db,
         fetcher:        fetcher,
@@ -333,7 +330,7 @@ func (rw *ResourceWatcher) createNewResource(resource models.Resource, normalize
     
     // Use default router priority if not set
     if resource.RouterPriority == 0 {
-        resource.RouterPriority = 200 // Default priority
+        resource.RouterPriority = 100 // Default priority
     }
     
     // Use a transaction for the insert
@@ -442,7 +439,7 @@ func (rw *ResourceWatcher) fetchTraefikConfig(ctx context.Context) (*models.Pang
     }
 
     // Read response body with a limit to prevent memory issues
-    body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
+    body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
     if err != nil {
         return nil, fmt.Errorf("failed to read response body: %w", err)
     }

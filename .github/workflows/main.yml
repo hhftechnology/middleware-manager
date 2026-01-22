@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - dev-docs
     paths:
       - 'Dockerfile'
       - 'go.mod'

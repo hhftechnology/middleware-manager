@@ -12,7 +12,7 @@ all: build
 # Build everything
 build: build-ui build-backend
 
-# Build UI
+# Build UI (Vite + TypeScript)
 build-ui:
 	@echo "Building UI..."
 	cd ui && npm install && npm run build
@@ -31,7 +31,7 @@ run: build
 clean:
 	@echo "Cleaning..."
 	rm -f $(APP_NAME)
-	rm -rf ui/build
+	rm -rf ui/dist
 
 # Build Docker image
 docker-build: build
@@ -56,7 +56,7 @@ dev:
 # Run the UI in development mode
 dev-ui:
 	@echo "Running UI in development mode..."
-	cd ui && npm start
+	cd ui && npm run dev
 
 # Install dependencies
 deps:
@@ -64,3 +64,13 @@ deps:
 	go mod download
 	@echo "Installing UI dependencies..."
 	cd ui && npm install
+
+# Type check the UI
+typecheck:
+	@echo "Type checking UI..."
+	cd ui && npm run typecheck
+
+# Lint the UI
+lint-ui:
+	@echo "Linting UI..."
+	cd ui && npm run lint

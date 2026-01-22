@@ -2,13 +2,12 @@ package config
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"fmt"
 
 	"github.com/hhftechnology/middleware-manager/database"
 	"gopkg.in/yaml.v3"
@@ -56,7 +55,7 @@ func LoadDefaultTemplates(db *database.DB) error {
 	}
 	
 	// Read the templates file
-	data, err := ioutil.ReadFile(templatesFile)
+	data, err := os.ReadFile(templatesFile)
 	if err != nil {
 		return err
 	}
@@ -96,28 +95,36 @@ func LoadDefaultTemplates(db *database.DB) error {
 			// Middleware exists, skip
 			continue
 		}
-		
+
+		// Check if user has explicitly deleted this template - don't re-create it
+		var deleted int
+		err = db.QueryRow("SELECT 1 FROM deleted_templates WHERE id = ? AND type = 'middleware'", middleware.ID).Scan(&deleted)
+		if err == nil {
+			// User deleted this template, skip
+			continue
+		}
+
 		// Convert config to JSON string
 		configJSON, err := json.Marshal(middleware.Config)
 		if err != nil {
 			log.Printf("Failed to marshal config for %s: %v", middleware.Name, err)
 			continue
 		}
-		
+
 		// Insert into database
 		_, err = db.Exec(
 			"INSERT INTO middlewares (id, name, type, config) VALUES (?, ?, ?, ?)",
 			middleware.ID, middleware.Name, middleware.Type, string(configJSON),
 		)
-		
+
 		if err != nil {
 			log.Printf("Failed to insert middleware %s: %v", middleware.Name, err)
 			continue
 		}
-		
+
 		log.Printf("Added default middleware: %s", middleware.Name)
 	}
-	
+
 	return nil
 }
 
@@ -568,18 +575,6 @@ func SaveTemplateFile(templatesDir string) error {
 			
 			// Security middlewares
 			{
-				ID:   "ip-whitelist",
-				Name: "IP Whitelist",
-				Type: "ipWhiteList",
-				Config: map[string]interface{}{
-					"sourceRange": []string{
-						"127.0.0.1/32",
-						"192.168.1.0/24",
-						"10.0.0.0/8",
-					},
-				},
-			},
-			{
 				ID:   "ip-allowlist",
 				Name: "IP Allow List",
 				Type: "ipAllowList",
@@ -928,7 +923,7 @@ func SaveTemplateFile(templatesDir string) error {
 	}
 	
 	// Write to file
-	return ioutil.WriteFile(templatesFile, data, 0644)
+	return os.WriteFile(templatesFile, data, 0644)
 }
 
 // preserveStringsInYamlNode ensures that string values, especially empty strings,

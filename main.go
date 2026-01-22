@@ -18,21 +18,6 @@ import (
 	"github.com/hhftechnology/middleware-manager/services"
 )
 
-// Plugin represents the structure of a plugin in the JSON file
-type Plugin struct {
-	DisplayName string `json:"displayName"`
-	Type        string `json:"type"`
-	IconPath    string `json:"iconPath"`
-	Import      string `json:"import"`
-	Summary     string `json:"summary"`
-	Author      string `json:"author,omitempty"`
-	Version     string `json:"version,omitempty"`
-	TestedWith  string `json:"tested_with,omitempty"`
-	Stars       int    `json:"stars,omitempty"`
-	Homepage    string `json:"homepage,omitempty"`
-	Docs        string `json:"docs,omitempty"`
-}
-
 // Configuration represents the application configuration
 type Configuration struct {
 	PangolinAPIURL          string
@@ -50,7 +35,6 @@ type Configuration struct {
 	CORSOrigin              string
 	ActiveDataSource        string
 	TraefikStaticConfigPath string
-	PluginsJSONURL          string
 }
 
 // DiscoverTraefikAPI attempts to discover the Traefik API by trying common URLs
@@ -82,119 +66,124 @@ func DiscoverTraefikAPI() (string, error) {
 }
 
 func main() {
-    log.Println("Starting Middleware Manager...")
+	log.Println("Starting Middleware Manager...")
 
-    var debug bool
-    flag.BoolVar(&debug, "debug", false, "Enable debug mode")
-    flag.Parse()
+	var debug bool
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+	flag.Parse()
 
-    cfg := loadConfiguration(debug)
+	cfg := loadConfiguration(debug)
 
-    if os.Getenv("TRAEFIK_API_URL") == "" {
-        if discoveredURL, err := DiscoverTraefikAPI(); err == nil && discoveredURL != "" {
-            log.Printf("Auto-discovered Traefik API URL: %s", discoveredURL)
-            cfg.TraefikAPIURL = discoveredURL
-        }
-    }
+	if os.Getenv("TRAEFIK_API_URL") == "" {
+		if discoveredURL, err := DiscoverTraefikAPI(); err == nil && discoveredURL != "" {
+			log.Printf("Auto-discovered Traefik API URL: %s", discoveredURL)
+			cfg.TraefikAPIURL = discoveredURL
+		}
+	}
 
-    db, err := database.InitDB(cfg.DBPath)
-    if err != nil {
-        log.Fatalf("Failed to initialize database: %v", err)
-    }
-    defer db.Close()
+	db, err := database.InitDB(cfg.DBPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
 
-    configDir := cfg.ConfigDir
-    if err := config.EnsureConfigDirectory(configDir); err != nil {
-        log.Printf("Warning: Failed to create config directory: %v", err)
-    }
+	configDir := cfg.ConfigDir
+	if err := config.EnsureConfigDirectory(configDir); err != nil {
+		log.Printf("Warning: Failed to create config directory: %v", err)
+	}
 
-    if err := config.SaveTemplateFile(configDir); err != nil {
-        log.Printf("Warning: Failed to save default middleware templates: %v", err)
-    }
+	if err := config.SaveTemplateFile(configDir); err != nil {
+		log.Printf("Warning: Failed to save default middleware templates: %v", err)
+	}
 
-    if err := config.LoadDefaultTemplates(db); err != nil {
-        log.Printf("Warning: Failed to load default middleware templates: %v", err)
-    }
+	if err := config.LoadDefaultTemplates(db); err != nil {
+		log.Printf("Warning: Failed to load default middleware templates: %v", err)
+	}
 
-    if err := config.SaveTemplateServicesFile(configDir); err != nil {
-        log.Printf("Warning: Failed to save default service templates: %v", err)
-    }
+	if err := config.SaveTemplateServicesFile(configDir); err != nil {
+		log.Printf("Warning: Failed to save default service templates: %v", err)
+	}
 
-    if err := config.LoadDefaultServiceTemplates(db); err != nil {
-        log.Printf("Warning: Failed to load default service templates: %v", err)
-    }
+	if err := config.LoadDefaultServiceTemplates(db); err != nil {
+		log.Printf("Warning: Failed to load default service templates: %v", err)
+	}
 
-    // Run comprehensive database cleanup on startup
-    log.Println("Performing full database cleanup...")
-    cleanupOpts := database.DefaultCleanupOptions()
-    cleanupOpts.LogLevel = 2 // More verbose logging during startup
-    
-    if err := db.PerformFullCleanup(cleanupOpts); err != nil {
-        log.Printf("Warning: Database cleanup encountered issues: %v", err)
-    } else {
-        log.Println("Database cleanup completed successfully")
-    }
+	// Run comprehensive database cleanup on startup
+	log.Println("Performing full database cleanup...")
+	cleanupOpts := database.DefaultCleanupOptions()
+	cleanupOpts.LogLevel = 2 // More verbose logging during startup
 
-    configManager, err := services.NewConfigManager(filepath.Join(configDir, "config.json"))
-    if err != nil {
-        log.Fatalf("Failed to initialize config manager: %v", err)
-    }
+	if err := db.PerformFullCleanup(cleanupOpts); err != nil {
+		log.Printf("Warning: Database cleanup encountered issues: %v", err)
+	} else {
+		log.Println("Database cleanup completed successfully")
+	}
 
-    configManager.EnsureDefaultDataSources(cfg.PangolinAPIURL, cfg.TraefikAPIURL)
+	configManager, err := services.NewConfigManager(filepath.Join(configDir, "config.json"))
+	if err != nil {
+		log.Fatalf("Failed to initialize config manager: %v", err)
+	}
 
-    stopChan := make(chan struct{})
+	configManager.EnsureDefaultDataSources(cfg.PangolinAPIURL, cfg.TraefikAPIURL)
 
-    resourceWatcher, err := services.NewResourceWatcher(db, configManager)
-    if err != nil {
-        log.Fatalf("Failed to create resource watcher: %v", err)
-    }
-    go resourceWatcher.Start(cfg.CheckInterval)
+	stopChan := make(chan struct{})
 
-    configGenerator := services.NewConfigGenerator(db, cfg.TraefikConfDir, configManager)
-    go configGenerator.Start(cfg.GenerateInterval)
+	resourceWatcher, err := services.NewResourceWatcher(db, configManager)
+	if err != nil {
+		log.Fatalf("Failed to create resource watcher: %v", err)
+	}
+	go resourceWatcher.Start(cfg.CheckInterval)
 
-    serverConfig := api.ServerConfig{
-        Port:       cfg.Port,
-        UIPath:     cfg.UIPath,
-        Debug:      cfg.Debug,
-        AllowCORS:  cfg.AllowCORS,
-        CORSOrigin: cfg.CORSOrigin,
-    }
+	configGenerator := services.NewConfigGenerator(db, cfg.TraefikConfDir, configManager)
+	if strings.ToLower(os.Getenv("ENABLE_FILE_CONFIG")) == "true" {
+		go configGenerator.Start(cfg.GenerateInterval)
+	} else {
+		log.Println("File config generator disabled (ENABLE_FILE_CONFIG not true); relying on API proxy only")
+	}
 
-    server := api.NewServer(db.DB, serverConfig, configManager, cfg.TraefikStaticConfigPath, cfg.PluginsJSONURL)
-    go func() {
-        if err := server.Start(); err != nil {
-            log.Printf("Server error: %v", err)
-            close(stopChan)
-        }
-    }()
+	serverConfig := api.ServerConfig{
+		Port:        cfg.Port,
+		UIPath:      cfg.UIPath,
+		Debug:       cfg.Debug,
+		AllowCORS:   cfg.AllowCORS,
+		CORSOrigin:  cfg.CORSOrigin,
+		PangolinURL: cfg.PangolinAPIURL,
+	}
 
-    signalChan := make(chan os.Signal, 1)
-    signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	server := api.NewServer(db, serverConfig, configManager, cfg.TraefikStaticConfigPath)
+	go func() {
+		if err := server.Start(); err != nil {
+			log.Printf("Server error: %v", err)
+			close(stopChan)
+		}
+	}()
 
-    serviceWatcher, err := services.NewServiceWatcher(db, configManager)
-    if err != nil {
-        log.Printf("Warning: Failed to create service watcher: %v", err)
-        serviceWatcher = nil
-    } else {
-        go serviceWatcher.Start(cfg.ServiceInterval)
-    }
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
-    select {
-    case <-signalChan:
-        log.Println("Received shutdown signal")
-    case <-stopChan:
-        log.Println("Received stop signal from server")
-    }
+	serviceWatcher, err := services.NewServiceWatcher(db, configManager)
+	if err != nil {
+		log.Printf("Warning: Failed to create service watcher: %v", err)
+		serviceWatcher = nil
+	} else {
+		go serviceWatcher.Start(cfg.ServiceInterval)
+	}
 
-    log.Println("Shutting down...")
-    resourceWatcher.Stop()
-    if serviceWatcher != nil {
-        serviceWatcher.Stop()
-    }
-    configGenerator.Stop()
-    server.Stop()
-    log.Println("Middleware Manager stopped")
+	select {
+	case <-signalChan:
+		log.Println("Received shutdown signal")
+	case <-stopChan:
+		log.Println("Received stop signal from server")
+	}
+
+	log.Println("Shutting down...")
+	resourceWatcher.Stop()
+	if serviceWatcher != nil {
+		serviceWatcher.Stop()
+	}
+	configGenerator.Stop()
+	server.Stop()
+	log.Println("Middleware Manager stopped")
 }
 
 func loadConfiguration(debug bool) Configuration {
@@ -234,7 +223,7 @@ func loadConfiguration(debug bool) Configuration {
 		TraefikConfDir:          getEnv("TRAEFIK_CONF_DIR", "/conf"),
 		DBPath:                  getEnv("DB_PATH", "/data/middleware.db"),
 		Port:                    getEnv("PORT", "3456"),
-		UIPath:                  getEnv("UI_PATH", "/app/ui/build"),
+		UIPath:                  getEnv("UI_PATH", "/app/ui/dist"),
 		ConfigDir:               getEnv("CONFIG_DIR", "/app/config"),
 		ActiveDataSource:        getEnv("ACTIVE_DATA_SOURCE", "pangolin"),
 		CheckInterval:           checkInterval,
@@ -244,7 +233,6 @@ func loadConfiguration(debug bool) Configuration {
 		AllowCORS:               allowCORS,
 		CORSOrigin:              getEnv("CORS_ORIGIN", ""),
 		TraefikStaticConfigPath: getEnv("TRAEFIK_STATIC_CONFIG_PATH", "/etc/traefik/traefik.yml"),
-		PluginsJSONURL:          getEnv("PLUGINS_JSON_URL", "https://raw.githubusercontent.com/hhftechnology/middleware-manager/traefik-int/plugin/plugins.json"),
 	}
 }
 

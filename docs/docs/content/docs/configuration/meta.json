@@ -1,0 +1,9 @@
+{
+  "title": "Configuration",
+  "pages": [
+    "config-overview",
+    "data-sources",
+    "templates",
+    "environment"
+  ]
+}
