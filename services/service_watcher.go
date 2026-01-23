@@ -111,7 +111,6 @@ func (sw *ServiceWatcher) Stop() {
 
 // checkServices fetches services from the configured data source and updates the database
 func (sw *ServiceWatcher) checkServices() error {
-    log.Println("Checking for services using configured data source...")
     
     // Create a context with timeout for the operation
     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -215,10 +214,10 @@ func (sw *ServiceWatcher) updateOrCreateService(service models.Service) error {
     // Try checking if service exists with different provider suffixes
     var found bool
     err = sw.db.QueryRow(
-        "SELECT 1 FROM services WHERE id LIKE ?", 
+        "SELECT 1 FROM services WHERE id LIKE ?",
         normalizedID+"%",
     ).Scan(&exists)
-    
+
     if err == nil {
         // Found a service with this base name but different suffix
         found = true
@@ -227,13 +226,18 @@ func (sw *ServiceWatcher) updateOrCreateService(service models.Service) error {
             "SELECT id FROM services WHERE id LIKE ? LIMIT 1",
             normalizedID+"%",
         ).Scan(&altID)
-        
+
         if err == nil {
-            log.Printf("Found existing service with different suffix: %s - will update", altID)
-            return sw.updateService(service, altID)
+            // Check if update is actually needed before updating
+            if shouldUpdateService(sw.db, service, altID) {
+                log.Printf("Updating service with different suffix: %s", altID)
+                return sw.updateService(service, altID)
+            }
+            // Service exists and hasn't changed, skip update
+            return nil
         }
     }
-    
+
     if !found {
         // Service doesn't exist with any suffix, create it
         service.ID = normalizedID
@@ -515,9 +519,10 @@ func (sw *ServiceWatcher) updateService(service models.Service, existingID strin
             log.Printf("Error getting rows affected: %v", err)
         } else if rowsAffected == 0 {
             log.Printf("Warning: Update did not affect any rows for service %s", existingID)
+        } else {
+            log.Printf("Updated existing service: %s", existingID)
         }
-        
-        log.Printf("Updated existing service: %s", existingID)
+
         return nil
     })
 }
