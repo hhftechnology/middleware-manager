@@ -572,30 +572,63 @@ export function ResourceDetail() {
           </CardHeader>
           <CardContent className="space-y-4">
             {selectedResource.service_id ? (
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <p className="font-medium">{selectedResource.service_id}</p>
-                  <p className="text-sm text-muted-foreground">Currently assigned</p>
+              <>
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <p className="font-medium">{selectedResource.service_id}</p>
+                    <p className="text-sm text-muted-foreground">Currently assigned</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigateTo('service-form', selectedResource.service_id)}
+                      title="Edit service"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveService}
+                      title="Remove service"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigateTo('service-form', selectedResource.service_id)}
-                    title="Edit service"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRemoveService}
-                    title="Remove service"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
+                {/* Display server targets from the assigned service */}
+                {(() => {
+                  const assignedService = services.find(s => s.id === selectedResource.service_id)
+                  if (!assignedService) return null
+
+                  const config = assignedService.config as Record<string, unknown>
+                  const servers = config?.servers as Array<{ url?: string; address?: string; weight?: number }> | undefined
+
+                  if (!servers || servers.length === 0) return null
+
+                  return (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Server Targets ({servers.length})</Label>
+                      <div className="space-y-1">
+                        {servers.map((server, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-2 bg-muted rounded text-sm font-mono"
+                          >
+                            <span>{server.url || server.address || 'Unknown'}</span>
+                            {server.weight !== undefined && (
+                              <Badge variant="outline" className="ml-2">
+                                weight: {server.weight}
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
             ) : (
               <div className="flex gap-2">
                 <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>

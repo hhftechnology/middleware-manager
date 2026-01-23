@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS services (
     name TEXT NOT NULL,
     type TEXT NOT NULL,
     config TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    source_type TEXT DEFAULT '',  -- 'pangolin', 'traefik', 'manual', etc.
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

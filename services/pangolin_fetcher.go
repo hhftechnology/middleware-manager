@@ -158,11 +158,6 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 	}
 
 	for id, router := range config.HTTP.Routers {
-		// Skip non-SSL routers (usually HTTP redirects)
-		if router.TLS.CertResolver == "" {
-			continue
-		}
-
 		// Extract host from rule
 		host := extractHostFromRule(router.Rule)
 		if host == "" {
@@ -171,6 +166,11 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 
 		// Skip system routers
 		if isPangolinSystemRouter(id) {
+			continue
+		}
+
+		// Skip redirect routers; we track primary websecure routers only
+		if strings.HasSuffix(id, "-redirect") {
 			continue
 		}
 

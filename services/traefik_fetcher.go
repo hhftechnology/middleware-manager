@@ -130,10 +130,10 @@ func (f *TraefikFetcher) fetchResourcesInternal(ctx context.Context) (*models.Re
 
 	// Try common fallback URLs
 	fallbackURLs := []string{
-		"http://host.docker.internal:8080",
+		"http://traefik:8080",
 		"http://localhost:8080",
 		"http://127.0.0.1:8080",
-		"http://traefik:8080",
+		"http://host.docker.internal:8080",
 	}
 
 	// Don't try the same URL twice

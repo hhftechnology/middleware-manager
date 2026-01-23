@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -373,6 +374,124 @@ func (h *ResourceHandler) DeleteResource(c *gin.Context) {
 
 	log.Printf("Successfully deleted resource %s", id)
 	c.JSON(http.StatusOK, gin.H{"message": "Resource deleted successfully"})
+}
+
+// DeleteDisabledResources deletes a list of disabled resources (bulk).
+func (h *ResourceHandler) DeleteDisabledResources(c *gin.Context) {
+	var payload struct {
+		IDs []string `json:"ids" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&payload); err != nil || len(payload.IDs) == 0 {
+		ResponseWithError(c, http.StatusBadRequest, "IDs are required")
+		return
+	}
+
+	// Use a transaction to remove relationships then resources
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	placeholders := strings.Repeat("?,", len(payload.IDs))
+	placeholders = strings.TrimSuffix(placeholders, ",")
+
+	// Ensure all IDs are disabled before deleting
+	query := fmt.Sprintf("SELECT id, status FROM resources WHERE id IN (%s)", placeholders)
+	args := make([]interface{}, len(payload.IDs))
+	for i, v := range payload.IDs {
+		args[i] = v
+	}
+
+	rows, err := tx.Query(query, args...)
+	if err != nil {
+		txErr = err
+		log.Printf("Error checking resource statuses: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+	defer rows.Close()
+
+	allowed := map[string]struct{}{}
+	for rows.Next() {
+		var rid, status string
+		if err := rows.Scan(&rid, &status); err != nil {
+			txErr = err
+			log.Printf("Error scanning resource row: %v", err)
+			ResponseWithError(c, http.StatusInternalServerError, "Database error")
+			return
+		}
+		if status == "disabled" {
+			allowed[rid] = struct{}{}
+		}
+	}
+
+	// Filter IDs to disabled ones
+	disabledIDs := make([]string, 0, len(allowed))
+	for _, id := range payload.IDs {
+		if _, ok := allowed[id]; ok {
+			disabledIDs = append(disabledIDs, id)
+		}
+	}
+
+	if len(disabledIDs) == 0 {
+		ResponseWithError(c, http.StatusBadRequest, "No disabled resources to delete")
+		return
+	}
+
+	// Build placeholders for disabled IDs
+	dPlaceholders := strings.Repeat("?,", len(disabledIDs))
+	dPlaceholders = strings.TrimSuffix(dPlaceholders, ",")
+	dArgs := make([]interface{}, len(disabledIDs))
+	for i, v := range disabledIDs {
+		dArgs[i] = v
+	}
+
+	// Delete resource_middlewares first
+	rmQuery := fmt.Sprintf("DELETE FROM resource_middlewares WHERE resource_id IN (%s)", dPlaceholders)
+	if _, txErr = tx.Exec(rmQuery, dArgs...); txErr != nil {
+		log.Printf("Error deleting resource_middlewares: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to delete resources")
+		return
+	}
+
+	// Delete resources
+	resQuery := fmt.Sprintf("DELETE FROM resources WHERE id IN (%s) AND status = 'disabled'", dPlaceholders)
+	result, txErr := tx.Exec(resQuery, dArgs...)
+	if txErr != nil {
+		log.Printf("Error deleting resources: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to delete resources")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		txErr = err
+		log.Printf("Error getting rows affected: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deleted": rowsAffected,
+		"ids":     disabledIDs,
+	})
 }
 
 // AssignMiddleware assigns a middleware to a resource
