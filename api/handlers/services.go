@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hhftechnology/middleware-manager/models"
+	"github.com/hhftechnology/middleware-manager/util"
 )
 
 // ServiceHandler handles service-related requests
@@ -149,7 +151,7 @@ func (h *ServiceHandler) CreateService(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -158,21 +160,21 @@ func (h *ServiceHandler) CreateService(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
-	log.Printf("Attempting to insert service with ID=%s, name=%s, type=%s", 
+
+	log.Printf("Attempting to insert service with ID=%s, name=%s, type=%s",
 		id, service.Name, service.Type)
-	
+
 	result, txErr := tx.Exec(
 		"INSERT INTO services (id, name, type, config, status, source_type) VALUES (?, ?, ?, ?, 'active', 'manual')",
 		id, service.Name, service.Type, string(configJSON),
 	)
-	
+
 	if txErr != nil {
 		log.Printf("Error inserting service: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to save service")
 		return
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err == nil {
 		log.Printf("Insert affected %d rows", rowsAffected)
@@ -205,11 +207,7 @@ func (h *ServiceHandler) GetService(c *gin.Context) {
 		return
 	}
 
-	var name, typ, configStr, status, sourceType string
-	err := h.DB.QueryRow(
-		"SELECT name, type, config, COALESCE(status, 'active'), COALESCE(source_type, '') FROM services WHERE id = ?",
-		id,
-	).Scan(&name, &typ, &configStr, &status, &sourceType)
+	rec, err := h.findServiceByID(id)
 	if err == sql.ErrNoRows {
 		ResponseWithError(c, http.StatusNotFound, "Service not found")
 		return
@@ -220,18 +218,18 @@ func (h *ServiceHandler) GetService(c *gin.Context) {
 	}
 
 	var config map[string]interface{}
-	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+	if err := json.Unmarshal([]byte(rec.Config), &config); err != nil {
 		log.Printf("Error parsing service config: %v", err)
 		config = map[string]interface{}{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":          id,
-		"name":        name,
-		"type":        typ,
+		"id":          rec.ID,
+		"name":        rec.Name,
+		"type":        rec.Type,
 		"config":      config,
-		"status":      status,
-		"source_type": sourceType,
+		"status":      rec.Status,
+		"source_type": rec.SourceType,
 	})
 }
 
@@ -260,9 +258,7 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 		return
 	}
 
-	// Check if service exists
-	var exists int
-	err := h.DB.QueryRow("SELECT 1 FROM services WHERE id = ?", id).Scan(&exists)
+	rec, err := h.findServiceByID(id)
 	if err == sql.ErrNoRows {
 		ResponseWithError(c, http.StatusNotFound, "Service not found")
 		return
@@ -290,7 +286,7 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -299,21 +295,21 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
-	log.Printf("Attempting to update service %s with name=%s, type=%s", 
+
+	log.Printf("Attempting to update service %s with name=%s, type=%s",
 		id, service.Name, service.Type)
-	
+
 	result, txErr := tx.Exec(
 		"UPDATE services SET name = ?, type = ?, config = ?, updated_at = ? WHERE id = ?",
-		service.Name, service.Type, string(configJSON), time.Now(), id,
+		service.Name, service.Type, string(configJSON), time.Now(), rec.ID,
 	)
-	
+
 	if txErr != nil {
 		log.Printf("Error updating service: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to update service")
 		return
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err == nil {
 		log.Printf("Update affected %d rows", rowsAffected)
@@ -321,7 +317,7 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 			log.Printf("Warning: Update query succeeded but no rows were affected")
 		}
 	}
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -331,18 +327,18 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 
 	// Double-check that the service was updated
 	var updatedName string
-	err = h.DB.QueryRow("SELECT name FROM services WHERE id = ?", id).Scan(&updatedName)
+	err = h.DB.QueryRow("SELECT name FROM services WHERE id = ?", rec.ID).Scan(&updatedName)
 	if err != nil {
 		log.Printf("Warning: Could not verify service update: %v", err)
 	} else if updatedName != service.Name {
 		log.Printf("Warning: Name mismatch after update. Expected '%s', got '%s'", service.Name, updatedName)
 	} else {
-		log.Printf("Successfully verified service update for %s", id)
+		log.Printf("Successfully verified service update for %s", rec.ID)
 	}
 
 	// Return the updated service
 	c.JSON(http.StatusOK, gin.H{
-		"id":     id,
+		"id":     rec.ID,
 		"name":   service.Name,
 		"type":   service.Type,
 		"config": service.Config,
@@ -357,9 +353,19 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 		return
 	}
 
+	rec, err := h.findServiceByID(id)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Service not found")
+		return
+	} else if err != nil {
+		log.Printf("Error fetching service for delete: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
 	// Check for dependencies first - resources using this service
 	var count int
-	err := h.DB.QueryRow("SELECT COUNT(*) FROM resource_services WHERE service_id = ?", id).Scan(&count)
+	err = h.DB.QueryRow("SELECT COUNT(*) FROM resource_services WHERE service_id = ?", rec.ID).Scan(&count)
 	if err != nil {
 		log.Printf("Error checking service dependencies: %v", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
@@ -378,7 +384,7 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -387,10 +393,10 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
-	log.Printf("Attempting to delete service %s", id)
 
-	result, txErr := tx.Exec("DELETE FROM services WHERE id = ?", id)
+	log.Printf("Attempting to delete service %s", rec.ID)
+
+	result, txErr := tx.Exec("DELETE FROM services WHERE id = ?", rec.ID)
 	if txErr != nil {
 		log.Printf("Error deleting service: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to delete service")
@@ -410,7 +416,7 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 	}
 
 	// Track deletion to prevent template from being re-created on restart
-	_, txErr = tx.Exec("INSERT OR REPLACE INTO deleted_templates (id, type) VALUES (?, 'service')", id)
+	_, txErr = tx.Exec("INSERT OR REPLACE INTO deleted_templates (id, type) VALUES (?, 'service')", rec.ID)
 	if txErr != nil {
 		log.Printf("Warning: Failed to track deleted template: %v", txErr)
 		// Continue anyway - this is not critical
@@ -425,7 +431,7 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Successfully deleted service %s", id)
+	log.Printf("Successfully deleted service %s", rec.ID)
 	c.JSON(http.StatusOK, gin.H{"message": "Service deleted successfully"})
 }
 
@@ -458,15 +464,15 @@ func (h *ServiceHandler) AssignServiceToResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// Don't allow attaching services to disabled resources
 	if status == "disabled" {
 		ResponseWithError(c, http.StatusBadRequest, "Cannot assign service to a disabled resource")
 		return
 	}
 
-	// Verify service exists
-	err = h.DB.QueryRow("SELECT 1 FROM services WHERE id = ?", input.ServiceID).Scan(&exists)
+	// Verify service exists (supports normalized IDs / provider suffixes)
+	serviceRec, err := h.findServiceByID(input.ServiceID)
 	if err == sql.ErrNoRows {
 		ResponseWithError(c, http.StatusNotFound, "Service not found")
 		return
@@ -483,7 +489,7 @@ func (h *ServiceHandler) AssignServiceToResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -492,7 +498,7 @@ func (h *ServiceHandler) AssignServiceToResource(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
+
 	// First delete any existing relationship
 	log.Printf("Removing existing service relationship: resource=%s", resourceID)
 	_, txErr = tx.Exec(
@@ -504,26 +510,26 @@ func (h *ServiceHandler) AssignServiceToResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// Then insert the new relationship
 	log.Printf("Creating new service relationship: resource=%s, service=%s",
-		resourceID, input.ServiceID)
+		resourceID, serviceRec.ID)
 	result, txErr := tx.Exec(
 		"INSERT INTO resource_services (resource_id, service_id) VALUES (?, ?)",
-		resourceID, input.ServiceID,
+		resourceID, serviceRec.ID,
 	)
-	
+
 	if txErr != nil {
 		log.Printf("Error assigning service: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to assign service")
 		return
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err == nil {
 		log.Printf("Insert affected %d rows", rowsAffected)
 	}
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -532,10 +538,10 @@ func (h *ServiceHandler) AssignServiceToResource(c *gin.Context) {
 	}
 
 	log.Printf("Successfully assigned service %s to resource %s",
-		input.ServiceID, resourceID)
+		serviceRec.ID, resourceID)
 	c.JSON(http.StatusOK, gin.H{
 		"resource_id": resourceID,
-		"service_id":  input.ServiceID,
+		"service_id":  serviceRec.ID,
 	})
 }
 
@@ -556,7 +562,7 @@ func (h *ServiceHandler) RemoveServiceFromResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
@@ -565,12 +571,12 @@ func (h *ServiceHandler) RemoveServiceFromResource(c *gin.Context) {
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
+
 	result, txErr := tx.Exec(
 		"DELETE FROM resource_services WHERE resource_id = ?",
 		resourceID,
 	)
-	
+
 	if txErr != nil {
 		log.Printf("Error removing service: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to remove service")
@@ -583,15 +589,15 @@ func (h *ServiceHandler) RemoveServiceFromResource(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	if rowsAffected == 0 {
 		log.Printf("No service assignment found for resource %s", resourceID)
 		ResponseWithError(c, http.StatusNotFound, "Resource service relationship not found")
 		return
 	}
-	
+
 	log.Printf("Delete affected %d rows", rowsAffected)
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -649,4 +655,50 @@ func (h *ServiceHandler) GetResourceService(c *gin.Context) {
 			"config": config,
 		},
 	})
+}
+
+type serviceRecord struct {
+	ID         string
+	Name       string
+	Type       string
+	Config     string
+	Status     string
+	SourceType string
+}
+
+// findServiceByID resolves a service by exact ID, normalized ID, or provider-suffixed variants.
+func (h *ServiceHandler) findServiceByID(id string) (serviceRecord, error) {
+	candidates := []string{id}
+	normalized := util.NormalizeID(id)
+	if normalized != id {
+		candidates = append(candidates, normalized)
+	}
+	if !strings.Contains(normalized, "@") {
+		candidates = append(candidates, normalized+"@%")
+	}
+
+	var rec serviceRecord
+	for _, candidate := range candidates {
+		var err error
+		if strings.Contains(candidate, "%") {
+			err = h.DB.QueryRow(
+				"SELECT id, name, type, config, COALESCE(status, 'active'), COALESCE(source_type, '') FROM services WHERE id LIKE ? LIMIT 1",
+				candidate,
+			).Scan(&rec.ID, &rec.Name, &rec.Type, &rec.Config, &rec.Status, &rec.SourceType)
+		} else {
+			err = h.DB.QueryRow(
+				"SELECT id, name, type, config, COALESCE(status, 'active'), COALESCE(source_type, '') FROM services WHERE id = ?",
+				candidate,
+			).Scan(&rec.ID, &rec.Name, &rec.Type, &rec.Config, &rec.Status, &rec.SourceType)
+		}
+
+		if err == nil {
+			return rec, nil
+		}
+		if err != sql.ErrNoRows {
+			return serviceRecord{}, err
+		}
+	}
+
+	return serviceRecord{}, sql.ErrNoRows
 }

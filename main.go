@@ -218,8 +218,9 @@ func loadConfiguration(debug bool) Configuration {
 	}
 
 	return Configuration{
-		PangolinAPIURL:          getEnv("PANGOLIN_API_URL", "http://pangolin:3001/api/v1"),
-		TraefikAPIURL:           getEnv("TRAEFIK_API_URL", "http://host.docker.internal:8080"),
+		PangolinAPIURL: getEnv("PANGOLIN_API_URL", "http://pangolin:3001/api/v1"),
+		// Default to in-network Traefik service; host.docker.internal often fails inside containers
+		TraefikAPIURL:           getEnv("TRAEFIK_API_URL", "http://traefik:8080"),
 		TraefikConfDir:          getEnv("TRAEFIK_CONF_DIR", "/conf"),
 		DBPath:                  getEnv("DB_PATH", "/data/middleware.db"),
 		Port:                    getEnv("PORT", "3456"),
