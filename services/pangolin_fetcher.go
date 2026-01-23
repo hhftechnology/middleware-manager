@@ -169,6 +169,11 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 			continue
 		}
 
+		// Skip redirect routers; we track primary websecure routers only
+		if strings.HasSuffix(id, "-redirect") {
+			continue
+		}
+
 		// Use Pangolin's priority if provided, otherwise default to 100
 		priority := router.Priority
 		if priority == 0 {
