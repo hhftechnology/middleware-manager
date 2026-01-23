@@ -122,9 +122,10 @@ func (sw *ServiceWatcher) checkServices() error {
         return fmt.Errorf("failed to fetch services: %w", err)
     }
 
-    // Get all existing services from the database
+    // Get all existing active Pangolin-synced services from the database
+    // We only track Pangolin-synced services for cleanup (source_type = 'pangolin')
     var existingServices []string
-    rows, err := sw.db.Query("SELECT id FROM services")
+    rows, err := sw.db.Query("SELECT id FROM services WHERE status = 'active' AND source_type = 'pangolin'")
     if err != nil {
         return fmt.Errorf("failed to query existing services: %w", err)
     }
@@ -167,19 +168,22 @@ func (sw *ServiceWatcher) checkServices() error {
         foundServices[normalizedID] = true
     }
     
-    // Optionally, mark services as "inactive" if they no longer exist in the data source
-    // This is commented out by default to avoid deleting user-created services
-    /*
+    // Mark Pangolin-synced services as disabled if they no longer exist in the data source
+    // Only affects services with source_type = 'pangolin' (already filtered in the query above)
     for _, serviceID := range existingServices {
         normalizedID := util.NormalizeID(serviceID)
         if !foundServices[normalizedID] {
-            log.Printf("Service %s no longer exists in data source, consider marking as inactive", serviceID)
-            // Optional: You could update a status field if you add one to the services table
-            // _, err := sw.db.Exec("UPDATE services SET status = 'inactive' WHERE id = ?", serviceID)
+            log.Printf("Service %s no longer exists in Pangolin, marking as disabled", serviceID)
+            _, err := sw.db.Exec(
+                "UPDATE services SET status = 'disabled', updated_at = ? WHERE id = ?",
+                time.Now(), serviceID,
+            )
+            if err != nil {
+                log.Printf("Error marking service as disabled: %v", err)
+            }
         }
     }
-    */
-    
+
     return nil
 }
 
@@ -449,9 +453,9 @@ func (sw *ServiceWatcher) createService(service models.Service) error {
             return fmt.Errorf("error checking service existence in transaction: %w", err)
         }
         
-        // Insert the service
+        // Insert the service with source_type for tracking origin
         _, err = tx.Exec(
-            "INSERT INTO services (id, name, type, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO services (id, name, type, config, status, source_type, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', 'pangolin', ?, ?)",
             service.ID, service.Name, service.Type, string(configJSON), time.Now(), time.Now(),
         )
         
@@ -504,9 +508,9 @@ func (sw *ServiceWatcher) updateService(service models.Service, existingID strin
     
     // Update the service using a transaction
     return sw.db.WithTransaction(func(tx *sql.Tx) error {
-        // Update the service using the existing ID
+        // Update the service using the existing ID, ensure status is active and source_type is pangolin
         result, err := tx.Exec(
-            "UPDATE services SET name = ?, type = ?, config = ?, updated_at = ? WHERE id = ?",
+            "UPDATE services SET name = ?, type = ?, config = ?, status = 'active', source_type = 'pangolin', updated_at = ? WHERE id = ?",
             service.Name, service.Type, string(configJSON), time.Now(), existingID,
         )
         

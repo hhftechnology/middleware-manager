@@ -24,13 +24,24 @@ func NewServiceHandler(db *sql.DB) *ServiceHandler {
 
 // GetServices returns all service configurations
 // Supports pagination via ?page=N&page_size=M query parameters
+// By default only returns active services; use ?status=all to include disabled
 func (h *ServiceHandler) GetServices(c *gin.Context) {
 	usePagination := IsPaginationRequested(c)
 	params := GetPaginationParams(c)
 
+	// Filter by status - default to active only
+	statusFilter := c.DefaultQuery("status", "active")
+	statusCondition := "WHERE status = 'active'"
+	if statusFilter == "all" {
+		statusCondition = ""
+	} else if statusFilter == "disabled" {
+		statusCondition = "WHERE status = 'disabled'"
+	}
+
 	var total int
 	if usePagination {
-		err := h.DB.QueryRow("SELECT COUNT(*) FROM services").Scan(&total)
+		countQuery := "SELECT COUNT(*) FROM services " + statusCondition
+		err := h.DB.QueryRow(countQuery).Scan(&total)
 		if err != nil {
 			log.Printf("Error counting services: %v", err)
 			ResponseWithError(c, http.StatusInternalServerError, "Failed to count services")
@@ -38,7 +49,7 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 		}
 	}
 
-	query := "SELECT id, name, type, config FROM services ORDER BY name"
+	query := "SELECT id, name, type, config, COALESCE(status, 'active') as status, COALESCE(source_type, '') as source_type FROM services " + statusCondition + " ORDER BY name"
 	var rows *sql.Rows
 	var err error
 
@@ -58,8 +69,8 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 
 	services := []map[string]interface{}{}
 	for rows.Next() {
-		var id, name, typ, configStr string
-		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
+		var id, name, typ, configStr, status, sourceType string
+		if err := rows.Scan(&id, &name, &typ, &configStr, &status, &sourceType); err != nil {
 			log.Printf("Error scanning service row: %v", err)
 			continue
 		}
@@ -71,10 +82,12 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 		}
 
 		services = append(services, map[string]interface{}{
-			"id":     id,
-			"name":   name,
-			"type":   typ,
-			"config": config,
+			"id":          id,
+			"name":        name,
+			"type":        typ,
+			"config":      config,
+			"status":      status,
+			"source_type": sourceType,
 		})
 	}
 
@@ -150,7 +163,7 @@ func (h *ServiceHandler) CreateService(c *gin.Context) {
 		id, service.Name, service.Type)
 	
 	result, txErr := tx.Exec(
-		"INSERT INTO services (id, name, type, config) VALUES (?, ?, ?, ?)",
+		"INSERT INTO services (id, name, type, config, status, source_type) VALUES (?, ?, ?, ?, 'active', 'manual')",
 		id, service.Name, service.Type, string(configJSON),
 	)
 	
@@ -192,8 +205,11 @@ func (h *ServiceHandler) GetService(c *gin.Context) {
 		return
 	}
 
-	var name, typ, configStr string
-	err := h.DB.QueryRow("SELECT name, type, config FROM services WHERE id = ?", id).Scan(&name, &typ, &configStr)
+	var name, typ, configStr, status, sourceType string
+	err := h.DB.QueryRow(
+		"SELECT name, type, config, COALESCE(status, 'active'), COALESCE(source_type, '') FROM services WHERE id = ?",
+		id,
+	).Scan(&name, &typ, &configStr, &status, &sourceType)
 	if err == sql.ErrNoRows {
 		ResponseWithError(c, http.StatusNotFound, "Service not found")
 		return
@@ -210,10 +226,12 @@ func (h *ServiceHandler) GetService(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":     id,
-		"name":   name,
-		"type":   typ,
-		"config": config,
+		"id":          id,
+		"name":        name,
+		"type":        typ,
+		"config":      config,
+		"status":      status,
+		"source_type": sourceType,
 	})
 }
 

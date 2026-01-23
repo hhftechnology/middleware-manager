@@ -578,6 +578,45 @@ func runPostMigrationUpdates(db *sql.DB) error {
 	// Create index on host for faster lookups when matching by host
 	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_resources_host ON resources(host)")
 
+	// Check for status column in services table (for tracking sync state)
+	var hasServicesStatusColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('services')
+		WHERE name = 'status'
+	`).Scan(&hasServicesStatusColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if services.status column exists: %w", err)
+	}
+	if !hasServicesStatusColumn {
+		log.Println("Adding status column to services table")
+		if _, err := db.Exec("ALTER TABLE services ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"); err != nil {
+			return fmt.Errorf("failed to add status column to services: %w", err)
+		}
+		log.Println("Successfully added status column to services table")
+	}
+
+	// Check for source_type column in services table (for tracking sync origin)
+	var hasServicesSourceTypeColumn bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('services')
+		WHERE name = 'source_type'
+	`).Scan(&hasServicesSourceTypeColumn)
+	if err != nil {
+		return fmt.Errorf("failed to check if services.source_type column exists: %w", err)
+	}
+	if !hasServicesSourceTypeColumn {
+		log.Println("Adding source_type column to services table")
+		if _, err := db.Exec("ALTER TABLE services ADD COLUMN source_type TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add source_type column to services: %w", err)
+		}
+		log.Println("Successfully added source_type column to services table")
+	}
+
+	// Create index on services status for faster filtering
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_services_status ON services(status)")
+
 	return nil
 }
 
