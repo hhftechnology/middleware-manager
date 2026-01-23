@@ -149,7 +149,7 @@ func (s *Server) setupRoutes(uiPath string) {
 	s.router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	
+
 	// API routes
 	api := s.router.Group("/api")
 	{
@@ -179,17 +179,18 @@ func (s *Server) setupRoutes(uiPath string) {
 			resources.GET("", s.resourceHandler.GetResources)
 			resources.GET("/:id", s.resourceHandler.GetResource)
 			resources.DELETE("/:id", s.resourceHandler.DeleteResource)
-			
+			resources.POST("/bulk-delete-disabled", s.resourceHandler.DeleteDisabledResources)
+
 			// Middleware assignments
 			resources.POST("/:id/middlewares", s.resourceHandler.AssignMiddleware)
 			resources.POST("/:id/middlewares/bulk", s.resourceHandler.AssignMultipleMiddlewares)
 			resources.DELETE("/:id/middlewares/:middlewareId", s.resourceHandler.RemoveMiddleware)
-			
+
 			// Service assignments
 			resources.GET("/:id/service", s.serviceHandler.GetResourceService)
 			resources.POST("/:id/service", s.serviceHandler.AssignServiceToResource)
 			resources.DELETE("/:id/service", s.serviceHandler.RemoveServiceFromResource)
-			
+
 			// Router configuration routes
 			resources.PUT("/:id/config/http", s.configHandler.UpdateHTTPConfig)
 			resources.PUT("/:id/config/tls", s.configHandler.UpdateTLSConfig)
@@ -294,11 +295,11 @@ func (s *Server) setupRoutes(uiPath string) {
 		// Default UI path
 		uiPathToUse = "/app/ui/dist"
 	}
-	
+
 	// Check if UI path exists and is a directory
 	if stat, err := os.Stat(uiPathToUse); err == nil && stat.IsDir() {
 		s.router.Use(static.Serve("/", static.LocalFile(uiPathToUse, false)))
-		
+
 		// Handle all other routes by serving the index.html file
 		s.router.NoRoute(func(c *gin.Context) {
 			// API routes should 404 when not found
@@ -306,7 +307,7 @@ func (s *Server) setupRoutes(uiPath string) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "API endpoint not found"})
 				return
 			}
-			
+
 			// Non-API routes serve the SPA
 			c.File(uiPathToUse + "/index.html")
 		})
@@ -363,7 +364,7 @@ func (s *Server) Start() error {
 func (s *Server) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	
+
 	if err := s.srv.Shutdown(ctx); err != nil {
 		log.Printf("Failed to gracefully shutdown server: %v", err)
 		if err := s.srv.Close(); err != nil {
@@ -379,10 +380,10 @@ func minimalLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Start timer
 		start := time.Now()
-		
+
 		// Process request
 		c.Next()
-		
+
 		// Log only when path is not being probed by health checkers
 		if c.Request.URL.Path != "/health" && c.Request.URL.Path != "/ping" {
 			// Log only requests with errors or non-standard responses

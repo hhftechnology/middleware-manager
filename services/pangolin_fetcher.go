@@ -182,7 +182,6 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 			Status:         "active",
 			SourceType:     string(models.PangolinAPI),
 			Entrypoints:    strings.Join(router.EntryPoints, ","),
-			TLSDomains:     models.JoinTLSDomains(router.TLS.Domains),
 			RouterPriority: priority,
 		}
 

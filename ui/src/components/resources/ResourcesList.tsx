@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useResourceStore } from '@/stores/resourceStore'
 import { useAppStore } from '@/stores/appStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,7 +17,7 @@ import { PageLoader } from '@/components/common/LoadingSpinner'
 import { ErrorMessage } from '@/components/common/ErrorMessage'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ConfirmationModal } from '@/components/common/ConfirmationModal'
-import { Search, ExternalLink, Trash2, Globe, RefreshCw } from 'lucide-react'
+import { Search, ExternalLink, Trash2, Globe, RefreshCw, CheckSquare, Square } from 'lucide-react'
 import { truncate } from '@/lib/utils'
 import type { Resource } from '@/types'
 
@@ -29,12 +29,15 @@ export function ResourcesList() {
     error,
     fetchResources,
     deleteResource,
+    deleteDisabledResources,
     clearError,
   } = useResourceStore()
 
   const [searchTerm, setSearchTerm] = useState('')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null)
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [bulkModalOpen, setBulkModalOpen] = useState(false)
 
   useEffect(() => {
     fetchResources()
@@ -50,6 +53,39 @@ export function ResourcesList() {
       await deleteResource(resourceToDelete.id)
       setResourceToDelete(null)
     }
+  }
+
+  const disabledResources = useMemo(
+    () => filteredResources.filter((r) => r.status === 'disabled'),
+    [filteredResources]
+  )
+
+  const selectedIds = Object.entries(selected)
+    .filter(([, checked]) => checked)
+    .map(([id]) => id)
+
+  const toggleSelect = (resource: Resource) => {
+    if (resource.status !== 'disabled') return
+    setSelected((prev) => ({ ...prev, [resource.id]: !prev[resource.id] }))
+  }
+
+  const toggleSelectAll = () => {
+    const allSelected = selectedIds.length === disabledResources.length && disabledResources.length > 0
+    if (allSelected) {
+      setSelected({})
+    } else {
+      const next: Record<string, boolean> = {}
+      disabledResources.forEach((r) => {
+        next[r.id] = true
+      })
+      setSelected(next)
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    await deleteDisabledResources(selectedIds)
+    setSelected({})
   }
 
   const openDeleteModal = (resource: Resource) => {
@@ -71,10 +107,20 @@ export function ResourcesList() {
             Manage your Traefik routes and configurations
           </p>
         </div>
-        <Button variant="outline" onClick={() => fetchResources()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant={selectedIds.length > 0 ? 'destructive' : 'outline'}
+            disabled={selectedIds.length === 0}
+            onClick={() => setBulkModalOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete disabled ({selectedIds.length})
+          </Button>
+          <Button variant="outline" onClick={() => fetchResources()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -120,6 +166,21 @@ export function ResourcesList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleSelectAll}
+                      disabled={disabledResources.length === 0}
+                      aria-label="Select all disabled"
+                    >
+                      {selectedIds.length === disabledResources.length && disabledResources.length > 0 ? (
+                        <CheckSquare className="h-4 w-4" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableHead>
                   <TableHead>Host</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Source</TableHead>
@@ -136,6 +197,21 @@ export function ResourcesList() {
 
                   return (
                     <TableRow key={resource.id}>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => toggleSelect(resource)}
+                          disabled={resource.status !== 'disabled'}
+                          aria-label="Select resource"
+                        >
+                          {selected[resource.id] ? (
+                            <CheckSquare className="h-4 w-4" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {truncate(resource.host, 35)}
@@ -202,6 +278,17 @@ export function ResourcesList() {
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDelete}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        open={bulkModalOpen}
+        onOpenChange={setBulkModalOpen}
+        title="Delete Disabled Resources"
+        description={`Delete ${selectedIds.length} disabled resource(s)? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleBulkDelete}
       />
     </div>
   )
