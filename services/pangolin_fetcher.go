@@ -158,11 +158,6 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 	}
 
 	for id, router := range config.HTTP.Routers {
-		// Skip non-SSL routers (usually HTTP redirects)
-		if router.TLS.CertResolver == "" {
-			continue
-		}
-
 		// Extract host from rule
 		host := extractHostFromRule(router.Rule)
 		if host == "" {
@@ -187,6 +182,7 @@ func (f *PangolinFetcher) convertConfigToResources(config *models.PangolinTraefi
 			Status:         "active",
 			SourceType:     string(models.PangolinAPI),
 			Entrypoints:    strings.Join(router.EntryPoints, ","),
+			TLSDomains:     models.JoinTLSDomains(router.TLS.Domains),
 			RouterPriority: priority,
 		}
 
