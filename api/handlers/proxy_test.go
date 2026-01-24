@@ -14,7 +14,7 @@ func newTestConfigProxy(t *testing.T) *services.ConfigProxy {
 	t.Helper()
 	db := testutil.NewTempDB(t)
 	cm := testutil.NewTestConfigManager(t)
-	return services.NewConfigProxy(db.DB, cm)
+	return services.NewConfigProxy(db, cm, "")
 }
 
 // TestNewProxyHandler tests proxy handler creation

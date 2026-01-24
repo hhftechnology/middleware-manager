@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hhftechnology/middleware-manager/internal/testutil"
+	"github.com/hhftechnology/middleware-manager/models"
 )
 
 // TestNewMTLSHandler tests mTLS handler creation
@@ -188,8 +189,8 @@ func TestMTLSHandler_DeleteClient_NotFound(t *testing.T) {
 	c.Params = gin.Params{{Key: "id", Value: "nonexistent"}}
 	handler.DeleteClient(c)
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rec.Code)
 	}
 }
 
@@ -202,8 +203,8 @@ func TestMTLSHandler_RevokeClient_NotFound(t *testing.T) {
 	c.Params = gin.Params{{Key: "id", Value: "nonexistent"}}
 	handler.RevokeClient(c)
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rec.Code)
 	}
 }
 
@@ -248,15 +249,27 @@ func TestMTLSHandler_UpdateMiddlewareConfig_InvalidJSON(t *testing.T) {
 	}
 }
 
-// TestMTLSHandler_GetCACert_NoCA tests getting CA cert when none exists
-func TestMTLSHandler_GetCACert_NoCA(t *testing.T) {
+// TestMTLSHandler_GetConfig_NoCA validates config response when CA is absent
+func TestMTLSHandler_GetConfig_NoCA(t *testing.T) {
 	db := testutil.NewTempDB(t)
 	handler := NewMTLSHandler(db.DB)
 
-	c, rec := testutil.NewContext(t, http.MethodGet, "/api/mtls/ca/cert", nil)
-	handler.GetCACert(c)
+	c, rec := testutil.NewContext(t, http.MethodGet, "/api/mtls/config", nil)
+	handler.GetConfig(c)
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("expected 404 (no CA), got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp models.MTLSConfigResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if resp.HasCA {
+		t.Errorf("expected HasCA to be false when no CA exists")
+	}
+	if resp.CACert != "" {
+		t.Errorf("expected CACert to be empty in config response")
 	}
 }

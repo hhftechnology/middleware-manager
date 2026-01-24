@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hhftechnology/middleware-manager/database"
 	"github.com/hhftechnology/middleware-manager/internal/testutil"
 )
 
@@ -284,7 +287,20 @@ func TestMiddlewareHandler_DeleteMiddleware(t *testing.T) {
 
 // TestMiddlewareHandler_DeleteMiddleware_NotFound tests deleting non-existent middleware
 func TestMiddlewareHandler_DeleteMiddleware_NotFound(t *testing.T) {
-	db := testutil.NewTempDB(t)
+	tmpDir, err := os.MkdirTemp("", "middleware-delete-notfound")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := database.InitDB(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init temp db: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Close()
+		os.RemoveAll(tmpDir)
+	})
+
 	handler := NewMiddlewareHandler(db.DB)
 
 	c, rec := testutil.NewContext(t, http.MethodDelete, "/api/middlewares/non-existent", nil)
@@ -357,24 +373,30 @@ func TestMiddlewareHandler_GetMiddlewares_ConfigParsing(t *testing.T) {
 // TestMiddlewareHandler_ValidMiddlewareTypes tests all valid middleware types
 func TestMiddlewareHandler_ValidMiddlewareTypes(t *testing.T) {
 	validTypes := []string{
-		"headers",
-		"rateLimit",
 		"basicAuth",
+		"digestAuth",
+		"forwardAuth",
+		"ipAllowList",
+		"rateLimit",
+		"headers",
 		"stripPrefix",
+		"stripPrefixRegex",
 		"addPrefix",
-		"redirect",
+		"redirectRegex",
 		"redirectScheme",
 		"replacePath",
 		"replacePathRegex",
-		"forwardAuth",
-		"ipAllowList",
-		"digestAuth",
 		"buffering",
 		"circuitBreaker",
 		"compress",
+		"contentType",
 		"retry",
 		"chain",
 		"plugin",
+		"errors",
+		"grpcWeb",
+		"inFlightReq",
+		"passTLSClientCert",
 	}
 
 	db := testutil.NewTempDB(t)

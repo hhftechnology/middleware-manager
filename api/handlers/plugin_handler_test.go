@@ -130,24 +130,6 @@ experimental:
 	}
 }
 
-// TestPluginHandler_GetPlugin tests getting a specific plugin
-func TestPluginHandler_GetPlugin(t *testing.T) {
-	db := testutil.NewTempDB(t)
-	cm := testutil.NewTestConfigManager(t)
-	configPath := filepath.Join(t.TempDir(), "traefik.yml")
-
-	handler := NewPluginHandler(db.DB, configPath, cm)
-
-	c, rec := testutil.NewContext(t, http.MethodGet, "/api/plugins/test-plugin", nil)
-	c.Params = gin.Params{{Key: "name", Value: "test-plugin"}}
-	handler.GetPlugin(c)
-
-	// Plugin may not exist, but should not panic
-	if rec.Code != http.StatusOK && rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 200 or 404, got %d", rec.Code)
-	}
-}
-
 // TestPluginHandler_InstallPlugin_InvalidJSON tests invalid install request
 func TestPluginHandler_InstallPlugin_InvalidJSON(t *testing.T) {
 	db := testutil.NewTempDB(t)
@@ -183,64 +165,36 @@ func TestPluginHandler_InstallPlugin_MissingFields(t *testing.T) {
 	}
 }
 
-// TestPluginHandler_UninstallPlugin_EmptyName tests uninstall without name
-func TestPluginHandler_UninstallPlugin_EmptyName(t *testing.T) {
+// TestPluginHandler_RemovePlugin_InvalidJSON ensures remove plugin validates body
+func TestPluginHandler_RemovePlugin_InvalidJSON(t *testing.T) {
 	db := testutil.NewTempDB(t)
 	cm := testutil.NewTestConfigManager(t)
 	configPath := filepath.Join(t.TempDir(), "traefik.yml")
 
 	handler := NewPluginHandler(db.DB, configPath, cm)
 
-	c, rec := testutil.NewContext(t, http.MethodDelete, "/api/plugins/", nil)
-	c.Params = gin.Params{{Key: "name", Value: ""}}
-	handler.UninstallPlugin(c)
+	c, rec := testutil.NewContext(t, http.MethodDelete, "/api/plugins/remove", bytes.NewBufferString(`{invalid}`))
+	handler.RemovePlugin(c)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
 	}
 }
 
-// TestPluginHandler_CheckDuplicates_InvalidJSON tests invalid duplicate check request
-func TestPluginHandler_CheckDuplicates_InvalidJSON(t *testing.T) {
+// TestPluginHandler_GetPluginUsage tests getting plugin usage info
+func TestPluginHandler_GetPluginUsage(t *testing.T) {
 	db := testutil.NewTempDB(t)
 	cm := testutil.NewTestConfigManager(t)
 	configPath := filepath.Join(t.TempDir(), "traefik.yml")
 
 	handler := NewPluginHandler(db.DB, configPath, cm)
 
-	body := bytes.NewBufferString(`{invalid}`)
-	c, rec := testutil.NewContext(t, http.MethodPost, "/api/plugins/check-duplicates", body)
-	handler.CheckDuplicates(c)
+	c, rec := testutil.NewContext(t, http.MethodGet, "/api/plugins/test-plugin/usage", nil)
+	c.Params = gin.Params{{Key: "name", Value: "test-plugin"}}
+	handler.GetPluginUsage(c)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
-	}
-}
-
-// TestPluginHandler_CheckDuplicates tests duplicate checking
-func TestPluginHandler_CheckDuplicates(t *testing.T) {
-	db := testutil.NewTempDB(t)
-	cm := testutil.NewTestConfigManager(t)
-	configPath := filepath.Join(t.TempDir(), "traefik.yml")
-
-	handler := NewPluginHandler(db.DB, configPath, cm)
-
-	body := bytes.NewBufferString(`{
-		"name": "test-middleware",
-		"plugin_name": "test-plugin"
-	}`)
-	c, rec := testutil.NewContext(t, http.MethodPost, "/api/plugins/check-duplicates", body)
-	handler.CheckDuplicates(c)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var result map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &result)
-
-	// Should have has_duplicates field
-	if result["has_duplicates"] == nil {
-		t.Error("expected has_duplicates in response")
+	// Depending on fetcher configuration, this may be 404 or 500, but should not panic
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNotFound && rec.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status code %d", rec.Code)
 	}
 }

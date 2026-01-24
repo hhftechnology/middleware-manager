@@ -8,7 +8,7 @@ import (
 
 // TestNewCertGenerator tests cert generator creation
 func TestNewCertGenerator(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	if cg == nil {
@@ -21,7 +21,7 @@ func TestNewCertGenerator(t *testing.T) {
 
 // TestCertGenerator_GetConfig tests fetching mTLS config
 func TestCertGenerator_GetConfig(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	config, err := cg.GetConfig()
@@ -44,7 +44,7 @@ func TestCertGenerator_GetConfig(t *testing.T) {
 
 // TestCertGenerator_EnableMTLS_NoCA tests enabling mTLS without CA
 func TestCertGenerator_EnableMTLS_NoCA(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	err := cg.EnableMTLS()
@@ -55,7 +55,7 @@ func TestCertGenerator_EnableMTLS_NoCA(t *testing.T) {
 
 // TestCertGenerator_DisableMTLS tests disabling mTLS
 func TestCertGenerator_DisableMTLS(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	err := cg.DisableMTLS()
@@ -72,7 +72,7 @@ func TestCertGenerator_DisableMTLS(t *testing.T) {
 
 // TestCertGenerator_GetClients_Empty tests getting clients when none exist
 func TestCertGenerator_GetClients_Empty(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	clients, err := cg.GetClients()
@@ -91,7 +91,7 @@ func TestCertGenerator_GetClients_Empty(t *testing.T) {
 
 // TestCertGenerator_GetClient_NotFound tests getting non-existent client
 func TestCertGenerator_GetClient_NotFound(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	_, err := cg.GetClient("nonexistent-id")
@@ -102,7 +102,7 @@ func TestCertGenerator_GetClient_NotFound(t *testing.T) {
 
 // TestCertGenerator_GetClientP12_NotFound tests getting P12 for non-existent client
 func TestCertGenerator_GetClientP12_NotFound(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	_, _, err := cg.GetClientP12("nonexistent-id")
@@ -113,7 +113,7 @@ func TestCertGenerator_GetClientP12_NotFound(t *testing.T) {
 
 // TestCertGenerator_RevokeClient_NotFound tests revoking non-existent client
 func TestCertGenerator_RevokeClient_NotFound(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	err := cg.RevokeClient("nonexistent-id")
@@ -124,7 +124,7 @@ func TestCertGenerator_RevokeClient_NotFound(t *testing.T) {
 
 // TestCertGenerator_DeleteClient_NotFound tests deleting non-existent client
 func TestCertGenerator_DeleteClient_NotFound(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	err := cg.DeleteClient("nonexistent-id")
@@ -135,7 +135,7 @@ func TestCertGenerator_DeleteClient_NotFound(t *testing.T) {
 
 // TestCertGenerator_GetClientCount_Empty tests client count when empty
 func TestCertGenerator_GetClientCount_Empty(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	count, err := cg.GetClientCount()
@@ -150,7 +150,7 @@ func TestCertGenerator_GetClientCount_Empty(t *testing.T) {
 
 // TestCertGenerator_UpdateCertsBasePath tests updating certs base path
 func TestCertGenerator_UpdateCertsBasePath(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	testPath := "/test/certs/path"
@@ -168,7 +168,7 @@ func TestCertGenerator_UpdateCertsBasePath(t *testing.T) {
 
 // TestCertGenerator_GetMiddlewareConfig tests getting middleware config
 func TestCertGenerator_GetMiddlewareConfig(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	config, err := cg.GetMiddlewareConfig()
@@ -188,7 +188,7 @@ func TestCertGenerator_GetMiddlewareConfig(t *testing.T) {
 
 // TestCertGenerator_UpdateMiddlewareConfig tests updating middleware config
 func TestCertGenerator_UpdateMiddlewareConfig(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	newConfig := &models.MTLSMiddlewareConfig{
@@ -215,7 +215,7 @@ func TestCertGenerator_UpdateMiddlewareConfig(t *testing.T) {
 
 // TestCertGenerator_DeleteCA_NoCA tests deleting CA when none exists
 func TestCertGenerator_DeleteCA_NoCA(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	// Should not error even when no CA exists
@@ -227,7 +227,7 @@ func TestCertGenerator_DeleteCA_NoCA(t *testing.T) {
 
 // TestCertGenerator_GenerateClientCert_NoCA tests generating client cert without CA
 func TestCertGenerator_GenerateClientCert_NoCA(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	req := models.CreateClientRequest{
@@ -244,7 +244,7 @@ func TestCertGenerator_GenerateClientCert_NoCA(t *testing.T) {
 
 // TestCertGenerator_GenerateCA tests CA generation
 func TestCertGenerator_GenerateCA(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	req := models.CreateCARequest{
@@ -281,7 +281,7 @@ func TestCertGenerator_GenerateCA(t *testing.T) {
 
 // TestCertGenerator_GenerateCA_DefaultValidity tests CA generation with default validity
 func TestCertGenerator_GenerateCA_DefaultValidity(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	req := models.CreateCARequest{
@@ -307,7 +307,7 @@ func TestCertGenerator_GenerateCA_DefaultValidity(t *testing.T) {
 
 // TestCertGenerator_GenerateClientCert tests client cert generation
 func TestCertGenerator_GenerateClientCert(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	// First create a CA
@@ -365,7 +365,7 @@ func TestCertGenerator_GenerateClientCert(t *testing.T) {
 
 // TestCertGenerator_ClientLifecycle tests full client lifecycle
 func TestCertGenerator_ClientLifecycle(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	// Create CA
@@ -451,7 +451,7 @@ func TestCertGenerator_ClientLifecycle(t *testing.T) {
 
 // TestCertGenerator_EnableDisableMTLS tests enable/disable cycle
 func TestCertGenerator_EnableDisableMTLS(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	// Create CA first
@@ -491,7 +491,7 @@ func TestCertGenerator_EnableDisableMTLS(t *testing.T) {
 
 // TestCertGenerator_DeleteCA tests CA deletion
 func TestCertGenerator_DeleteCA(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	// Create CA
@@ -538,7 +538,7 @@ func TestCertGenerator_DeleteCA(t *testing.T) {
 
 // TestCertGenerator_WriteCACertToFilesystem tests writing CA to filesystem
 func TestCertGenerator_WriteCACertToFilesystem(t *testing.T) {
-	db := newTestDB(t)
+	db := newTestSQLDB(t)
 	cg := NewCertGenerator(db)
 
 	basePath := t.TempDir()

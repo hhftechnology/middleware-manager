@@ -204,8 +204,11 @@ func TestResponseWithError(t *testing.T) {
 			var response map[string]interface{}
 			json.Unmarshal(rec.Body.Bytes(), &response)
 
-			if response["error"] == nil {
-				t.Error("response should contain 'error' field")
+			if response["message"] == nil {
+				t.Error("response should contain 'message' field")
+			}
+			if response["code"] == nil {
+				t.Error("response should contain 'code' field")
 			}
 		})
 	}

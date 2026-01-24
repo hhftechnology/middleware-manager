@@ -24,8 +24,24 @@ func (m *mockResourceFetcher) FetchResources(ctx context.Context) (*models.Resou
 	return m.resources, nil
 }
 
-func (m *mockResourceFetcher) FetchFullData(ctx context.Context) (*models.FullFetchData, error) {
-	return nil, nil
+// setActiveDataSource updates the config manager to point to a test data source
+func setActiveDataSource(t *testing.T, cm *ConfigManager, name string, url string, username string, password string) {
+	t.Helper()
+	cfg := models.DataSourceConfig{
+		Type: models.DataSourceType(name),
+		URL:  url,
+	}
+	if username != "" || password != "" {
+		cfg.BasicAuth.Username = username
+		cfg.BasicAuth.Password = password
+	}
+
+	if err := cm.UpdateDataSource(name, cfg); err != nil {
+		t.Fatalf("failed to update data source: %v", err)
+	}
+	if err := cm.SetActiveDataSource(name); err != nil {
+		t.Fatalf("failed to set active data source: %v", err)
+	}
 }
 
 // TestNewResourceWatcher tests resource watcher creation
@@ -40,7 +56,7 @@ func TestNewResourceWatcher(t *testing.T) {
 	defer server.Close()
 
 	// Update config manager with test URL
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -74,7 +90,7 @@ func TestResourceWatcher_Stop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -99,7 +115,7 @@ func TestResourceWatcher_RefreshFetcher(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -123,7 +139,7 @@ func TestResourceWatcher_StartStop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -183,7 +199,7 @@ func TestResourceWatcher_CheckResources(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -227,7 +243,7 @@ func TestResourceWatcher_CheckResources_EmptyResult(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -291,7 +307,7 @@ func TestResourceWatcher_UpdateOrCreateResource_New(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -336,7 +352,7 @@ func TestResourceWatcher_UpdateOrCreateResource_Update(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	// Create existing resource
 	existingID := "existing-uuid-123"
@@ -391,7 +407,7 @@ func TestResourceWatcher_UpdateOrCreateResource_ByHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	// Create existing resource with old pangolin_router_id
 	existingID := "existing-uuid-456"
@@ -461,7 +477,7 @@ func TestResourceWatcher_DisablesRemovedResources(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -510,7 +526,7 @@ func TestResourceWatcher_FetchTraefikConfig(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -552,7 +568,7 @@ func TestResourceWatcher_FetchTraefikConfig_WithAuth(t *testing.T) {
 	defer server.Close()
 
 	// Update data source with auth
-	cm.db.Exec("UPDATE data_sources SET url = ?, username = 'admin', password = 'secret', is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "admin", "secret")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -586,7 +602,7 @@ func TestResourceWatcher_PreservesRouterPriorityManual(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {
@@ -628,7 +644,7 @@ func TestResourceWatcher_CreateWithDefaults(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cm.db.Exec("UPDATE data_sources SET url = ?, is_active = 1 WHERE id = 1", server.URL)
+	setActiveDataSource(t, cm, "pangolin", server.URL, "", "")
 
 	watcher, err := NewResourceWatcher(db, cm)
 	if err != nil {

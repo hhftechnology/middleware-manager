@@ -37,20 +37,17 @@ func TestNewPangolinFetcher(t *testing.T) {
 // TestPangolinFetcher_FetchResources tests fetching resources from mock Pangolin API
 func TestPangolinFetcher_FetchResources(t *testing.T) {
 	// Create a mock Pangolin API server
-	mockConfig := models.PangolinTraefikConfig{
-		HTTP: models.PangolinHTTPConfig{
-			Routers: map[string]models.PangolinRouter{
-				"test-router": {
-					Rule:        "Host(`test.example.com`)",
-					Service:     "test-service",
-					EntryPoints: []string{"websecure"},
-					Priority:    100,
-				},
-			},
-			Services:    map[string]models.PangolinService{},
-			Middlewares: map[string]map[string]interface{}{},
+	var mockConfig models.PangolinTraefikConfig
+	mockConfig.HTTP.Routers = map[string]models.PangolinRouter{
+		"test-router": {
+			Rule:        "Host(`test.example.com`)",
+			Service:     "test-service",
+			EntryPoints: []string{"websecure"},
+			Priority:    100,
 		},
 	}
+	mockConfig.HTTP.Services = map[string]models.PangolinService{}
+	mockConfig.HTTP.Middlewares = map[string]map[string]interface{}{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/traefik-config" {
@@ -104,7 +101,10 @@ func TestPangolinFetcher_FetchResources_BasicAuth(t *testing.T) {
 	config := models.DataSourceConfig{
 		Type: models.PangolinAPI,
 		URL:  server.URL,
-		BasicAuth: models.BasicAuthConfig{
+		BasicAuth: struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}{
 			Username: "testuser",
 			Password: "testpass",
 		},
@@ -177,23 +177,20 @@ func TestPangolinFetcher_FetchResources_Error(t *testing.T) {
 
 // TestPangolinFetcher_GetTraefikMiddlewares tests middleware fetching
 func TestPangolinFetcher_GetTraefikMiddlewares(t *testing.T) {
-	mockConfig := models.PangolinTraefikConfig{
-		HTTP: models.PangolinHTTPConfig{
-			Routers:  map[string]models.PangolinRouter{},
-			Services: map[string]models.PangolinService{},
-			Middlewares: map[string]map[string]interface{}{
-				"test-headers": {
-					"headers": map[string]interface{}{
-						"customRequestHeaders": map[string]string{
-							"X-Custom": "value",
-						},
-					},
+	var mockConfig models.PangolinTraefikConfig
+	mockConfig.HTTP.Routers = map[string]models.PangolinRouter{}
+	mockConfig.HTTP.Services = map[string]models.PangolinService{}
+	mockConfig.HTTP.Middlewares = map[string]map[string]interface{}{
+		"test-headers": {
+			"headers": map[string]interface{}{
+				"customRequestHeaders": map[string]string{
+					"X-Custom": "value",
 				},
-				"test-ratelimit": {
-					"rateLimit": map[string]interface{}{
-						"average": 100,
-					},
-				},
+			},
+		},
+		"test-ratelimit": {
+			"rateLimit": map[string]interface{}{
+				"average": 100,
 			},
 		},
 	}
