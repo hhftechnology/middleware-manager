@@ -240,21 +240,18 @@ func TestPangolinFetcher_GetTraefikMiddlewares(t *testing.T) {
 
 // TestPangolinFetcher_GetTraefikServices tests service fetching
 func TestPangolinFetcher_GetTraefikServices(t *testing.T) {
-	mockConfig := models.PangolinTraefikConfig{
-		HTTP: models.PangolinHTTPConfig{
-			Routers: map[string]models.PangolinRouter{},
-			Services: map[string]models.PangolinService{
-				"test-service": {
-					LoadBalancer: map[string]interface{}{
-						"servers": []map[string]string{
-							{"url": "http://backend:8080"},
-						},
-					},
+	var mockConfig models.PangolinTraefikConfig
+	mockConfig.HTTP.Routers = map[string]models.PangolinRouter{}
+	mockConfig.HTTP.Services = map[string]models.PangolinService{
+		"test-service": {
+			LoadBalancer: map[string]interface{}{
+				"servers": []map[string]string{
+					{"url": "http://backend:8080"},
 				},
 			},
-			Middlewares: map[string]map[string]interface{}{},
 		},
 	}
+	mockConfig.HTTP.Middlewares = map[string]map[string]interface{}{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

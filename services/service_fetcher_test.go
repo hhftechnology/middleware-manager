@@ -11,6 +11,106 @@ import (
 	"github.com/hhftechnology/middleware-manager/models"
 )
 
+func newLoadBalancer(url string) *struct {
+	Servers []struct {
+		URL     string `json:"url,omitempty"`
+		Address string `json:"address,omitempty"`
+		Weight  *int   `json:"weight,omitempty"`
+	} `json:"servers,omitempty"`
+	PassHostHeader *bool       `json:"passHostHeader,omitempty"`
+	Sticky         interface{} `json:"sticky,omitempty"`
+	HealthCheck    interface{} `json:"healthCheck,omitempty"`
+} {
+	return &struct {
+		Servers []struct {
+			URL     string `json:"url,omitempty"`
+			Address string `json:"address,omitempty"`
+			Weight  *int   `json:"weight,omitempty"`
+		} `json:"servers,omitempty"`
+		PassHostHeader *bool       `json:"passHostHeader,omitempty"`
+		Sticky         interface{} `json:"sticky,omitempty"`
+		HealthCheck    interface{} `json:"healthCheck,omitempty"`
+	}{
+		Servers: []struct {
+			URL     string `json:"url,omitempty"`
+			Address string `json:"address,omitempty"`
+			Weight  *int   `json:"weight,omitempty"`
+		}{
+			{URL: url},
+		},
+	}
+}
+
+func newWeighted(name string, weight int) *struct {
+	Services []struct {
+		Name   string `json:"name"`
+		Weight int    `json:"weight"`
+	} `json:"services,omitempty"`
+	Sticky      interface{} `json:"sticky,omitempty"`
+	HealthCheck interface{} `json:"healthCheck,omitempty"`
+} {
+	return &struct {
+		Services []struct {
+			Name   string `json:"name"`
+			Weight int    `json:"weight"`
+		} `json:"services,omitempty"`
+		Sticky      interface{} `json:"sticky,omitempty"`
+		HealthCheck interface{} `json:"healthCheck,omitempty"`
+	}{
+		Services: []struct {
+			Name   string `json:"name"`
+			Weight int    `json:"weight"`
+		}{
+			{Name: name, Weight: weight},
+		},
+	}
+}
+
+func newMirroring(name string, percent int, service string) *struct {
+	Service    string `json:"service"`
+	Mirrors    []struct {
+		Name    string `json:"name"`
+		Percent int    `json:"percent"`
+	} `json:"mirrors,omitempty"`
+	MaxBodySize *int        `json:"maxBodySize,omitempty"`
+	MirrorBody  *bool       `json:"mirrorBody,omitempty"`
+	HealthCheck interface{} `json:"healthCheck,omitempty"`
+} {
+	return &struct {
+		Service    string `json:"service"`
+		Mirrors    []struct {
+			Name    string `json:"name"`
+			Percent int    `json:"percent"`
+		} `json:"mirrors,omitempty"`
+		MaxBodySize *int        `json:"maxBodySize,omitempty"`
+		MirrorBody  *bool       `json:"mirrorBody,omitempty"`
+		HealthCheck interface{} `json:"healthCheck,omitempty"`
+	}{
+		Service: service,
+		Mirrors: []struct {
+			Name    string `json:"name"`
+			Percent int    `json:"percent"`
+		}{
+			{Name: name, Percent: percent},
+		},
+	}
+}
+
+func newFailover(service, fallback string) *struct {
+	Service     string      `json:"service"`
+	Fallback    string      `json:"fallback"`
+	HealthCheck interface{} `json:"healthCheck,omitempty"`
+} {
+	return &struct {
+		Service     string      `json:"service"`
+		Fallback    string      `json:"fallback"`
+		HealthCheck interface{} `json:"healthCheck,omitempty"`
+	}{
+		Service:  service,
+		Fallback: fallback,
+	}
+}
+
 // TestNewServiceFetcher_Pangolin tests creating Pangolin service fetcher
 func TestNewServiceFetcher_Pangolin(t *testing.T) {
 	config := models.DataSourceConfig{
@@ -106,15 +206,12 @@ func TestNewTraefikServiceFetcher(t *testing.T) {
 // TestPangolinServiceFetcher_FetchServices tests Pangolin service fetching
 func TestPangolinServiceFetcher_FetchServices(t *testing.T) {
 	// Create mock Pangolin server
-	pangolinConfig := models.PangolinTraefikConfig{
-		HTTP: models.PangolinHTTP{
-			Services: map[string]models.PangolinService{
-				"web-service": {
-					LoadBalancer: map[string]interface{}{
-						"servers": []map[string]interface{}{
-							{"url": "http://backend:8080"},
-						},
-					},
+	var pangolinConfig models.PangolinTraefikConfig
+	pangolinConfig.HTTP.Services = map[string]models.PangolinService{
+		"web-service": {
+			LoadBalancer: map[string]interface{}{
+				"servers": []map[string]interface{}{
+					{"url": "http://backend:8080"},
 				},
 			},
 		},
@@ -206,11 +303,7 @@ func TestTraefikServiceFetcher_FetchServices(t *testing.T) {
 		{
 			Name:     "web-service@docker",
 			Provider: "docker",
-			LoadBalancer: &models.LoadBalancerConfig{
-				Servers: []interface{}{
-					map[string]interface{}{"url": "http://backend:8080"},
-				},
-			},
+			LoadBalancer: newLoadBalancer("http://backend:8080"),
 		},
 	}
 
@@ -254,11 +347,7 @@ func TestTraefikServiceFetcher_FetchServices_MapResponse(t *testing.T) {
 	httpServices := map[string]models.TraefikService{
 		"web-service@docker": {
 			Provider: "docker",
-			LoadBalancer: &models.LoadBalancerConfig{
-				Servers: []interface{}{
-					map[string]interface{}{"url": "http://backend:8080"},
-				},
-			},
+			LoadBalancer: newLoadBalancer("http://backend:8080"),
 		},
 	}
 
@@ -302,11 +391,7 @@ func TestTraefikServiceFetcher_FetchServices_SkipsInternal(t *testing.T) {
 		{
 			Name:     "user-service@docker",
 			Provider: "docker",
-			LoadBalancer: &models.LoadBalancerConfig{
-				Servers: []interface{}{
-					map[string]interface{}{"url": "http://backend:8080"},
-				},
-			},
+			LoadBalancer: newLoadBalancer("http://backend:8080"),
 		},
 	}
 
@@ -482,13 +567,9 @@ func TestProcessTraefikService(t *testing.T) {
 		{
 			name: "load balancer service",
 			service: models.TraefikService{
-				Name:     "web@docker",
-				Provider: "docker",
-				LoadBalancer: &models.LoadBalancerConfig{
-					Servers: []interface{}{
-						map[string]interface{}{"url": "http://localhost:8080"},
-					},
-				},
+				Name:         "web@docker",
+				Provider:     "docker",
+				LoadBalancer: newLoadBalancer("http://localhost:8080"),
 			},
 			wantNil:  false,
 			wantType: string(models.LoadBalancerType),
@@ -498,11 +579,7 @@ func TestProcessTraefikService(t *testing.T) {
 			service: models.TraefikService{
 				Name:     "weighted@file",
 				Provider: "file",
-				Weighted: &models.WeightedConfig{
-					Services: []interface{}{
-						map[string]interface{}{"name": "svc1", "weight": 50},
-					},
-				},
+				Weighted: newWeighted("svc1", 50),
 			},
 			wantNil:  false,
 			wantType: string(models.WeightedType),
@@ -510,14 +587,9 @@ func TestProcessTraefikService(t *testing.T) {
 		{
 			name: "mirroring service",
 			service: models.TraefikService{
-				Name:     "mirror@file",
-				Provider: "file",
-				Mirroring: &models.MirroringConfig{
-					Service: "main-service",
-					Mirrors: []interface{}{
-						map[string]interface{}{"name": "mirror1", "percent": 10},
-					},
-				},
+				Name:       "mirror@file",
+				Provider:   "file",
+				Mirroring:  newMirroring("mirror1", 10, "main-service"),
 			},
 			wantNil:  false,
 			wantType: string(models.MirroringType),
@@ -527,10 +599,7 @@ func TestProcessTraefikService(t *testing.T) {
 			service: models.TraefikService{
 				Name:     "failover@file",
 				Provider: "file",
-				Failover: &models.FailoverConfig{
-					Service:  "main-service",
-					Fallback: "backup-service",
-				},
+				Failover: newFailover("main-service", "backup-service"),
 			},
 			wantNil:  false,
 			wantType: string(models.FailoverType),
