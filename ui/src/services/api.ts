@@ -116,6 +116,12 @@ export const resourceApi = {
       method: 'DELETE',
     }),
 
+  bulkDeleteDisabled: (ids: string[]) =>
+    request<{ deleted: number; ids: string[] }>(`${API_BASE}/resources/bulk-delete-disabled`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+
   // Middleware assignment
   assignMiddleware: (resourceId: string, data: AssignMiddlewareRequest) =>
     request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/middlewares`, {

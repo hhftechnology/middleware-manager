@@ -26,6 +26,7 @@ interface ResourceState {
   fetchResources: () => Promise<void>
   fetchResource: (id: string) => Promise<void>
   deleteResource: (id: string) => Promise<boolean>
+  deleteDisabledResources: (ids: string[]) => Promise<boolean>
   assignMiddleware: (resourceId: string, data: AssignMiddlewareRequest) => Promise<boolean>
   removeMiddleware: (resourceId: string, middlewareId: string) => Promise<boolean>
   assignService: (resourceId: string, serviceId: string) => Promise<boolean>
@@ -91,6 +92,25 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to delete resource',
+        loading: false,
+      })
+      return false
+    }
+  },
+
+  // Bulk delete disabled resources
+  deleteDisabledResources: async (ids) => {
+    set({ loading: true, error: null })
+    try {
+      const res = await resourceApi.bulkDeleteDisabled(ids)
+      set((state) => ({
+        resources: state.resources.filter((r) => !res.ids.includes(r.id)),
+        loading: false,
+      }))
+      return true
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to delete resources',
         loading: false,
       })
       return false

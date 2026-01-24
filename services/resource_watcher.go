@@ -119,7 +119,6 @@ func (rw *ResourceWatcher) Stop() {
 
 // checkResources fetches resources from the configured data source and updates the database
 func (rw *ResourceWatcher) checkResources() error {
-    log.Println("Checking for resources using configured data source...")
     
     // Create a context with timeout for the operation
     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -219,8 +218,7 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) (str
     `, pangolinRouterID).Scan(&internalID, &status)
 
     if err == nil {
-        // Found by pangolin_router_id - update it
-        log.Printf("Found resource by pangolin_router_id %s (internal: %s)", pangolinRouterID, internalID)
+        // Found by pangolin_router_id - update it (only if changed)
         if err := rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource); err != nil {
             return "", err
         }
@@ -234,9 +232,7 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) (str
     `, resource.Host).Scan(&internalID, &status)
 
     if err == nil {
-        // Found by host - Pangolin changed the router ID, just update pangolin_router_id
-        log.Printf("Found resource by host %s (internal: %s), updating pangolin_router_id from old to %s",
-            resource.Host, internalID, pangolinRouterID)
+        // Found by host - Pangolin changed the router ID, update pangolin_router_id (only if changed)
         if err := rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource); err != nil {
             return "", err
         }
@@ -250,8 +246,7 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) (str
     `, pangolinRouterID, resource.Host).Scan(&internalID, &status)
 
     if err == nil {
-        // Found legacy resource - update it
-        log.Printf("Found legacy resource %s, updating", internalID)
+        // Found legacy resource - update it (only if changed)
         if err := rw.updateExistingResourceByInternalID(internalID, pangolinRouterID, resource); err != nil {
             return "", err
         }
@@ -263,18 +258,56 @@ func (rw *ResourceWatcher) updateOrCreateResource(resource models.Resource) (str
 }
 
 // updateExistingResourceByInternalID updates an existing resource using its internal UUID
+// Only performs update if the data has actually changed
 func (rw *ResourceWatcher) updateExistingResourceByInternalID(internalID, pangolinRouterID string, resource models.Resource) error {
+    // First, check if any data has actually changed
+    var existingPangolinRouterID, existingHost, existingServiceID, existingSourceType, existingEntrypoints string
+    var existingRouterPriority int
+    var routerPriorityManual int
+
+    err := rw.db.QueryRow(`
+        SELECT COALESCE(pangolin_router_id, ''), host, service_id, COALESCE(source_type, ''),
+               COALESCE(entrypoints, ''), COALESCE(router_priority, 0), COALESCE(router_priority_manual, 0)
+        FROM resources WHERE id = ?
+    `, internalID).Scan(&existingPangolinRouterID, &existingHost, &existingServiceID,
+        &existingSourceType, &existingEntrypoints, &existingRouterPriority, &routerPriorityManual)
+
+    if err != nil {
+        // If we can't read existing data, proceed with update
+        log.Printf("Warning: Could not read existing resource %s: %v - will update", internalID, err)
+    } else {
+        // Check if essential fields have changed
+        essentialFieldsChanged := existingPangolinRouterID != pangolinRouterID ||
+            existingHost != resource.Host ||
+            existingServiceID != resource.ServiceID ||
+            existingSourceType != resource.SourceType ||
+            existingEntrypoints != resource.Entrypoints
+
+        // Check if router priority needs update (only if not manually overridden)
+        priorityNeedsUpdate := resource.RouterPriority > 0 &&
+            routerPriorityManual == 0 &&
+            existingRouterPriority != resource.RouterPriority
+
+        // If nothing changed, skip the update entirely
+        if !essentialFieldsChanged && !priorityNeedsUpdate {
+            return nil
+        }
+    }
+
     return rw.db.WithTransaction(func(tx *sql.Tx) error {
-        log.Printf("Updating resource (internal: %s, pangolin: %s, host: %s)",
-            internalID, pangolinRouterID, resource.Host)
+        log.Printf("Updating resource (internal: %s, pangolin: %s, host: %s, entrypoints: %s)",
+            internalID, pangolinRouterID, resource.Host, resource.Entrypoints)
 
         // Update essential fields and pangolin_router_id, preserve custom configuration
         _, err := tx.Exec(`
             UPDATE resources
             SET pangolin_router_id = ?, host = ?, service_id = ?,
-                status = 'active', source_type = ?, updated_at = ?
+                status = 'active', source_type = ?, entrypoints = ?,
+                tls_domains = ?, tcp_enabled = ?, updated_at = ?
             WHERE id = ?
-        `, pangolinRouterID, resource.Host, resource.ServiceID, resource.SourceType, time.Now(), internalID)
+        `, pangolinRouterID, resource.Host, resource.ServiceID, resource.SourceType,
+           resource.Entrypoints, resource.TLSDomains, resource.TCPEnabled,
+           time.Now(), internalID)
 
         if err != nil {
             return fmt.Errorf("failed to update resource %s: %w", internalID, err)
