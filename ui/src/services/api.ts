@@ -11,6 +11,8 @@ import type {
   CreateServiceRequest,
   UpdateServiceRequest,
   AssignMiddlewareRequest,
+  AssignExternalMiddlewareRequest,
+  ExternalMiddleware,
   AssignServiceRequest,
   HTTPConfig,
   TLSConfig,
@@ -138,6 +140,24 @@ export const resourceApi = {
   removeMiddleware: (resourceId: string, middlewareId: string) =>
     request<void>(
       `${API_BASE}/resources/${encodeURIComponent(resourceId)}/middlewares/${encodeURIComponent(middlewareId)}`,
+      { method: 'DELETE' }
+    ),
+
+  // External (Traefik-native) middleware assignment
+  getExternalMiddlewares: (resourceId: string) =>
+    request<ExternalMiddleware[]>(
+      `${API_BASE}/resources/${encodeURIComponent(resourceId)}/external-middlewares`
+    ),
+
+  assignExternalMiddleware: (resourceId: string, data: AssignExternalMiddlewareRequest) =>
+    request<void>(`${API_BASE}/resources/${encodeURIComponent(resourceId)}/external-middlewares`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeExternalMiddleware: (resourceId: string, name: string) =>
+    request<void>(
+      `${API_BASE}/resources/${encodeURIComponent(resourceId)}/external-middlewares/${encodeURIComponent(name)}`,
       { method: 'DELETE' }
     ),
 

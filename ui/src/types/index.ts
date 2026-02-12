@@ -8,6 +8,8 @@ export type {
   TCPConfig,
   HeadersConfig,
   AssignMiddlewareRequest,
+  AssignExternalMiddlewareRequest,
+  ExternalMiddleware,
   AssignServiceRequest,
   MTLSWhitelistConfigRequest,
   MTLSWhitelistExternalData,

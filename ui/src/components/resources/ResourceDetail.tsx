@@ -4,6 +4,7 @@ import { useMiddlewareStore } from '@/stores/middlewareStore'
 import { useServiceStore } from '@/stores/serviceStore'
 import { useMTLSStore } from '@/stores/mtlsStore'
 import { useSecurityStore } from '@/stores/securityStore'
+import { useTraefikStore } from '@/stores/traefikStore'
 import { useAppStore } from '@/stores/appStore'
 import { resourceApi } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -51,6 +52,7 @@ import {
   Save,
   X,
   Loader2,
+  Globe,
 } from 'lucide-react'
 import { parseJSON } from '@/lib/utils'
 import type { MTLSWhitelistExternalData } from '@/types'
@@ -71,18 +73,28 @@ export function ResourceDetail() {
     updateTCPConfig,
     updateRouterPriority,
     clearError,
+    assignExternalMiddleware,
+    removeExternalMiddleware,
   } = useResourceStore()
 
   const { middlewares, fetchMiddlewares } = useMiddlewareStore()
   const { services, fetchServices } = useServiceStore()
   const { config: mtlsConfig, fetchConfig: fetchMTLSConfig } = useMTLSStore()
   const { config: securityConfig, fetchConfig: fetchSecurityConfig } = useSecurityStore()
+  const { httpMiddlewares, fetchMiddlewares: fetchTraefikMiddlewares } = useTraefikStore()
   const { updateMTLSConfig, updateMTLSWhitelistConfig } = useResourceStore()
 
   const [selectedMiddlewareId, setSelectedMiddlewareId] = useState('')
   const [middlewarePriority, setMiddlewarePriority] = useState('100')
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [removeMiddlewareModal, setRemoveMiddlewareModal] = useState<string | null>(null)
+
+  // External middleware state
+  const [selectedExternalMw, setSelectedExternalMw] = useState('')
+  const [customExternalMwName, setCustomExternalMwName] = useState('')
+  const [externalMwPriority, setExternalMwPriority] = useState('100')
+  const [removeExternalMwModal, setRemoveExternalMwModal] = useState<string | null>(null)
+  const [useCustomExternalName, setUseCustomExternalName] = useState(false)
 
   // Edit priority dialog state
   const [editPriorityDialog, setEditPriorityDialog] = useState<{ middlewareId: string; currentPriority: number } | null>(null)
@@ -118,8 +130,9 @@ export function ResourceDetail() {
       fetchServices()
       fetchMTLSConfig()
       fetchSecurityConfig()
+      fetchTraefikMiddlewares('http')
     }
-  }, [resourceId, fetchResource, fetchMiddlewares, fetchServices, fetchMTLSConfig, fetchSecurityConfig])
+  }, [resourceId, fetchResource, fetchMiddlewares, fetchServices, fetchMTLSConfig, fetchSecurityConfig, fetchTraefikMiddlewares])
 
   useEffect(() => {
     if (!selectedResource) return
@@ -173,6 +186,18 @@ export function ResourceDetail() {
       }).sort((a, b) => b.priority - a.priority) // Sort by priority descending (higher priority first)
     : []
 
+  // Parse external middleware assignments from the format "name:priority:provider,..."
+  const assignedExternalMiddlewares = selectedResource.external_middlewares
+    ? selectedResource.external_middlewares.split(',').filter(Boolean).map(mwStr => {
+        const parts = mwStr.split(':')
+        return {
+          name: parts[0] || '',
+          priority: parseInt(parts[1] || '100', 10) || 100,
+          provider: parts[2] || '',
+        }
+      }).sort((a, b) => b.priority - a.priority)
+    : []
+
   const customHeaders = parseJSON<Record<string, string>>(
     selectedResource.custom_headers,
     {}
@@ -208,9 +233,38 @@ export function ResourceDetail() {
     }
   }
 
+  const handleAssignExternalMiddleware = async () => {
+    const name = useCustomExternalName ? customExternalMwName.trim() : selectedExternalMw
+    if (!name || !resourceId) return
+
+    // Try to find provider info from Traefik data
+    const traefikMw = httpMiddlewares.find(m => m.name === name)
+    await assignExternalMiddleware(resourceId, {
+      middleware_name: name,
+      priority: parseInt(externalMwPriority, 10) || 100,
+      provider: traefikMw?.provider || '',
+    })
+    setSelectedExternalMw('')
+    setCustomExternalMwName('')
+    setExternalMwPriority('100')
+  }
+
+  const handleRemoveExternalMiddleware = async (name: string) => {
+    if (resourceId) {
+      await removeExternalMiddleware(resourceId, name)
+    }
+    setRemoveExternalMwModal(null)
+  }
+
   const assignedMiddlewareIds = assignedMiddlewares.map(m => m.id)
   const availableMiddlewares = middlewares.filter(
     (m) => !assignedMiddlewareIds.includes(m.id)
+  )
+
+  // Filter Traefik middlewares: exclude already-assigned external ones and MW-manager's own
+  const assignedExternalNames = assignedExternalMiddlewares.map(m => m.name)
+  const availableExternalMiddlewares = httpMiddlewares.filter(
+    (m) => !assignedExternalNames.includes(m.name)
   )
 
   // Start editing configuration
@@ -1061,6 +1115,132 @@ export function ResourceDetail() {
         </CardContent>
       </Card>
 
+      {/* External / Traefik-Native Middlewares Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                External Middlewares
+              </CardTitle>
+              <CardDescription>
+                {assignedExternalMiddlewares.length} Traefik-native middleware(s) assigned
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Add External Middleware */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium whitespace-nowrap">
+                {useCustomExternalName ? 'Custom name:' : 'From Traefik:'}
+              </Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setUseCustomExternalName(!useCustomExternalName)
+                  setSelectedExternalMw('')
+                  setCustomExternalMwName('')
+                }}
+                className="text-xs"
+              >
+                {useCustomExternalName ? 'Switch to dropdown' : 'Enter custom name'}
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              {useCustomExternalName ? (
+                <Input
+                  placeholder="e.g., my-auth@file or plugin-ratelimit@docker"
+                  value={customExternalMwName}
+                  onChange={(e) => setCustomExternalMwName(e.target.value)}
+                  className="flex-1"
+                />
+              ) : (
+                <Select value={selectedExternalMw} onValueChange={setSelectedExternalMw}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select Traefik middleware" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableExternalMiddlewares.map((mw) => (
+                      <SelectItem key={mw.name} value={mw.name}>
+                        {mw.name} {mw.provider ? `(${mw.provider})` : ''} {mw.type ? `[${mw.type}]` : ''}
+                      </SelectItem>
+                    ))}
+                    {availableExternalMiddlewares.length === 0 && (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No external middlewares available
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              <Input
+                type="number"
+                placeholder="Priority"
+                value={externalMwPriority}
+                onChange={(e) => setExternalMwPriority(e.target.value)}
+                className="w-24"
+              />
+              <Button
+                onClick={handleAssignExternalMiddleware}
+                disabled={useCustomExternalName ? !customExternalMwName.trim() : !selectedExternalMw}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Assigned External Middlewares Table */}
+          {assignedExternalMiddlewares.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">#</TableHead>
+                  <TableHead>Middleware Name</TableHead>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {assignedExternalMiddlewares.map((mw, index) => (
+                  <TableRow key={mw.name}>
+                    <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                    <TableCell className="font-mono text-sm">{mw.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                        {mw.provider || 'external'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{mw.priority}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRemoveExternalMwModal(mw.name)}
+                        title="Remove external middleware"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground border rounded-lg">
+              No external middlewares assigned. Use this section to reference middlewares defined in Traefik&apos;s dynamic config or plugins.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Custom Headers Card */}
       {Object.keys(customHeaders).length > 0 && (
         <Card>
@@ -1100,6 +1280,17 @@ export function ResourceDetail() {
         confirmLabel="Remove"
         variant="destructive"
         onConfirm={() => removeMiddlewareModal && handleRemoveMiddleware(removeMiddlewareModal)}
+      />
+
+      {/* Remove External Middleware Confirmation */}
+      <ConfirmationModal
+        open={!!removeExternalMwModal}
+        onOpenChange={(open) => !open && setRemoveExternalMwModal(null)}
+        title="Remove External Middleware"
+        description={`Are you sure you want to remove the external middleware "${removeExternalMwModal}" from this resource?`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => removeExternalMwModal && handleRemoveExternalMiddleware(removeExternalMwModal)}
       />
 
       {/* Edit Priority Dialog */}

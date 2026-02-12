@@ -23,6 +23,7 @@ export interface Resource {
   tls_hardening_enabled: boolean
   secure_headers_enabled: boolean
   middlewares: string
+  external_middlewares: string
   created_at?: string
   updated_at?: string
 }
@@ -78,6 +79,20 @@ export interface MTLSWhitelistConfigRequest {
 export interface AssignMiddlewareRequest {
   middleware_id: string
   priority: number
+}
+
+export interface AssignExternalMiddlewareRequest {
+  middleware_name: string
+  priority: number
+  provider?: string
+}
+
+export interface ExternalMiddleware {
+  resource_id: string
+  middleware_name: string
+  priority: number
+  provider: string
+  created_at?: string
 }
 
 export interface AssignServiceRequest {
