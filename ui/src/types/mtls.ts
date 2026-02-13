@@ -47,6 +47,7 @@ export interface PluginCheckResponse {
   installed: boolean
   plugin_name: string
   version: string
+  recommended_version?: string // Latest version from plugin catalogue
 }
 
 export interface MTLSMiddlewareConfig {

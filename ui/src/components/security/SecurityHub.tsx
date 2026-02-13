@@ -35,7 +35,6 @@ import { CertImportGuide } from "./CertImportGuide";
 import type { SecureHeadersConfig } from "@/types";
 
 export function SecurityHub() {
-  const PLUGIN_VERSION_DISPLAY = "v0.0.4";
   const {
     config,
     loading,
@@ -187,7 +186,7 @@ export function SecurityHub() {
           {pluginStatus?.installed ? (
             <Badge variant="outline" className="flex items-center gap-1">
               <CheckCircle className="h-4 w-4 text-green-500" />
-              Plugin {PLUGIN_VERSION_DISPLAY}
+              Plugin {pluginStatus.version || pluginStatus.recommended_version || 'installed'}
             </Badge>
           ) : (
             <Badge
@@ -423,7 +422,7 @@ export function SecurityHub() {
   plugins:
     mtlswhitelist:
       moduleName: github.com/smerschjohann/mtlswhitelist
-      version: v0.0.4`}
+      version: ${pluginStatus?.recommended_version || pluginStatus?.version || 'v0.0.4'}`}
                 </pre>
               </div>
 

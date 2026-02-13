@@ -1,6 +1,8 @@
 import { create } from 'zustand'
-import { mtlsApi } from '@/services/api'
+import { mtlsApi, pluginApi } from '@/services/api'
 import type { MTLSConfig, MTLSClient, CreateCARequest, CreateClientRequest, PluginCheckResponse, MTLSMiddlewareConfig } from '@/types'
+
+const MTLS_PLUGIN_MODULE = 'github.com/smerschjohann/mtlswhitelist'
 
 interface MTLSState {
   // Data
@@ -190,17 +192,36 @@ export const useMTLSStore = create<MTLSState>((set, get) => ({
     }
   },
 
-  // Check plugin status
+  // Check plugin status and fetch recommended version from catalogue
   checkPlugin: async () => {
     try {
       const status = await mtlsApi.checkPlugin()
-      // Normalize version display; default to recommended v0.0.4 if missing
-      const version = status.version || 'v0.0.4'
-      set({ pluginStatus: { ...status, version } })
+
+      // Fetch the recommended (latest) version from the plugin catalogue
+      let recommendedVersion = status.version || ''
+      try {
+        const catalogue = await pluginApi.getCatalogue()
+        const mtlsPlugin = catalogue.find(p => p.import === MTLS_PLUGIN_MODULE)
+        if (mtlsPlugin?.latestVersion) {
+          recommendedVersion = mtlsPlugin.latestVersion
+        }
+      } catch (catalogueErr) {
+        console.warn('Failed to fetch plugin catalogue for version info:', catalogueErr)
+      }
+
+      // Use installed version if available, otherwise use recommended version
+      const version = status.version || recommendedVersion
+      set({
+        pluginStatus: {
+          ...status,
+          version,
+          recommended_version: recommendedVersion
+        }
+      })
       return status.installed
     } catch (err) {
       console.error('Failed to check plugin status:', err)
-      set({ pluginStatus: { installed: false, plugin_name: 'mtlswhitelist', version: 'v0.0.4' } })
+      set({ pluginStatus: { installed: false, plugin_name: 'mtlswhitelist', version: '', recommended_version: '' } })
       return false
     }
   },
