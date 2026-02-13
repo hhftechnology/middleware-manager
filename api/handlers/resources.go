@@ -171,6 +171,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 			resource["middlewares"] = ""
 		}
 
+		resource["external_middlewares"] = ""
 		resources = append(resources, resource)
 	}
 
@@ -178,6 +179,33 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		log.Printf("Error during resource rows iteration: %v", err)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch resources")
 		return
+	}
+
+	// Batch-load external middlewares for all resources
+	if len(resources) > 0 {
+		extRows, err := h.DB.Query(
+			"SELECT resource_id, middleware_name, priority, provider FROM resource_external_middlewares ORDER BY resource_id, priority DESC",
+		)
+		if err != nil {
+			log.Printf("Warning: failed to fetch external middlewares: %v", err)
+		} else {
+			defer extRows.Close()
+			extMap := make(map[string][]string)
+			for extRows.Next() {
+				var resID, name, provider string
+				var priority int
+				if err := extRows.Scan(&resID, &name, &priority, &provider); err != nil {
+					log.Printf("Error scanning external middleware: %v", err)
+					continue
+				}
+				extMap[resID] = append(extMap[resID], fmt.Sprintf("%s:%d:%s", name, priority, provider))
+			}
+			for i, res := range resources {
+				if parts, ok := extMap[res["id"].(string)]; ok {
+					resources[i]["external_middlewares"] = strings.Join(parts, ",")
+				}
+			}
+		}
 	}
 
 	// Return paginated or regular response
@@ -285,6 +313,29 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 		resource["middlewares"] = middlewares.String
 	} else {
 		resource["middlewares"] = ""
+	}
+
+	// Fetch external (Traefik-native) middlewares assigned to this resource
+	extRows, err := h.DB.Query(
+		"SELECT middleware_name, priority, provider FROM resource_external_middlewares WHERE resource_id = ? ORDER BY priority DESC",
+		id,
+	)
+	if err != nil {
+		log.Printf("Error fetching external middlewares for resource %s: %v", id, err)
+		resource["external_middlewares"] = ""
+	} else {
+		defer extRows.Close()
+		var extParts []string
+		for extRows.Next() {
+			var name, provider string
+			var priority int
+			if err := extRows.Scan(&name, &priority, &provider); err != nil {
+				log.Printf("Error scanning external middleware row: %v", err)
+				continue
+			}
+			extParts = append(extParts, fmt.Sprintf("%s:%d:%s", name, priority, provider))
+		}
+		resource["external_middlewares"] = strings.Join(extParts, ",")
 	}
 
 	c.JSON(http.StatusOK, resource)
@@ -807,4 +858,210 @@ func (h *ResourceHandler) RemoveMiddleware(c *gin.Context) {
 
 	log.Printf("Successfully removed middleware %s from resource %s", middlewareID, resourceID)
 	c.JSON(http.StatusOK, gin.H{"message": "Middleware removed from resource successfully"})
+}
+
+// AssignExternalMiddleware assigns a Traefik-native middleware to a resource by name
+func (h *ResourceHandler) AssignExternalMiddleware(c *gin.Context) {
+	resourceID := c.Param("id")
+	if resourceID == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	var input struct {
+		MiddlewareName string `json:"middleware_name" binding:"required"`
+		Priority       int    `json:"priority"`
+		Provider       string `json:"provider"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		ResponseWithError(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
+		return
+	}
+
+	// Validate middleware name is not empty after trimming
+	input.MiddlewareName = strings.TrimSpace(input.MiddlewareName)
+	if input.MiddlewareName == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Middleware name is required")
+		return
+	}
+
+	// Default priority
+	if input.Priority <= 0 {
+		input.Priority = 100
+	}
+
+	// Verify resource exists and is active
+	var exists int
+	var status string
+	err := h.DB.QueryRow("SELECT 1, status FROM resources WHERE id = ?", resourceID).Scan(&exists, &status)
+	if err == sql.ErrNoRows {
+		ResponseWithError(c, http.StatusNotFound, "Resource not found")
+		return
+	} else if err != nil {
+		log.Printf("Error checking resource existence: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	if status == "disabled" {
+		ResponseWithError(c, http.StatusBadRequest, "Cannot assign middleware to a disabled resource")
+		return
+	}
+
+	// Insert or update using a transaction
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	// Delete any existing relationship first
+	_, txErr = tx.Exec(
+		"DELETE FROM resource_external_middlewares WHERE resource_id = ? AND middleware_name = ?",
+		resourceID, input.MiddlewareName,
+	)
+	if txErr != nil {
+		log.Printf("Error removing existing external middleware: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Insert new relationship
+	_, txErr = tx.Exec(
+		"INSERT INTO resource_external_middlewares (resource_id, middleware_name, priority, provider) VALUES (?, ?, ?, ?)",
+		resourceID, input.MiddlewareName, input.Priority, input.Provider,
+	)
+	if txErr != nil {
+		log.Printf("Error assigning external middleware: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to assign external middleware")
+		return
+	}
+
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully assigned external middleware %s to resource %s with priority %d",
+		input.MiddlewareName, resourceID, input.Priority)
+	c.JSON(http.StatusOK, gin.H{
+		"resource_id":     resourceID,
+		"middleware_name": input.MiddlewareName,
+		"priority":        input.Priority,
+		"provider":        input.Provider,
+	})
+}
+
+// RemoveExternalMiddleware removes a Traefik-native middleware from a resource
+func (h *ResourceHandler) RemoveExternalMiddleware(c *gin.Context) {
+	resourceID := c.Param("id")
+	middlewareName := c.Param("name")
+
+	if resourceID == "" || middlewareName == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID and Middleware name are required")
+		return
+	}
+
+	log.Printf("Removing external middleware %s from resource %s", middlewareName, resourceID)
+
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("Error beginning transaction: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			tx.Rollback()
+			log.Printf("Transaction rolled back due to error: %v", txErr)
+		}
+	}()
+
+	result, txErr := tx.Exec(
+		"DELETE FROM resource_external_middlewares WHERE resource_id = ? AND middleware_name = ?",
+		resourceID, middlewareName,
+	)
+	if txErr != nil {
+		log.Printf("Error removing external middleware: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to remove external middleware")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	if rowsAffected == 0 {
+		ResponseWithError(c, http.StatusNotFound, "External middleware assignment not found")
+		return
+	}
+
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("Error committing transaction: %v", txErr)
+		ResponseWithError(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	log.Printf("Successfully removed external middleware %s from resource %s", middlewareName, resourceID)
+	c.JSON(http.StatusOK, gin.H{"message": "External middleware removed from resource successfully"})
+}
+
+// GetExternalMiddlewares returns all external middlewares assigned to a resource
+func (h *ResourceHandler) GetExternalMiddlewares(c *gin.Context) {
+	resourceID := c.Param("id")
+	if resourceID == "" {
+		ResponseWithError(c, http.StatusBadRequest, "Resource ID is required")
+		return
+	}
+
+	rows, err := h.DB.Query(
+		"SELECT middleware_name, priority, provider, created_at FROM resource_external_middlewares WHERE resource_id = ? ORDER BY priority DESC",
+		resourceID,
+	)
+	if err != nil {
+		log.Printf("Error fetching external middlewares: %v", err)
+		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch external middlewares")
+		return
+	}
+	defer rows.Close()
+
+	var externalMiddlewares []gin.H
+	for rows.Next() {
+		var name, provider string
+		var priority int
+		var createdAt string
+		if err := rows.Scan(&name, &priority, &provider, &createdAt); err != nil {
+			log.Printf("Error scanning external middleware row: %v", err)
+			continue
+		}
+		externalMiddlewares = append(externalMiddlewares, gin.H{
+			"resource_id":     resourceID,
+			"middleware_name": name,
+			"priority":        priority,
+			"provider":        provider,
+			"created_at":      createdAt,
+		})
+	}
+
+	if externalMiddlewares == nil {
+		externalMiddlewares = []gin.H{}
+	}
+
+	c.JSON(http.StatusOK, externalMiddlewares)
 }

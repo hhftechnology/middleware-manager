@@ -3,6 +3,7 @@ import { resourceApi } from '@/services/api'
 import type {
   Resource,
   AssignMiddlewareRequest,
+  AssignExternalMiddlewareRequest,
   HTTPConfig,
   TLSConfig,
   TCPConfig,
@@ -29,6 +30,8 @@ interface ResourceState {
   deleteDisabledResources: (ids: string[]) => Promise<boolean>
   assignMiddleware: (resourceId: string, data: AssignMiddlewareRequest) => Promise<boolean>
   removeMiddleware: (resourceId: string, middlewareId: string) => Promise<boolean>
+  assignExternalMiddleware: (resourceId: string, data: AssignExternalMiddlewareRequest) => Promise<boolean>
+  removeExternalMiddleware: (resourceId: string, name: string) => Promise<boolean>
   assignService: (resourceId: string, serviceId: string) => Promise<boolean>
   removeService: (resourceId: string) => Promise<boolean>
   updateHTTPConfig: (resourceId: string, config: HTTPConfig) => Promise<boolean>
@@ -144,6 +147,36 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to remove middleware',
+      })
+      return false
+    }
+  },
+
+  // Assign external (Traefik-native) middleware to resource
+  assignExternalMiddleware: async (resourceId, data) => {
+    set({ error: null })
+    try {
+      await resourceApi.assignExternalMiddleware(resourceId, data)
+      await get().fetchResource(resourceId)
+      return true
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to assign external middleware',
+      })
+      return false
+    }
+  },
+
+  // Remove external middleware from resource
+  removeExternalMiddleware: async (resourceId, name) => {
+    set({ error: null })
+    try {
+      await resourceApi.removeExternalMiddleware(resourceId, name)
+      await get().fetchResource(resourceId)
+      return true
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to remove external middleware',
       })
       return false
     }

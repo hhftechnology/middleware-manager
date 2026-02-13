@@ -186,6 +186,11 @@ func (s *Server) setupRoutes(uiPath string) {
 			resources.POST("/:id/middlewares/bulk", s.resourceHandler.AssignMultipleMiddlewares)
 			resources.DELETE("/:id/middlewares/:middlewareId", s.resourceHandler.RemoveMiddleware)
 
+			// External (Traefik-native) middleware assignments
+			resources.GET("/:id/external-middlewares", s.resourceHandler.GetExternalMiddlewares)
+			resources.POST("/:id/external-middlewares", s.resourceHandler.AssignExternalMiddleware)
+			resources.DELETE("/:id/external-middlewares/:name", s.resourceHandler.RemoveExternalMiddleware)
+
 			// Service assignments
 			resources.GET("/:id/service", s.serviceHandler.GetResourceService)
 			resources.POST("/:id/service", s.serviceHandler.AssignServiceToResource)

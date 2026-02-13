@@ -80,6 +80,11 @@ type middlewareWithPriority struct {
 	Priority int
 }
 
+type externalMiddlewareRef struct {
+	Name     string
+	Priority int
+}
+
 type mtlsConfigData struct {
 	CACertPath      string
 	Rules           []interface{}
@@ -109,6 +114,7 @@ type resourceData struct {
 	TLSHardeningEnabled  bool
 	SecureHeadersEnabled bool
 	Middlewares          []middlewareWithPriority
+	ExternalMiddlewares  []externalMiddlewareRef
 	CustomServiceID      sql.NullString
 }
 
@@ -501,11 +507,6 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 			continue
 		}
 
-		// Sort middlewares by priority (highest first)
-		sort.SliceStable(resource.Middlewares, func(i, j int) bool {
-			return resource.Middlewares[i].Priority > resource.Middlewares[j].Priority
-		})
-
 		// Build middleware list (mTLS first, then secure headers, then custom headers, then assigned)
 		var newMiddlewares []string
 
@@ -561,9 +562,26 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 			}
 		}
 
-		// Add assigned middlewares
+		// Build a combined list of internal + external middlewares sorted by priority
+		type middlewareEntry struct {
+			Name     string
+			Priority int
+		}
+		var allAssigned []middlewareEntry
 		for _, mw := range resource.Middlewares {
-			newMiddlewares = append(newMiddlewares, mw.ID)
+			allAssigned = append(allAssigned, middlewareEntry{Name: mw.ID, Priority: mw.Priority})
+		}
+		for _, ext := range resource.ExternalMiddlewares {
+			allAssigned = append(allAssigned, middlewareEntry{Name: ext.Name, Priority: ext.Priority})
+		}
+		// Sort by priority (highest first) for consistent ordering
+		sort.SliceStable(allAssigned, func(i, j int) bool {
+			return allAssigned[i].Priority > allAssigned[j].Priority
+		})
+
+		// Add all assigned middlewares (internal by ID, external by name)
+		for _, entry := range allAssigned {
+			newMiddlewares = append(newMiddlewares, entry.Name)
 		}
 
 		// Get existing middlewares from router
@@ -794,6 +812,30 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	// Load external (Traefik-native) middleware assignments
+	extRows, err := cp.db.Query(
+		"SELECT resource_id, middleware_name, priority FROM resource_external_middlewares ORDER BY resource_id, priority DESC",
+	)
+	if err != nil {
+		log.Printf("Warning: failed to fetch external middlewares: %v", err)
+	} else {
+		defer extRows.Close()
+		for extRows.Next() {
+			var resID, name string
+			var priority int
+			if err := extRows.Scan(&resID, &name, &priority); err != nil {
+				log.Printf("Failed to scan external middleware: %v", err)
+				continue
+			}
+			if data, ok := resourceMap[resID]; ok {
+				data.ExternalMiddlewares = append(data.ExternalMiddlewares, externalMiddlewareRef{
+					Name:     name,
+					Priority: priority,
+				})
+			}
+		}
 	}
 
 	resources := make([]*resourceData, 0, len(resourceMap))

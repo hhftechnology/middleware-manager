@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -18,6 +19,12 @@ func newTestDB(t *testing.T) *database.DB {
 		db.Close()
 	})
 	return db
+}
+
+// newTestSQLDB returns the underlying *sql.DB for tests that require it
+func newTestSQLDB(t *testing.T) *sql.DB {
+	t.Helper()
+	return newTestDB(t).DB
 }
 
 func newTestConfigManager(t *testing.T) *ConfigManager {

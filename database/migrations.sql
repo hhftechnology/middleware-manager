@@ -156,3 +156,15 @@ CREATE TABLE IF NOT EXISTS security_config (
 
 -- Initialize security config singleton row
 INSERT OR IGNORE INTO security_config (id) VALUES (1);
+
+-- External middlewares table stores references to Traefik-native middlewares assigned to resources
+-- These are middlewares defined in Traefik dynamic config or plugins (not managed by MW-manager)
+CREATE TABLE IF NOT EXISTS resource_external_middlewares (
+    resource_id TEXT NOT NULL,
+    middleware_name TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 100,
+    provider TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (resource_id, middleware_name),
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);

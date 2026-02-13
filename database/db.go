@@ -617,6 +617,35 @@ func runPostMigrationUpdates(db *sql.DB) error {
 	// Create index on services status for faster filtering
 	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_services_status ON services(status)")
 
+	// Check for resource_external_middlewares table (for Traefik-native middleware references)
+	var hasExternalMiddlewaresTable bool
+	err = db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM sqlite_master
+		WHERE type='table' AND name='resource_external_middlewares'
+	`).Scan(&hasExternalMiddlewaresTable)
+	if err != nil {
+		return fmt.Errorf("failed to check if resource_external_middlewares table exists: %w", err)
+	}
+	if !hasExternalMiddlewaresTable {
+		log.Println("Creating resource_external_middlewares table")
+		_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS resource_external_middlewares (
+				resource_id TEXT NOT NULL,
+				middleware_name TEXT NOT NULL,
+				priority INTEGER NOT NULL DEFAULT 100,
+				provider TEXT DEFAULT '',
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY (resource_id, middleware_name),
+				FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to create resource_external_middlewares table: %w", err)
+		}
+		log.Println("Successfully created resource_external_middlewares table")
+	}
+
 	return nil
 }
 
