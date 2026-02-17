@@ -1,16 +1,23 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { LucideIcon } from 'lucide-react'
+
+type StatColor = 'blue' | 'violet' | 'emerald' | 'cyan' | 'neutral'
+
+const iconColorMap: Record<StatColor, string> = {
+  blue: 'bg-rose-800/10 text-rose-800 dark:bg-rose-400/15 dark:text-rose-300',
+  violet: 'bg-amber-700/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300',
+  emerald: 'bg-emerald-700/10 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300',
+  cyan: 'bg-stone-600/10 text-stone-600 dark:bg-stone-400/15 dark:text-stone-300',
+  neutral: 'bg-muted text-foreground/70',
+}
 
 interface StatCardProps {
   title: string
   value: number | string
   description?: string
   icon?: LucideIcon
-  trend?: {
-    value: number
-    isPositive: boolean
-  }
+  color?: StatColor
   className?: string
   onClick?: () => void
 }
@@ -20,39 +27,34 @@ export function StatCard({
   value,
   description,
   icon: Icon,
-  trend,
+  color = 'neutral',
   className,
   onClick,
 }: StatCardProps) {
   return (
     <Card
       className={cn(
-        'transition-colors',
-        onClick && 'cursor-pointer hover:bg-accent/50',
+        'transition-all duration-150',
+        onClick && 'cursor-pointer hover:border-primary/40 hover:shadow-md',
         className
       )}
       onClick={onClick}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-        {trend && (
-          <p
-            className={cn(
-              'text-xs mt-1',
-              trend.isPositive ? 'text-success' : 'text-destructive'
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-3xl font-bold tracking-tight">{value}</p>
+            {description && (
+              <p className="text-xs text-muted-foreground pt-0.5">{description}</p>
             )}
-          >
-            {trend.isPositive ? '+' : '-'}
-            {Math.abs(trend.value)}% from last period
-          </p>
-        )}
+          </div>
+          {Icon && (
+            <div className={cn('rounded-lg p-2.5', iconColorMap[color])}>
+              <Icon className="h-5 w-5" />
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

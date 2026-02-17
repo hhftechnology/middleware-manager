@@ -302,16 +302,16 @@ export function MiddlewareForm() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 pb-2 border-b border-border/60">
         <Button variant="ghost" onClick={() => navigateTo('middlewares')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold tracking-tight">
             {isEditing ? 'Edit Middleware' : 'Create Middleware'}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {isEditing
               ? 'Update middleware configuration'
               : 'Create a new Traefik middleware'}

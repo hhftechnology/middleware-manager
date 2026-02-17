@@ -171,13 +171,13 @@ export function SecurityHub() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-border/60">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Shield className="h-8 w-8" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Shield className="h-6 w-6 text-primary" />
             Security
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Manage mTLS (mutual TLS) for secure client authentication
           </p>
         </div>
@@ -249,7 +249,7 @@ export function SecurityHub() {
       )}
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="flex-wrap h-auto gap-1">
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="setup">Setup</TabsTrigger>
           <TabsTrigger value="ca">Certificate Authority</TabsTrigger>

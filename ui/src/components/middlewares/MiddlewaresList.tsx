@@ -240,10 +240,10 @@ export function MiddlewaresList() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-border/60">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Middlewares</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Middlewares</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             Create and manage Traefik middleware configurations
           </p>
         </div>

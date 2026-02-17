@@ -18,7 +18,7 @@ import {
   ServiceTabs,
   MiddlewareTabs,
 } from '@/components/traefik'
-import { Globe, Layers, Server, Plus, ArrowRight, Activity } from 'lucide-react'
+import { Globe, Layers, Server, Plus, ArrowRight, Activity, Network } from 'lucide-react'
 
 export function Dashboard() {
   const { navigateTo } = useAppStore()
@@ -70,21 +70,19 @@ export function Dashboard() {
   const tcpResources = resources.filter((r) => r.tcp_enabled).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-border/60">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             Overview of your Traefik configuration
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigateTo('middleware-form')}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Middleware
-          </Button>
-        </div>
+        <Button onClick={() => navigateTo('middleware-form')}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Middleware
+        </Button>
       </div>
 
       {/* Dashboard Tabs */}
@@ -101,7 +99,7 @@ export function Dashboard() {
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-8">
           {/* Stats Grid */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatCard
@@ -109,27 +107,31 @@ export function Dashboard() {
               value={resources.length}
               description={`${activeResources} active`}
               icon={Globe}
+              color="blue"
               onClick={() => navigateTo('resources')}
             />
             <StatCard
               title="Middlewares"
               value={middlewares.length}
-              description="Available configurations"
+              description="Configured"
               icon={Layers}
+              color="violet"
               onClick={() => navigateTo('middlewares')}
             />
             <StatCard
               title="Services"
               value={services.length}
-              description="Load balancer configs"
+              description="Defined"
               icon={Server}
+              color="emerald"
               onClick={() => navigateTo('services')}
             />
             <StatCard
               title="TCP Routes"
               value={tcpResources}
-              description="SNI-based routing"
-              icon={Globe}
+              description="SNI-based"
+              icon={Network}
+              color="cyan"
             />
           </div>
 
@@ -155,74 +157,19 @@ export function Dashboard() {
               <ResourceSummary resources={resources} limit={5} />
             </CardContent>
           </Card>
-
-          {/* Quick Actions */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card
-              className="cursor-pointer hover:bg-accent/50 transition-colors"
-              onClick={() => navigateTo('middlewares')}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Layers className="h-5 w-5" />
-                  Manage Middlewares
-                </CardTitle>
-                <CardDescription>
-                  Create and configure Traefik middlewares
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            <Card
-              className="cursor-pointer hover:bg-accent/50 transition-colors"
-              onClick={() => navigateTo('services')}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Server className="h-5 w-5" />
-                  Manage Services
-                </CardTitle>
-                <CardDescription>
-                  Configure load balancing and routing
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            <Card
-              className="cursor-pointer hover:bg-accent/50 transition-colors"
-              onClick={() => navigateTo('plugin-hub')}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Plus className="h-5 w-5" />
-                  Plugin Hub
-                </CardTitle>
-                <CardDescription>
-                  Discover and install Traefik plugins
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
         </TabsContent>
 
         {/* Traefik Status Tab */}
         <TabsContent value="traefik" className="space-y-6">
-          {/* Traefik Overview Cards */}
           <OverviewCards />
 
-          {/* Version and Entrypoints */}
           <div className="grid gap-4 md:grid-cols-2">
             <VersionInfo />
             <EntrypointList />
           </div>
 
-          {/* Routers */}
           <RouterTabs />
-
-          {/* Services */}
           <ServiceTabs />
-
-          {/* Middlewares */}
           <MiddlewareTabs />
         </TabsContent>
       </Tabs>

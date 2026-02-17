@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { usePluginStore } from '@/stores/pluginStore'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -208,10 +209,10 @@ export function PluginHub() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-border/60">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Plugin Hub</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Plugin Hub</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             Manage installed plugins and browse the Traefik plugin catalogue
           </p>
         </div>
@@ -235,54 +236,82 @@ export function PluginHub() {
         />
       )}
 
-      {/* Statistics (for installed plugins) */}
+      {/* Statistics */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card
-          className={`cursor-pointer transition-colors ${statusFilter === 'all' && activeTab === 'installed' ? 'border-primary' : 'hover:border-primary/50'}`}
+          className={cn(
+            'cursor-pointer transition-all hover:shadow-md',
+            statusFilter === 'all' && activeTab === 'installed' ? 'border-primary/40 shadow-md' : 'hover:border-primary/30'
+          )}
           onClick={() => { setActiveTab('installed'); setStatusFilter('all') }}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Plugins</CardTitle>
-            <Puzzle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Total Plugins</p>
+                <p className="text-3xl font-bold tracking-tight">{stats.total}</p>
+              </div>
+              <div className="rounded-lg p-2.5 bg-rose-800/10 text-rose-800 dark:bg-rose-400/15 dark:text-rose-300">
+                <Puzzle className="h-5 w-5" />
+              </div>
+            </div>
           </CardContent>
         </Card>
         <Card
-          className={`cursor-pointer transition-colors ${statusFilter === 'enabled' && activeTab === 'installed' ? 'border-primary' : 'hover:border-primary/50'}`}
+          className={cn(
+            'cursor-pointer transition-all hover:shadow-md',
+            statusFilter === 'enabled' && activeTab === 'installed' ? 'border-primary/40 shadow-md' : 'hover:border-primary/30'
+          )}
           onClick={() => { setActiveTab('installed'); setStatusFilter('enabled') }}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Enabled</CardTitle>
-            <Power className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{stats.enabled}</div>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Enabled</p>
+                <p className="text-3xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400">{stats.enabled}</p>
+              </div>
+              <div className="rounded-lg p-2.5 bg-emerald-700/10 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300">
+                <Power className="h-5 w-5" />
+              </div>
+            </div>
           </CardContent>
         </Card>
         <Card
-          className={`cursor-pointer transition-colors ${statusFilter === 'error' && activeTab === 'installed' ? 'border-primary' : 'hover:border-primary/50'}`}
+          className={cn(
+            'cursor-pointer transition-all hover:shadow-md',
+            statusFilter === 'error' && activeTab === 'installed' ? 'border-primary/40 shadow-md' : 'hover:border-primary/30'
+          )}
           onClick={() => { setActiveTab('installed'); setStatusFilter('error') }}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">With Errors</CardTitle>
-            <AlertCircle className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{stats.error}</div>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">With Errors</p>
+                <p className="text-3xl font-bold tracking-tight text-destructive">{stats.error}</p>
+              </div>
+              <div className="rounded-lg p-2.5 bg-destructive/10 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+            </div>
           </CardContent>
         </Card>
         <Card
-          className={`cursor-pointer transition-colors ${activeTab === 'catalogue' ? 'border-primary' : 'hover:border-primary/50'}`}
+          className={cn(
+            'cursor-pointer transition-all hover:shadow-md',
+            activeTab === 'catalogue' ? 'border-primary/40 shadow-md' : 'hover:border-primary/30'
+          )}
           onClick={() => setActiveTab('catalogue')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Browse Catalogue</CardTitle>
-            <Store className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-500">{cataloguePlugins.length || '...'}</div>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Browse Catalogue</p>
+                <p className="text-3xl font-bold tracking-tight text-amber-700 dark:text-amber-400">{cataloguePlugins.length || '...'}</p>
+              </div>
+              <div className="rounded-lg p-2.5 bg-amber-700/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
+                <Store className="h-5 w-5" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -327,7 +356,7 @@ export function PluginHub() {
 
       {/* Tabs for Installed vs Catalogue */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'installed' | 'catalogue')}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList>
           <TabsTrigger value="installed" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Installed ({stats.total})
@@ -424,7 +453,7 @@ export function PluginHub() {
                   <select
                     value={catalogueFilter}
                     onChange={(e) => setCatalogueFilter(e.target.value as CatalogueFilter)}
-                    className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="h-10 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-colors"
                   >
                     <option value="all">All Plugins</option>
                     <option value="not_installed">Not Installed</option>
