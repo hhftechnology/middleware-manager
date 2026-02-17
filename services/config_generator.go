@@ -254,7 +254,7 @@ func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
 		// Use the centralized processing logic from models package
 		middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
 
-		config.HTTP.Middlewares[id] = map[string]interface{}{
+		config.HTTP.Middlewares[name] = map[string]interface{}{
 			typ: middlewareConfig,
 		}
 	}
@@ -330,10 +330,11 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 	query := `
         SELECT r.id, r.host, r.service_id, r.entrypoints, r.tls_domains,
                r.custom_headers, r.router_priority, r.source_type, r.mtls_enabled,
-               rm.middleware_id, rm.priority,
+               rm.middleware_id, rm.priority, m.name as middleware_name,
                rs.service_id as custom_service_id
         FROM resources r
         LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
+        LEFT JOIN middlewares m ON rm.middleware_id = m.id
         LEFT JOIN resource_services rs ON r.id = rs.resource_id
         WHERE r.status = 'active'
         ORDER BY r.id, rm.priority DESC
@@ -357,12 +358,13 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 		var mtlsEnabled_db int
 		var middlewareID_db sql.NullString
 		var middlewarePriority_db sql.NullInt64
+		var middlewareName_db sql.NullString
 		var customServiceID_db sql.NullString
 
 		err := rows.Scan(
 			&rID_db, &host_db, &serviceID_db, &entrypoints_db, &tlsDomains_db,
 			&customHeadersStr_db, &routerPriority_db, &sourceType_db, &mtlsEnabled_db,
-			&middlewareID_db, &middlewarePriority_db, &customServiceID_db,
+			&middlewareID_db, &middlewarePriority_db, &middlewareName_db, &customServiceID_db,
 		)
 		if err != nil {
 			log.Printf("Failed to scan resource data for HTTP router: %v", err)
@@ -394,8 +396,13 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 			if middlewarePriority_db.Valid {
 				mwPriority = int(middlewarePriority_db.Int64)
 			}
+			mwName := middlewareID_db.String // fallback to ID if name not available
+			if middlewareName_db.Valid && middlewareName_db.String != "" {
+				mwName = middlewareName_db.String
+			}
 			data.Middlewares = append(data.Middlewares, MiddlewareWithPriority{
 				ID:       middlewareID_db.String,
+				Name:     mwName,
 				Priority: mwPriority,
 			})
 		}
@@ -441,9 +448,8 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 			finalMiddlewares = append(finalMiddlewares, customHeadersMiddlewareID)
 		}
 		for _, mw := range assignedMiddlewares {
-			// Use extractBaseName here too for middleware IDs if needed
-			middlewareID := extractBaseName(mw.ID)
-			finalMiddlewares = append(finalMiddlewares, fmt.Sprintf("%s@file", middlewareID))
+			middlewareName := extractBaseName(mw.Name)
+			finalMiddlewares = append(finalMiddlewares, fmt.Sprintf("%s@file", middlewareName))
 		}
 
 		// Only add the badger middleware when using Pangolin data source
@@ -774,6 +780,7 @@ func (cg *ConfigGenerator) writeConfigToFile(yamlData []byte) error {
 // MiddlewareWithPriority represents a middleware with its priority value
 type MiddlewareWithPriority struct {
 	ID       string
+	Name     string
 	Priority int
 }
 

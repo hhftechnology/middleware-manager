@@ -242,6 +242,8 @@ export function MiddlewareForm() {
 
     if (!name.trim()) {
       errors.name = 'Name is required'
+    } else if (!/^[a-z0-9-]+$/.test(name)) {
+      errors.name = 'Name must contain only lowercase letters, numbers, and hyphens'
     }
 
     if (!type) {
@@ -342,7 +344,7 @@ export function MiddlewareForm() {
                 id="name"
                 placeholder="my-middleware"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
               />
               {validationErrors.name && (
                 <InlineError message={validationErrors.name} />

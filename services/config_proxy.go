@@ -77,6 +77,7 @@ type OrderedMiddleware struct {
 
 type middlewareWithPriority struct {
 	ID       string
+	Name     string
 	Priority int
 }
 
@@ -428,13 +429,13 @@ func (cp *ConfigProxy) applyMiddlewares(config *ProxiedTraefikConfig, allowedIDs
 		// Use the centralized processing logic from models package
 		middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
 
-		// Add middleware using its ID as the key
-		config.HTTP.Middlewares[id] = map[string]interface{}{
+		// Add middleware using its name as the key (so chain references by name work)
+		config.HTTP.Middlewares[name] = map[string]interface{}{
 			typ: middlewareConfig,
 		}
 
 		if shouldLog() {
-			log.Printf("Added middleware %s (%s) to config", id, typ)
+			log.Printf("Added middleware %s [%s] (%s) to config", name, id, typ)
 		}
 	}
 
@@ -569,7 +570,7 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 		}
 		var allAssigned []middlewareEntry
 		for _, mw := range resource.Middlewares {
-			allAssigned = append(allAssigned, middlewareEntry{Name: mw.ID, Priority: mw.Priority})
+			allAssigned = append(allAssigned, middlewareEntry{Name: mw.Name, Priority: mw.Priority})
 		}
 		for _, ext := range resource.ExternalMiddlewares {
 			allAssigned = append(allAssigned, middlewareEntry{Name: ext.Name, Priority: ext.Priority})
@@ -729,10 +730,11 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 		       r.mtls_rules, r.mtls_request_headers, r.mtls_reject_message, r.mtls_reject_code,
 		       r.mtls_refresh_interval, r.mtls_external_data,
 		       COALESCE(r.tls_hardening_enabled, 0), COALESCE(r.secure_headers_enabled, 0),
-		       rm.middleware_id, rm.priority,
+		       rm.middleware_id, rm.priority, m.name as middleware_name,
 		       rs.service_id as custom_service_id
 		FROM resources r
 		LEFT JOIN resource_middlewares rm ON r.id = rm.resource_id
+		LEFT JOIN middlewares m ON rm.middleware_id = m.id
 		LEFT JOIN resource_services rs ON r.id = rs.resource_id
 		WHERE r.status = 'active'
 		ORDER BY r.id, rm.priority DESC
@@ -751,6 +753,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 		var mtlsEnabled, tlsHardeningEnabled, secureHeadersEnabled int
 		var middlewareID sql.NullString
 		var middlewarePriority sql.NullInt64
+		var middlewareName sql.NullString
 		var customServiceID sql.NullString
 		var mtlsRules, mtlsRequestHeaders, mtlsRejectMessage, mtlsRefreshInterval, mtlsExternalData sql.NullString
 		var mtlsRejectCode sql.NullInt64
@@ -761,7 +764,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 			&mtlsRules, &mtlsRequestHeaders, &mtlsRejectMessage, &mtlsRejectCode,
 			&mtlsRefreshInterval, &mtlsExternalData,
 			&tlsHardeningEnabled, &secureHeadersEnabled,
-			&middlewareID, &middlewarePriority, &customServiceID,
+			&middlewareID, &middlewarePriority, &middlewareName, &customServiceID,
 		)
 		if err != nil {
 			log.Printf("Failed to scan resource: %v", err)
@@ -803,8 +806,13 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 			if middlewarePriority.Valid {
 				mwPriority = int(middlewarePriority.Int64)
 			}
+			mwName := middlewareID.String // fallback to ID if name not available
+			if middlewareName.Valid && middlewareName.String != "" {
+				mwName = middlewareName.String
+			}
 			data.Middlewares = append(data.Middlewares, middlewareWithPriority{
 				ID:       middlewareID.String,
+				Name:     mwName,
 				Priority: mwPriority,
 			})
 		}
