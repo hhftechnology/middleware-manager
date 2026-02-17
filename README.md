@@ -279,7 +279,9 @@ npm start
 
 ## Inspiration 
 
-api shim was ispired by @AstralDestiny. We love her. she is a gem of a dev and always be a friend.
+Api shim was ispired by @AstralDestiny. We love her. she is a gem of a dev and always be a friend.
+https://github.com/AstralDestiny
+https://gitlab.com/Astra.Destiny
 
 ## License
 
