@@ -71,7 +71,7 @@ func TestNewServiceWatcher(t *testing.T) {
 	if watcher.configManager == nil {
 		t.Error("watcher.configManager is nil")
 	}
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher.isRunning should be false initially")
 	}
 }
@@ -97,7 +97,7 @@ func TestServiceWatcher_Stop(t *testing.T) {
 	// Should not panic when stopping a non-running watcher
 	watcher.Stop()
 
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher.isRunning should be false after Stop()")
 	}
 }
@@ -397,7 +397,7 @@ func TestServiceWatcher_StartStop(t *testing.T) {
 	// Wait a bit for it to start
 	time.Sleep(50 * time.Millisecond)
 
-	if !watcher.isRunning {
+	if !watcher.isRunning.Load() {
 		t.Error("watcher should be running after Start()")
 	}
 
@@ -407,7 +407,7 @@ func TestServiceWatcher_StartStop(t *testing.T) {
 	// Wait for stop to complete
 	time.Sleep(50 * time.Millisecond)
 
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher should not be running after Stop()")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -311,9 +312,9 @@ func TestTraefikFetcher_GetTraefikServices(t *testing.T) {
 
 // TestTraefikFetcher_RateLimiting tests rate limiting behavior
 func TestTraefikFetcher_RateLimiting(t *testing.T) {
-	requestCount := 0
+	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
+		requestCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("[]"))
 	}))
@@ -329,7 +330,7 @@ func TestTraefikFetcher_RateLimiting(t *testing.T) {
 
 	// First request
 	_, _ = fetcher.FetchResources(ctx)
-	firstCount := requestCount
+	firstCount := requestCount.Load()
 
 	// Immediate second request should be rate limited
 	_, err := fetcher.FetchResources(ctx)
@@ -338,8 +339,8 @@ func TestTraefikFetcher_RateLimiting(t *testing.T) {
 	}
 
 	// Request count should not have increased
-	if requestCount != firstCount {
-		t.Errorf("requestCount changed from %d to %d during rate limiting", firstCount, requestCount)
+	if requestCount.Load() != firstCount {
+		t.Errorf("requestCount changed from %d to %d during rate limiting", firstCount, requestCount.Load())
 	}
 }
 
@@ -406,11 +407,11 @@ func TestTraefikFetcher_FetchResources_ConnectionRefused(t *testing.T) {
 // TestTraefikFetcher_Singleflight tests that concurrent requests are deduplicated
 func TestTraefikFetcher_Singleflight(t *testing.T) {
 	t.Skip("skipping pending Traefik fetcher behavior alignment")
-	requestCount := 0
+	var requestCount atomic.Int32
 	delay := 100 * time.Millisecond
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
+		requestCount.Add(1)
 		time.Sleep(delay) // Simulate slow response
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("[]"))
@@ -440,7 +441,7 @@ func TestTraefikFetcher_Singleflight(t *testing.T) {
 	}
 
 	// Singleflight should ensure only 1 actual request was made
-	if requestCount != 1 {
-		t.Errorf("requestCount = %d, want 1 (singleflight should deduplicate)", requestCount)
+	if requestCount.Load() != 1 {
+		t.Errorf("requestCount = %d, want 1 (singleflight should deduplicate)", requestCount.Load())
 	}
 }
