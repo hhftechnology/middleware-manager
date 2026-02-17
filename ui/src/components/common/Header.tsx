@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
   { id: 'resources', label: 'Resources', icon: <Globe className="h-4 w-4" /> },
   { id: 'middlewares', label: 'Middlewares', icon: <Layers className="h-4 w-4" /> },
   { id: 'services', label: 'Services', icon: <Server className="h-4 w-4" /> },
-  { id: 'plugin-hub', label: 'Plugin Hub', icon: <Puzzle className="h-4 w-4" /> },
+  { id: 'plugin-hub', label: 'Plugins', icon: <Puzzle className="h-4 w-4" /> },
   { id: 'security', label: 'Security', icon: <Shield className="h-4 w-4" /> },
 ]
 
@@ -41,42 +41,47 @@ export function Header() {
   const { page, navigateTo, setShowSettings } = useAppStore()
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
         {/* Logo */}
-        <div className="mr-4 flex">
+        <div className="mr-6 flex">
           <button
             onClick={() => navigateTo('dashboard')}
-            className="mr-6 flex items-center space-x-2"
+            className="flex items-center space-x-2.5 hover:opacity-80 transition-opacity"
           >
-            <Layers className="h-6 w-6" />
-            <span className="hidden font-bold sm:inline-block">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
+              <Layers className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <span className="hidden font-semibold sm:inline-block tracking-tight">
               Middleware Manager
             </span>
           </button>
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex flex-1 items-center space-x-1">
+        <nav className="hidden md:flex flex-1 items-center gap-0.5">
           {navItems.map((item) => (
-            <Button
+            <button
               key={item.id}
-              variant={page === item.id ? 'secondary' : 'ghost'}
-              size="sm"
               onClick={() => navigateTo(item.id)}
               className={cn(
-                'gap-2',
-                page === item.id && 'bg-secondary'
+                'relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                page === item.id
+                  ? 'text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               )}
             >
               {item.icon}
               {item.label}
-            </Button>
+              {page === item.id && (
+                <span className="absolute -bottom-[13px] left-2 right-2 h-0.5 rounded-full bg-primary" />
+              )}
+            </button>
           ))}
         </nav>
 
         {/* Right side actions */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-1">
           <ThemeToggle />
 
           <Button
@@ -106,7 +111,7 @@ export function Header() {
                     onClick={() => navigateTo(item.id)}
                     className={cn(
                       'gap-2 cursor-pointer',
-                      page === item.id && 'bg-secondary'
+                      page === item.id && 'bg-primary/10 text-primary'
                     )}
                   >
                     {item.icon}

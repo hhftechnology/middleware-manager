@@ -54,7 +54,7 @@ function getStatusBadge(
       return {
         variant: 'destructive' as const,
         icon: <AlertCircle className="h-3 w-3" />,
-        label: 'Error',
+        label: isInstalled ? 'Installed (Error)' : 'Error',
       }
     case 'not_loaded':
     case 'configured':
@@ -77,9 +77,9 @@ function getStatusBadge(
           }
         }
         return {
-          variant: 'outline' as const,
+          variant: 'secondary' as const,
           icon: <Activity className="h-3 w-3" />,
-          label: 'Not Loaded',
+          label: 'Installed',
         }
       }
       return {
@@ -185,11 +185,11 @@ export function PluginCard({
         )}
         {plugin.isInstalled ? (
           <Button
-            variant="destructive"
+            variant="outline"
             size="sm"
             onClick={() => onRemove(plugin.moduleName)}
             disabled={isLoading || plugin.usageCount > 0}
-            className="flex-1"
+            className="flex-1 text-destructive hover:bg-destructive hover:text-destructive-foreground"
             title={plugin.usageCount > 0 ? 'Cannot remove: plugin is in use' : undefined}
           >
             {removing ? (

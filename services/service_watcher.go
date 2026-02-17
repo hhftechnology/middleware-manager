@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/hhftechnology/middleware-manager/database"
@@ -20,7 +21,7 @@ type ServiceWatcher struct {
 	fetcher       ServiceFetcher
 	configManager *ConfigManager
 	stopChan      chan struct{}
-	isRunning     bool
+	isRunning     atomic.Bool
 }
 
 // NewServiceWatcher creates a new service watcher
@@ -42,17 +43,16 @@ func NewServiceWatcher(db *database.DB, configManager *ConfigManager) (*ServiceW
 		fetcher:       fetcher,
 		configManager: configManager,
 		stopChan:      make(chan struct{}),
-		isRunning:     false,
 	}, nil
 }
 
 // Start begins watching for services
 func (sw *ServiceWatcher) Start(interval time.Duration) {
-	if sw.isRunning {
+	if sw.isRunning.Load() {
 		return
 	}
 
-	sw.isRunning = true
+	sw.isRunning.Store(true)
 	log.Printf("Service watcher started, checking every %v", interval)
 
 	ticker := time.NewTicker(interval)
@@ -101,12 +101,12 @@ func (sw *ServiceWatcher) refreshFetcher() error {
 
 // Stop stops the service watcher
 func (sw *ServiceWatcher) Stop() {
-	if !sw.isRunning {
+	if !sw.isRunning.Load() {
 		return
 	}
 
 	close(sw.stopChan)
-	sw.isRunning = false
+	sw.isRunning.Store(false)
 }
 
 // checkServices fetches services from the configured data source and updates the database

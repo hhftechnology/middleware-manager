@@ -242,6 +242,8 @@ export function MiddlewareForm() {
 
     if (!name.trim()) {
       errors.name = 'Name is required'
+    } else if (!/^[a-z0-9-]+$/.test(name)) {
+      errors.name = 'Name must contain only lowercase letters, numbers, and hyphens'
     }
 
     if (!type) {
@@ -302,16 +304,16 @@ export function MiddlewareForm() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 pb-2 border-b border-border/60">
         <Button variant="ghost" onClick={() => navigateTo('middlewares')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold tracking-tight">
             {isEditing ? 'Edit Middleware' : 'Create Middleware'}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {isEditing
               ? 'Update middleware configuration'
               : 'Create a new Traefik middleware'}
@@ -342,7 +344,7 @@ export function MiddlewareForm() {
                 id="name"
                 placeholder="my-middleware"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
               />
               {validationErrors.name && (
                 <InlineError message={validationErrors.name} />

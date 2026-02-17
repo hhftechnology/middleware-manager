@@ -430,14 +430,14 @@ export function ResourceDetail() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-border/60">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => navigateTo('resources')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">{selectedResource.host}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{selectedResource.host}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge
                 variant={selectedResource.status === 'active' ? 'success' : 'secondary'}

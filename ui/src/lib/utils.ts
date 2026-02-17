@@ -16,7 +16,7 @@ export function formatDate(date: string | Date): string {
 }
 
 export function truncate(str: string, length: number): string {
-  if (str.length <= length) return str
+  if (!str || str.length <= length) return str ?? ''
   return str.slice(0, length) + '...'
 }
 
