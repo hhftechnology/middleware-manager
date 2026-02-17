@@ -289,6 +289,7 @@ MIT License
 
 ## Documentation
 
-![Documentation](https://img.shields.io/website?url=https%3A%2F%2Fmiddleware-[![Documentation](https://img.shields.io/website?url=https://middleware-manager.hhf.technology&up_message=Please%20Visit%20the%20docs%20for%20in%20depth%20details&up_color=Green&down_message=Docs%20are%20getting%20Updated&down_color=pink&style=flat-square)](https://middleware-manager.hhf.technology)
+[![Documentation](https://img.shields.io/website?url=https://middleware-manager.hhf.technology&up_message=Please%20Visit%20the%20docs%20for%20in%20depth%20details&up_color=Green&down_message=Docs%20are%20getting%20Updated&down_color=pink&style=flat-square)](https://middleware-manager.hhf.technology)
+
 
 
