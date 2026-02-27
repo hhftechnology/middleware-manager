@@ -43,10 +43,14 @@ export function ResourcesList() {
     fetchResources()
   }, [fetchResources])
 
-  const filteredResources = resources.filter((resource) =>
-    resource.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    resource.id.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Memoize filtered resources to prevent unnecessary recalculations on re-renders
+  const filteredResources = useMemo(() => {
+    const lowerSearchTerm = searchTerm.toLowerCase()
+    return resources.filter((resource) =>
+      resource.host.toLowerCase().includes(lowerSearchTerm) ||
+      resource.id.toLowerCase().includes(lowerSearchTerm)
+    )
+  }, [resources, searchTerm])
 
   const handleDelete = async () => {
     if (resourceToDelete) {
