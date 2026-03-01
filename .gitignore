@@ -35,6 +35,10 @@ go.work
 ui/node_modules/
 ui/dist/
 
+# Compiled vite config artifacts
+ui/vite.config.js
+ui/vite.config.d.ts
+
 # SQLite database
 *.db
 
