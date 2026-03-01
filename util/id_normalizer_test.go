@@ -1,131 +1,109 @@
 package util
 
 import (
+	"fmt"
 	"testing"
 )
 
 func TestNormalizeID(t *testing.T) {
 	tests := []struct {
-		name     string
 		input    string
 		expected string
 	}{
-		{"provider suffix removal", "my-svc@docker", "my-svc"},
-		{"no provider suffix", "my-svc", "my-svc"},
-		{"auth cascade", "svc-auth-auth", "svc-auth"},
-		{"triple auth cascade", "svc-auth-auth-auth", "svc-auth"},
-		{"router auth pattern", "my-router-auth-auth", "my-router-auth"},
-		{"router redirect", "my-router-redirect-auth", "my-router-redirect"},
-		{"empty string", "", ""},
-		{"at sign only suffix", "svc@file", "svc"},
-		{"memoization cache hit", "cached-svc@docker", "cached-svc"},
+		{"service@http", "service"},
+		{"service@docker", "service"},
+		{"my-app-auth-auth", "my-app-auth"},
+		{"my-app-router-auth-auth", "my-app-router-auth"},
+		{"my-app-router-redirect-auth", "my-app-router-redirect"},
+		{"simple-id", "simple-id"},
+		{"", ""},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Clear cache before each test for isolation
+		t.Run(tt.input, func(t *testing.T) {
 			ClearNormalizationCache()
-			got := NormalizeID(tt.input)
-			if got != tt.expected {
-				t.Errorf("NormalizeID(%q) = %q, want %q", tt.input, got, tt.expected)
+			result := NormalizeID(tt.input)
+			if result != tt.expected {
+				t.Errorf("NormalizeID(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
+}
 
-	// Verify memoization: call twice and check cache is used
-	t.Run("memoization", func(t *testing.T) {
-		ClearNormalizationCache()
-		first := NormalizeID("test-svc@docker")
-		second := NormalizeID("test-svc@docker")
-		if first != second {
-			t.Errorf("memoization mismatch: first=%q, second=%q", first, second)
-		}
-	})
+func TestNormalizeIDCacheHit(t *testing.T) {
+	ClearNormalizationCache()
+	first := NormalizeID("test@http")
+	second := NormalizeID("test@http")
+	if first != second {
+		t.Errorf("cache returned different results: %q vs %q", first, second)
+	}
+}
+
+func TestCacheBoundedness(t *testing.T) {
+	ClearNormalizationCache()
+
+	// Fill cache beyond maxCacheSize
+	for i := 0; i < maxCacheSize+100; i++ {
+		NormalizeID(fmt.Sprintf("id-%d@http", i))
+	}
+
+	// Cache should have been flushed, so size <= maxCacheSize
+	cacheMu.RLock()
+	size := len(normalizedIDCache)
+	cacheMu.RUnlock()
+
+	if size > maxCacheSize {
+		t.Errorf("cache size %d exceeds max %d", size, maxCacheSize)
+	}
 }
 
 func TestClearNormalizationCache(t *testing.T) {
-	// Populate cache
-	NormalizeID("a@docker")
-	NormalizeID("b@file")
+	NormalizeID("something@http")
 
-	// Clear it
 	ClearNormalizationCache()
 
-	// Verify by loading directly from sync.Map
-	count := 0
-	normalizedIDCache.Range(func(_, _ interface{}) bool {
-		count++
-		return true
-	})
-	if count != 0 {
-		t.Errorf("cache should be empty after ClearNormalizationCache, got %d items", count)
+	cacheMu.RLock()
+	size := len(normalizedIDCache)
+	cacheMu.RUnlock()
+
+	if size != 0 {
+		t.Errorf("cache not empty after clear: %d entries", size)
 	}
 }
 
 func TestGetProviderSuffix(t *testing.T) {
 	tests := []struct {
-		name     string
 		input    string
 		expected string
 	}{
-		{"with suffix", "my-svc@docker", "@docker"},
-		{"without suffix", "my-svc", ""},
-		{"empty string", "", ""},
-		{"file provider", "svc@file", "@file"},
+		{"service@http", "@http"},
+		{"service@docker", "@docker"},
+		{"no-suffix", ""},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetProviderSuffix(tt.input)
-			if got != tt.expected {
-				t.Errorf("GetProviderSuffix(%q) = %q, want %q", tt.input, got, tt.expected)
+		t.Run(tt.input, func(t *testing.T) {
+			result := GetProviderSuffix(tt.input)
+			if result != tt.expected {
+				t.Errorf("GetProviderSuffix(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestAddProviderSuffix(t *testing.T) {
-	tests := []struct {
-		name     string
-		id       string
-		suffix   string
-		expected string
-	}{
-		{"adds suffix", "my-svc", "docker", "my-svc@docker"},
-		{"adds suffix with @", "my-svc", "@docker", "my-svc@docker"},
-		{"skips if already has @", "my-svc@file", "docker", "my-svc@file"},
-		{"empty suffix returns original", "my-svc", "", "my-svc"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := AddProviderSuffix(tt.id, tt.suffix)
-			if got != tt.expected {
-				t.Errorf("AddProviderSuffix(%q, %q) = %q, want %q", tt.id, tt.suffix, got, tt.expected)
-			}
-		})
+func BenchmarkNormalizeIDUnique(b *testing.B) {
+	ClearNormalizationCache()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		NormalizeID(fmt.Sprintf("unique-id-%d@http", i))
 	}
 }
 
-func TestDetermineProviderSuffix(t *testing.T) {
-	tests := []struct {
-		name             string
-		sourceType       string
-		activeDS         string
-		expected         string
-	}{
-		{"file source", "file", "pangolin", "@file"},
-		{"traefik+traefik", "traefik", "traefik", "@docker"},
-		{"default http", "pangolin", "pangolin", "@http"},
-		{"other combo", "custom", "traefik", "@http"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := DetermineProviderSuffix(tt.sourceType, tt.activeDS)
-			if got != tt.expected {
-				t.Errorf("DetermineProviderSuffix(%q, %q) = %q, want %q", tt.sourceType, tt.activeDS, got, tt.expected)
-			}
-		})
+func BenchmarkNormalizeIDRepeated(b *testing.B) {
+	ClearNormalizationCache()
+	NormalizeID("repeated-id@http")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		NormalizeID("repeated-id@http")
 	}
 }

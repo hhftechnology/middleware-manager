@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ type ResourceWatcher struct {
     fetcher         ResourceFetcher
     configManager   *ConfigManager
     stopChan        chan struct{}
-    isRunning       bool
+    isRunning       atomic.Bool
     httpClient      *http.Client
 }
 
@@ -49,18 +50,15 @@ func NewResourceWatcher(db *database.DB, configManager *ConfigManager) (*Resourc
         fetcher:        fetcher,
         configManager:  configManager,
         stopChan:       make(chan struct{}),
-        isRunning:      false,
         httpClient:     httpClient,
     }, nil
 }
 
 // Start begins watching for resources
 func (rw *ResourceWatcher) Start(interval time.Duration) {
-    if rw.isRunning {
+    if !rw.isRunning.CompareAndSwap(false, true) {
         return
     }
-    
-    rw.isRunning = true
     log.Printf("Resource watcher started, checking every %v", interval)
 
     ticker := time.NewTicker(interval)
@@ -109,12 +107,11 @@ func (rw *ResourceWatcher) refreshFetcher() error {
 
 // Stop stops the resource watcher
 func (rw *ResourceWatcher) Stop() {
-    if !rw.isRunning {
+    if !rw.isRunning.CompareAndSwap(true, false) {
         return
     }
-    
+
     close(rw.stopChan)
-    rw.isRunning = false
 }
 
 // checkResources fetches resources from the configured data source and updates the database

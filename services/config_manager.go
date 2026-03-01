@@ -132,7 +132,7 @@ func (cm *ConfigManager) EnsureDefaultDataSources(pangolinURL, traefikURL string
 
 	// Try to determine if Traefik is available
 	if cm.config.ActiveDataSource == "pangolin" {
-		client := &http.Client{Timeout: 2 * time.Second}
+		client := HTTPClientWithTimeout(2 * time.Second)
 		traefikConfig := cm.config.DataSources["traefik"]
 
 		// Try the Traefik URL
@@ -282,9 +282,7 @@ func (cm *ConfigManager) UpdateDataSource(name string, config models.DataSourceC
 
 // testDataSourceConnection tests the connection to a data source
 func (cm *ConfigManager) testDataSourceConnection(ctx context.Context, config models.DataSourceConfig) error {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+	client := HTTPClientWithTimeout(5 * time.Second)
 
 	var url string
 	switch config.Type {

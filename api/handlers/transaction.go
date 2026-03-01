@@ -101,8 +101,24 @@ func ExecuteInTransactionWithResult(c *gin.Context, db *sql.DB, operation string
 	c.JSON(http.StatusOK, response.Data)
 }
 
+// allowedTables is the whitelist of table names that can be used in dynamic SQL.
+var allowedTables = map[string]bool{
+	"resources":          true,
+	"services":           true,
+	"middlewares":        true,
+	"resource_services":  true,
+	"mtls_clients":       true,
+	"mtls_config":        true,
+}
+
 // DeleteInTransaction is a specialized helper for delete operations
 func DeleteInTransaction(c *gin.Context, db *sql.DB, table string, id string, additionalDeletes ...func(*sql.Tx) error) {
+	if !allowedTables[table] {
+		log.Printf("Error: attempted delete from disallowed table %q", table)
+		ResponseWithError(c, http.StatusBadRequest, "Invalid table name")
+		return
+	}
+
 	err := WithTransaction(db, func(tx *sql.Tx) error {
 		// Execute any additional deletes first (e.g., related records)
 		for _, deleteFn := range additionalDeletes {
