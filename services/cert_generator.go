@@ -246,7 +246,11 @@ func (cg *CertGenerator) GenerateClientCert(req models.CreateClientRequest) (*mo
 	}
 
 	// Generate PKCS#12 (.p12) file
-	p12Data, err := pkcs12.Modern.Encode(clientKey, clientCert, []*x509.Certificate{caCert}, req.P12Password)
+	encoder := pkcs12.Modern
+	if req.LegacyP12 {
+		encoder = pkcs12.Legacy
+	}
+	p12Data, err := encoder.Encode(clientKey, clientCert, []*x509.Certificate{caCert}, req.P12Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate PKCS#12: %w", err)
 	}

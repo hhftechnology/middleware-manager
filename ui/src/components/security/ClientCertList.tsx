@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -110,7 +111,7 @@ export function ClientCertList() {
     if (client) {
       setNewClientId(client.id)
       setIsCreateOpen(false)
-      setFormData({ name: '', validity_days: 730, p12_password: '' })
+      setFormData({ name: '', validity_days: 730, p12_password: '', legacy_p12: false })
       setConfirmPassword('')
     }
   }
@@ -242,6 +243,18 @@ export function ClientCertList() {
                   <p className="text-xs text-muted-foreground">
                     Default: 730 days (2 years)
                   </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="legacy_p12"
+                    checked={formData.legacy_p12 || false}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, legacy_p12: checked === true })
+                    }
+                  />
+                  <Label htmlFor="legacy_p12" className="text-sm font-normal">
+                    Use legacy format (required for iOS and some older devices)
+                  </Label>
                 </div>
               </div>
               <DialogFooter>
