@@ -47,6 +47,7 @@ type CreateClientRequest struct {
 	Name         string `json:"name" binding:"required"`
 	ValidityDays int    `json:"validity_days"` // Default: 730 (2 years)
 	P12Password  string `json:"p12_password" binding:"required"`
+	LegacyP12   bool   `json:"legacy_p12"`    // Use legacy encryption for iOS/older device compatibility
 }
 
 // UpdateMTLSConfigRequest represents the request to update resource mTLS settings

@@ -39,10 +39,8 @@ type PangolinServiceFetcher struct {
 // NewPangolinServiceFetcher creates a new Pangolin API fetcher for services
 func NewPangolinServiceFetcher(config models.DataSourceConfig) *PangolinServiceFetcher {
 	return &PangolinServiceFetcher{
-		config: config,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		config:     config,
+		httpClient: GetHTTPClient(),
 	}
 }
 
@@ -72,7 +70,7 @@ func (f *PangolinServiceFetcher) FetchServices(ctx context.Context) (*models.Ser
 	}
 
 	// Process response
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024)) // 50MB limit
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -122,7 +120,11 @@ func (f *PangolinServiceFetcher) FetchServices(ctx context.Context) (*models.Ser
 		}
 
 		// Create new service
-		configJSON, _ := json.Marshal(serviceConfig)
+		configJSON, err := json.Marshal(serviceConfig)
+		if err != nil {
+			log.Printf("Failed to marshal service config for %s: %v", id, err)
+			continue
+		}
 
 		newService := models.Service{
 			ID:        id,
@@ -188,10 +190,8 @@ type TraefikServiceFetcher struct {
 // NewTraefikServiceFetcher creates a new Traefik API fetcher for services
 func NewTraefikServiceFetcher(config models.DataSourceConfig) *TraefikServiceFetcher {
 	return &TraefikServiceFetcher{
-		config: config,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		config:     config,
+		httpClient: GetHTTPClient(),
 	}
 }
 
@@ -313,7 +313,7 @@ func (f *TraefikServiceFetcher) fetchHTTPServices(ctx context.Context, baseURL s
 	}
 
 	// Read and parse response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024)) // 50MB limit
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -392,7 +392,7 @@ func (f *TraefikServiceFetcher) fetchTCPServices(ctx context.Context, baseURL st
 	}
 
 	// Read and parse response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024)) // 50MB limit
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -435,7 +435,11 @@ func (f *TraefikServiceFetcher) fetchTCPServices(ctx context.Context, baseURL st
 			}
 
 			// Create service
-			configJSON, _ := json.Marshal(config)
+			configJSON, err := json.Marshal(config)
+			if err != nil {
+				log.Printf("Failed to marshal service config for %s: %v", name, err)
+				continue
+			}
 
 			services = append(services, models.Service{
 				ID:        name,
@@ -476,7 +480,11 @@ func (f *TraefikServiceFetcher) fetchTCPServices(ctx context.Context, baseURL st
 			}
 
 			// Create service
-			configJSON, _ := json.Marshal(config)
+			configJSON, err := json.Marshal(config)
+			if err != nil {
+				log.Printf("Failed to marshal service config for %s: %v", name, err)
+				continue
+			}
 
 			services = append(services, models.Service{
 				ID:        name,
@@ -522,7 +530,7 @@ func (f *TraefikServiceFetcher) fetchUDPServices(ctx context.Context, baseURL st
 	}
 
 	// Read and parse response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024)) // 50MB limit
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -563,7 +571,11 @@ func (f *TraefikServiceFetcher) fetchUDPServices(ctx context.Context, baseURL st
 			}
 
 			// Create service
-			configJSON, _ := json.Marshal(config)
+			configJSON, err := json.Marshal(config)
+			if err != nil {
+				log.Printf("Failed to marshal service config for %s: %v", name, err)
+				continue
+			}
 
 			services = append(services, models.Service{
 				ID:        name,
@@ -604,7 +616,11 @@ func (f *TraefikServiceFetcher) fetchUDPServices(ctx context.Context, baseURL st
 			}
 
 			// Create service
-			configJSON, _ := json.Marshal(config)
+			configJSON, err := json.Marshal(config)
+			if err != nil {
+				log.Printf("Failed to marshal service config for %s: %v", name, err)
+				continue
+			}
 
 			services = append(services, models.Service{
 				ID:        name,

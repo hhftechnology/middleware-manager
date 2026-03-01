@@ -6,6 +6,8 @@ import (
 	"sync"
 )
 
+const maxCacheSize = 1000
+
 var (
 	// Regular expression to match cascading auth suffixes
 	authCascadeRegex = regexp.MustCompile(`(-auth)+$`)
@@ -13,24 +15,33 @@ var (
 	// Regular expression for router suffix with auth patterns
 	routerAuthRegex = regexp.MustCompile(`-router(-auth)*$`)
 
-	// Memoization cache for normalized IDs
-	normalizedIDCache sync.Map
+	// Bounded memoization cache for normalized IDs
+	cacheMu           sync.RWMutex
+	normalizedIDCache = make(map[string]string, maxCacheSize)
 )
 
 // NormalizeID provides a standard way to normalize any ID across the application
 // It removes provider suffixes and handles special cases like auth cascades
 // Uses memoization for improved performance on repeated calls
 func NormalizeID(id string) string {
-	// Check cache first
-	if cached, ok := normalizedIDCache.Load(id); ok {
-		return cached.(string)
+	// Check cache first (read lock)
+	cacheMu.RLock()
+	if cached, ok := normalizedIDCache[id]; ok {
+		cacheMu.RUnlock()
+		return cached
 	}
+	cacheMu.RUnlock()
 
 	// Perform normalization
 	normalized := normalizeIDInternal(id)
 
-	// Store in cache
-	normalizedIDCache.Store(id, normalized)
+	// Store in cache (write lock), flush if full
+	cacheMu.Lock()
+	if len(normalizedIDCache) >= maxCacheSize {
+		normalizedIDCache = make(map[string]string, maxCacheSize)
+	}
+	normalizedIDCache[id] = normalized
+	cacheMu.Unlock()
 
 	return normalized
 }
@@ -66,10 +77,9 @@ func normalizeIDInternal(id string) string {
 // ClearNormalizationCache clears the ID normalization cache
 // Useful for testing or when IDs change
 func ClearNormalizationCache() {
-	normalizedIDCache.Range(func(key, value interface{}) bool {
-		normalizedIDCache.Delete(key)
-		return true
-	})
+	cacheMu.Lock()
+	normalizedIDCache = make(map[string]string, maxCacheSize)
+	cacheMu.Unlock()
 }
 
 // GetProviderSuffix extracts the provider suffix from an ID

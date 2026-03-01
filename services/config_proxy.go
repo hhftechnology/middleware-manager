@@ -146,9 +146,7 @@ func NewConfigProxy(db *database.DB, configManager *ConfigManager, pangolinURL s
 		db:            db,
 		configManager: configManager,
 		pangolinURL:   pangolinURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		httpClient: HTTPClientWithTimeout(10 * time.Second),
 		cacheDuration: 5 * time.Second, // Match typical Traefik poll interval
 	}
 }
@@ -161,29 +159,21 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 		defer cp.cacheMutex.RUnlock()
 		return cp.cache, nil
 	}
+	staleCache := cp.cache
 	cp.cacheMutex.RUnlock()
 
-	// Acquire write lock for cache update
-	cp.cacheMutex.Lock()
-	defer cp.cacheMutex.Unlock()
-
-	// Double-check after acquiring write lock
-	if cp.cache != nil && time.Now().Before(cp.cacheExpiry) {
-		return cp.cache, nil
-	}
-
-	// Fetch fresh config from Pangolin
+	// Fetch fresh config OUTSIDE the lock to avoid blocking readers
 	config, err := cp.fetchPangolinConfig()
 	if err != nil {
 		// Return stale cache on error if available
-		if cp.cache != nil {
+		if staleCache != nil {
 			log.Printf("Warning: Pangolin fetch failed, using stale cache: %v", err)
-			return cp.cache, nil
+			return staleCache, nil
 		}
 		return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
 	}
 
-	// Merge MW-manager additions
+	// Merge MW-manager additions (no lock needed, operates on local config)
 	if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
 		return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
 	}
@@ -197,9 +187,11 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	// Normalize middleware field ordering to match Pangolin's JSON format
 	cp.normalizeMiddlewareOrder(config)
 
-	// Update cache
+	// Lock only to swap the cache
+	cp.cacheMutex.Lock()
 	cp.cache = config
 	cp.cacheExpiry = time.Now().Add(cp.cacheDuration)
+	cp.cacheMutex.Unlock()
 
 	return config, nil
 }
@@ -245,7 +237,7 @@ func (cp *ConfigProxy) fetchPangolinConfig() (*ProxiedTraefikConfig, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024)) // 1MB limit for error body
 		return nil, fmt.Errorf("Pangolin returned status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -1164,6 +1156,8 @@ func (cp *ConfigProxy) SetPangolinURL(url string) {
 
 // SetCacheDuration updates the cache duration
 func (cp *ConfigProxy) SetCacheDuration(duration time.Duration) {
+	cp.cacheMutex.Lock()
+	defer cp.cacheMutex.Unlock()
 	cp.cacheDuration = duration
 }
 

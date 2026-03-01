@@ -628,7 +628,7 @@ func (cg *ConfigGenerator) processMTLSOptions(config *TraefikConfig) error {
 // Helper to fetch service names from Traefik API
 func (cg *ConfigGenerator) fetchTraefikServiceNames() map[string]string {
 	serviceMap := make(map[string]string)
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := HTTPClientWithTimeout(5 * time.Second)
 
 	// Get Traefik API URL from data source config
 	dsConfig, err := cg.configManager.GetActiveDataSourceConfig()

@@ -37,6 +37,7 @@ export interface CreateClientRequest {
   name: string
   validity_days?: number
   p12_password: string
+  legacy_p12?: boolean
 }
 
 export interface MTLSConfigRequest {
