@@ -101,7 +101,7 @@ export function DataSourceSettings() {
             Data Source Settings
           </DialogTitle>
           <DialogDescription>
-            Configure your data source connections for Pangolin or Traefik API
+            Configure your data source connections for Pangolin or Traefik API --Traefik api will not function on pangolin stack/api,dont switch
           </DialogDescription>
         </DialogHeader>
 
@@ -178,7 +178,7 @@ export function DataSourceSettings() {
                         <Input
                           value={editUrl}
                           onChange={(e) => setEditUrl(e.target.value)}
-                          placeholder="http://localhost:8080"
+                          placeholder="http://gerbil:8080"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-2">

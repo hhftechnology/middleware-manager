@@ -55,6 +55,89 @@ func TestConfigProxyCachesAndInvalidates(t *testing.T) {
 	}
 }
 
+func TestConfigProxyPreservesServersTransports(t *testing.T) {
+	db := newTestDB(t)
+	cm := newTestConfigManager(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"http": map[string]interface{}{
+				"middlewares": map[string]interface{}{},
+				"routers":     map[string]interface{}{},
+				"services": map[string]interface{}{
+					"14-example-service": map[string]interface{}{
+						"loadBalancer": map[string]interface{}{
+							"servers": []map[string]interface{}{
+								{"url": "https://10.0.0.1:12345"},
+							},
+							"serversTransport": "14-transport",
+						},
+					},
+				},
+				"serversTransports": map[string]interface{}{
+					"14-transport": map[string]interface{}{
+						"serverName":         "example.com",
+						"insecureSkipVerify": true,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	cp := NewConfigProxy(db, cm, server.URL)
+	cp.httpClient = server.Client()
+
+	config, err := cp.GetMergedConfig()
+	if err != nil {
+		t.Fatalf("GetMergedConfig() error = %v", err)
+	}
+
+	if config.HTTP == nil {
+		t.Fatal("config.HTTP is nil")
+	}
+
+	transportRaw, exists := config.HTTP.ServersTransports["14-transport"]
+	if !exists {
+		t.Fatalf("serversTransport %q was not preserved", "14-transport")
+	}
+
+	transport, ok := transportRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("serversTransport has type %T, want map[string]interface{}", transportRaw)
+	}
+
+	if got, ok := transport["serverName"].(string); !ok || got != "example.com" {
+		t.Fatalf("serverName = %#v, want %q", transport["serverName"], "example.com")
+	}
+	if got, ok := transport["insecureSkipVerify"].(bool); !ok || !got {
+		t.Fatalf("insecureSkipVerify = %#v, want true", transport["insecureSkipVerify"])
+	}
+
+	serviceRaw, exists := config.HTTP.Services["14-example-service"]
+	if !exists {
+		t.Fatalf("service %q not found", "14-example-service")
+	}
+	service, ok := serviceRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("service has type %T, want map[string]interface{}", serviceRaw)
+	}
+
+	loadBalancerRaw, exists := service["loadBalancer"]
+	if !exists {
+		t.Fatalf("service %q missing loadBalancer", "14-example-service")
+	}
+	loadBalancer, ok := loadBalancerRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("loadBalancer has type %T, want map[string]interface{}", loadBalancerRaw)
+	}
+
+	if got, ok := loadBalancer["serversTransport"].(string); !ok || got != "14-transport" {
+		t.Fatalf("loadBalancer.serversTransport = %#v, want %q", loadBalancer["serversTransport"], "14-transport")
+	}
+}
+
 func TestConfigGeneratorWritesConfigFile(t *testing.T) {
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)

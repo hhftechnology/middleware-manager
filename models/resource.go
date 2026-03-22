@@ -6,36 +6,36 @@ import (
 
 // Resource represents a Pangolin resource
 type Resource struct {
-	ID               string    `json:"id"`                 // Internal UUID (stable, never changes)
-	PangolinRouterID string    `json:"pangolin_router_id"` // Pangolin's router ID (can change)
-	Host             string    `json:"host"`
-	ServiceID        string    `json:"service_id"`
-	OrgID            string    `json:"org_id"`
-	SiteID           string    `json:"site_id"`
-	Status           string    `json:"status"`
+	ID               string `json:"id"`                 // Internal UUID (stable, never changes)
+	PangolinRouterID string `json:"pangolin_router_id"` // Pangolin's router ID (can change)
+	Host             string `json:"host"`
+	ServiceID        string `json:"service_id"`
+	OrgID            string `json:"org_id"`
+	SiteID           string `json:"site_id"`
+	Status           string `json:"status"`
 
 	// HTTP router configuration
-	Entrypoints    string    `json:"entrypoints"`
-	
+	Entrypoints string `json:"entrypoints"`
+
 	// TLS certificate configuration
-	TLSDomains     string    `json:"tls_domains"`
-	
+	TLSDomains string `json:"tls_domains"`
+
 	// TCP SNI routing configuration
-	TCPEnabled     bool      `json:"tcp_enabled"`
-	TCPEntrypoints string    `json:"tcp_entrypoints"`
-	TCPSNIRule     string    `json:"tcp_sni_rule"`
-	
+	TCPEnabled     bool   `json:"tcp_enabled"`
+	TCPEntrypoints string `json:"tcp_entrypoints"`
+	TCPSNIRule     string `json:"tcp_sni_rule"`
+
 	// Custom headers configuration
-	CustomHeaders  string    `json:"custom_headers"`
-	
+	CustomHeaders string `json:"custom_headers"`
+
 	// Router priority configuration
-	RouterPriority int       `json:"router_priority"`
+	RouterPriority int `json:"router_priority"`
 
 	// Source type for tracking data origin
-	SourceType     string    `json:"source_type"`
+	SourceType string `json:"source_type"`
 
 	// mTLS configuration
-	MTLSEnabled    bool      `json:"mtls_enabled"`
+	MTLSEnabled bool `json:"mtls_enabled"`
 
 	// TLS Hardening configuration (standalone, disabled when mTLS is active)
 	TLSHardeningEnabled bool `json:"tls_hardening_enabled"`
@@ -43,8 +43,8 @@ type Resource struct {
 	// Secure Headers configuration
 	SecureHeadersEnabled bool `json:"secure_headers_enabled"`
 
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // PangolinResource represents the format of a resource from Pangolin API
@@ -58,9 +58,10 @@ type PangolinResource struct {
 // PangolinTraefikConfig represents the Traefik configuration from Pangolin API
 type PangolinTraefikConfig struct {
 	HTTP struct {
-		Routers     map[string]PangolinRouter         `json:"routers"`
-		Services    map[string]PangolinService        `json:"services"`
-		Middlewares map[string]map[string]interface{} `json:"middlewares"`
+		Routers           map[string]PangolinRouter         `json:"routers"`
+		Services          map[string]PangolinService        `json:"services"`
+		Middlewares       map[string]map[string]interface{} `json:"middlewares"`
+		ServersTransports map[string]interface{}            `json:"serversTransports"`
 	} `json:"http"`
 }
 
@@ -96,7 +97,7 @@ type PangolinServiceConfig struct {
 type TraefikService struct {
 	Name     string `json:"name"`
 	Provider string `json:"provider"`
-	
+
 	// Service types - only one will be populated based on service type
 	LoadBalancer *struct {
 		Servers []struct {
@@ -108,7 +109,7 @@ type TraefikService struct {
 		Sticky         interface{} `json:"sticky,omitempty"`
 		HealthCheck    interface{} `json:"healthCheck,omitempty"`
 	} `json:"loadBalancer,omitempty"`
-	
+
 	Weighted *struct {
 		Services []struct {
 			Name   string `json:"name"`
@@ -117,10 +118,10 @@ type TraefikService struct {
 		Sticky      interface{} `json:"sticky,omitempty"`
 		HealthCheck interface{} `json:"healthCheck,omitempty"`
 	} `json:"weighted,omitempty"`
-	
+
 	Mirroring *struct {
-		Service     string `json:"service"`
-		Mirrors     []struct {
+		Service string `json:"service"`
+		Mirrors []struct {
 			Name    string `json:"name"`
 			Percent int    `json:"percent"`
 		} `json:"mirrors,omitempty"`
@@ -128,7 +129,7 @@ type TraefikService struct {
 		MirrorBody  *bool       `json:"mirrorBody,omitempty"`
 		HealthCheck interface{} `json:"healthCheck,omitempty"`
 	} `json:"mirroring,omitempty"`
-	
+
 	Failover *struct {
 		Service     string      `json:"service"`
 		Fallback    string      `json:"fallback"`
