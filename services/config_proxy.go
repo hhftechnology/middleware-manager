@@ -28,9 +28,10 @@ type ProxiedTraefikConfig struct {
 
 // HTTPConfig represents HTTP configuration section
 type HTTPConfig struct {
-	Middlewares map[string]interface{} `json:"middlewares,omitempty"`
-	Routers     map[string]interface{} `json:"routers,omitempty"`
-	Services    map[string]interface{} `json:"services,omitempty"`
+	Middlewares       map[string]interface{} `json:"middlewares,omitempty"`
+	Routers           map[string]interface{} `json:"routers,omitempty"`
+	Services          map[string]interface{} `json:"services,omitempty"`
+	ServersTransports map[string]interface{} `json:"serversTransports,omitempty"`
 }
 
 // TCPConfig represents TCP configuration section
@@ -53,12 +54,12 @@ type TLSConfig struct {
 // OrderedRouter represents a Traefik HTTP router with fields in Pangolin's order.
 // The JSON field order matches Pangolin API output for consistency.
 type OrderedRouter struct {
-	EntryPoints []string               `json:"entryPoints,omitempty"`
-	Middlewares []string               `json:"middlewares,omitempty"`
-	Service     string                 `json:"service,omitempty"`
-	Rule        string                 `json:"rule,omitempty"`
-	Priority    int                    `json:"priority,omitempty"`
-	TLS         *OrderedTLSConfig      `json:"tls,omitempty"`
+	EntryPoints []string          `json:"entryPoints,omitempty"`
+	Middlewares []string          `json:"middlewares,omitempty"`
+	Service     string            `json:"service,omitempty"`
+	Rule        string            `json:"rule,omitempty"`
+	Priority    int               `json:"priority,omitempty"`
+	TLS         *OrderedTLSConfig `json:"tls,omitempty"`
 }
 
 // OrderedTLSConfig represents TLS config for a router with Pangolin's field order.
@@ -146,7 +147,7 @@ func NewConfigProxy(db *database.DB, configManager *ConfigManager, pangolinURL s
 		db:            db,
 		configManager: configManager,
 		pangolinURL:   pangolinURL,
-		httpClient: HTTPClientWithTimeout(10 * time.Second),
+		httpClient:    HTTPClientWithTimeout(10 * time.Second),
 		cacheDuration: 5 * time.Second, // Match typical Traefik poll interval
 	}
 }
@@ -265,6 +266,9 @@ func (cp *ConfigProxy) initializeConfigMaps(config *ProxiedTraefikConfig) {
 	}
 	if config.HTTP.Services == nil {
 		config.HTTP.Services = make(map[string]interface{})
+	}
+	if config.HTTP.ServersTransports == nil {
+		config.HTTP.ServersTransports = make(map[string]interface{})
 	}
 
 	if config.TCP == nil {
