@@ -8,7 +8,20 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/hhftechnology/middleware-manager/models"
 )
+
+func setActiveDataSourceForConfigProxy(t *testing.T, cm *ConfigManager, name string, cfg models.DataSourceConfig) {
+	t.Helper()
+
+	if err := cm.UpdateDataSource(name, cfg); err != nil {
+		t.Fatalf("UpdateDataSource(%s) failed: %v", name, err)
+	}
+	if err := cm.SetActiveDataSource(name); err != nil {
+		t.Fatalf("SetActiveDataSource(%s) failed: %v", name, err)
+	}
+}
 
 func TestConfigProxyCachesAndInvalidates(t *testing.T) {
 	db := newTestDB(t)
@@ -135,6 +148,50 @@ func TestConfigProxyPreservesServersTransports(t *testing.T) {
 
 	if got, ok := loadBalancer["serversTransport"].(string); !ok || got != "14-transport" {
 		t.Fatalf("loadBalancer.serversTransport = %#v, want %q", loadBalancer["serversTransport"], "14-transport")
+	}
+}
+
+func TestConfigProxyUsesStandaloneConfigWhenTraefikIsActive(t *testing.T) {
+	db := newTestDB(t)
+	cm := newTestConfigManager(t)
+
+	traefikServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/version" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"Version": "3.6.12",
+		})
+	}))
+	defer traefikServer.Close()
+
+	setActiveDataSourceForConfigProxy(t, cm, "traefik", models.DataSourceConfig{
+		Type: models.TraefikAPI,
+		URL:  traefikServer.URL,
+	})
+
+	cp := NewConfigProxy(db, cm, "http://pangolin.invalid:3001/api/v1")
+	config, err := cp.GetMergedConfig()
+	if err != nil {
+		t.Fatalf("GetMergedConfig() should not require Pangolin when Traefik is active: %v", err)
+	}
+
+	if config == nil {
+		t.Fatal("GetMergedConfig() returned nil config")
+	}
+	if config.HTTP == nil {
+		t.Fatal("config.HTTP is nil")
+	}
+	if config.HTTP.Middlewares == nil {
+		t.Fatal("config.HTTP.Middlewares is nil")
+	}
+	if config.HTTP.Routers == nil {
+		t.Fatal("config.HTTP.Routers is nil")
+	}
+	if config.HTTP.Services == nil {
+		t.Fatal("config.HTTP.Services is nil")
 	}
 }
 
