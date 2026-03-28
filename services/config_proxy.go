@@ -164,19 +164,14 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	cp.cacheMutex.RUnlock()
 
 	// Fetch fresh config OUTSIDE the lock to avoid blocking readers
-	config, err := cp.fetchPangolinConfig()
+	config, err := cp.buildBaseConfig()
 	if err != nil {
 		// Return stale cache on error if available
 		if staleCache != nil {
-			log.Printf("Warning: Pangolin fetch failed, using stale cache: %v", err)
+			log.Printf("Warning: base config fetch failed, using stale cache: %v", err)
 			return staleCache, nil
 		}
-		return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
-	}
-
-	// Merge MW-manager additions (no lock needed, operates on local config)
-	if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
-		return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
+		return nil, fmt.Errorf("failed to build base config: %w", err)
 	}
 
 	// Remove empty protocol sections so Traefik doesn't reject blank configs
@@ -194,6 +189,88 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	cp.cacheExpiry = time.Now().Add(cp.cacheDuration)
 	cp.cacheMutex.Unlock()
 
+	return config, nil
+}
+
+// buildBaseConfig selects the appropriate config source for the active data source.
+func (cp *ConfigProxy) buildBaseConfig() (*ProxiedTraefikConfig, error) {
+	activeType := models.PangolinAPI
+	if cp.configManager != nil {
+		if dsConfig, err := cp.configManager.GetActiveDataSourceConfig(); err == nil {
+			activeType = dsConfig.Type
+		} else if shouldLogInfo() {
+			log.Printf("Warning: failed to read active data source for config proxy, defaulting to Pangolin: %v", err)
+		}
+	}
+
+	switch activeType {
+	case models.TraefikAPI:
+		if shouldLogInfo() {
+			log.Printf("Building standalone Traefik config from Middleware Manager state")
+		}
+		return cp.buildStandaloneTraefikConfig()
+	case models.PangolinAPI:
+		fallthrough
+	default:
+		config, err := cp.fetchPangolinConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
+		}
+		if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
+			return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
+		}
+		return config, nil
+	}
+}
+
+// buildStandaloneTraefikConfig builds the dynamic config directly from Middleware Manager state.
+func (cp *ConfigProxy) buildStandaloneTraefikConfig() (*ProxiedTraefikConfig, error) {
+	generatorConfig := &TraefikConfig{}
+	generatorConfig.HTTP.Middlewares = make(map[string]interface{})
+	generatorConfig.HTTP.Routers = make(map[string]interface{})
+	generatorConfig.HTTP.Services = make(map[string]interface{})
+	generatorConfig.TCP.Routers = make(map[string]interface{})
+	generatorConfig.TCP.Services = make(map[string]interface{})
+	generatorConfig.UDP.Services = make(map[string]interface{})
+	generatorConfig.TLS.Options = make(map[string]interface{})
+
+	generator := NewConfigGenerator(cp.db, "", cp.configManager)
+
+	if err := generator.processMiddlewares(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process middlewares for standalone config: %w", err)
+	}
+	if err := generator.processMTLSOptions(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process mTLS options for standalone config: %w", err)
+	}
+	if err := generator.processServices(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process services for standalone config: %w", err)
+	}
+	if err := generator.processResourcesWithServices(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process HTTP resources for standalone config: %w", err)
+	}
+	if err := generator.processTCPRouters(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process TCP resources for standalone config: %w", err)
+	}
+
+	config := &ProxiedTraefikConfig{
+		HTTP: &HTTPConfig{
+			Middlewares: generatorConfig.HTTP.Middlewares,
+			Routers:     generatorConfig.HTTP.Routers,
+			Services:    generatorConfig.HTTP.Services,
+		},
+		TCP: &TCPConfig{
+			Routers:  generatorConfig.TCP.Routers,
+			Services: generatorConfig.TCP.Services,
+		},
+		UDP: &UDPConfig{
+			Services: generatorConfig.UDP.Services,
+		},
+		TLS: &TLSConfig{
+			Options: generatorConfig.TLS.Options,
+		},
+	}
+
+	cp.initializeConfigMaps(config)
 	return config, nil
 }
 

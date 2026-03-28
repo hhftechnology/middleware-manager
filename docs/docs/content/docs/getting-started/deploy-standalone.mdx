@@ -60,6 +60,11 @@ middleware-manager:
 4) Open UI at `http://<host>:3456` and set **Active Data Source → Traefik**.  
 5) Validate with **Traefik Explorer** (routers/services/middlewares) and a test middleware assignment.
 
+## Notes
+
+- In standalone Traefik mode, `/api/v1/traefik-config` should be served from Middleware Manager's Traefik/standalone path and must not require Pangolin.
+- `PANGOLIN_API_URL` may still exist in the container environment, but it should not be consulted while `active_data_source` is `traefik`.
+
 ## Port/health
 
 - Middleware Manager: `:3456` (UI/API), `GET /health`.
