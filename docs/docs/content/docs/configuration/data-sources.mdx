@@ -9,6 +9,7 @@ Middleware Manager can pull routers/services from Pangolin or directly from Trae
 
 - Set via **Settings → Active Data Source** or `config.json` (`active_data_source`).
 - Pangolin uses `/api/v1/traefik-config`; Traefik uses `/api/version` checks.
+- When `active_data_source` is `traefik`, the config proxy endpoint must operate without requiring Pangolin to be reachable.
 
 ## Config file (mounted)
 
