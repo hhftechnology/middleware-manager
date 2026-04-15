@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,7 +21,7 @@ func TestConfigProxyCachesAndInvalidates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits++
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONResponse(w, map[string]interface{}{
 			"http": map[string]interface{}{
 				"middlewares": map[string]interface{}{},
 				"routers":     map[string]interface{}{},
@@ -71,7 +70,7 @@ func TestConfigProxyPreservesServersTransports(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONResponse(w, map[string]interface{}{
 			"http": map[string]interface{}{
 				"middlewares": map[string]interface{}{},
 				"routers":     map[string]interface{}{},

@@ -379,7 +379,7 @@ func (h *ResourceHandler) DeleteResource(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "create resource")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -449,7 +449,7 @@ func (h *ResourceHandler) DeleteDisabledResources(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update resource")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -610,7 +610,7 @@ func (h *ResourceHandler) AssignMiddleware(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "delete resource")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -713,7 +713,7 @@ func (h *ResourceHandler) AssignMultipleMiddlewares(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "enable resource")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -818,7 +818,7 @@ func (h *ResourceHandler) RemoveMiddleware(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "disable resource")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -920,7 +920,7 @@ func (h *ResourceHandler) AssignExternalMiddleware(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "replace external middlewares")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -985,7 +985,7 @@ func (h *ResourceHandler) RemoveExternalMiddleware(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update external middlewares")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()

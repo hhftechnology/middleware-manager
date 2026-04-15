@@ -23,7 +23,7 @@ func WithTransaction(db *sql.DB, fn TxFn) error {
 	defer func() {
 		if p := recover(); p != nil {
 			log.Printf("Recovered from panic in transaction: %v", p)
-			tx.Rollback()
+			rollbackTransaction(tx, "panic recovery")
 			panic(p) // Re-throw panic after rollback
 		}
 	}()
@@ -42,6 +42,12 @@ func WithTransaction(db *sql.DB, fn TxFn) error {
 	}
 
 	return nil
+}
+
+func rollbackTransaction(tx *sql.Tx, context string) {
+	if err := tx.Rollback(); err != nil {
+		log.Printf("Warning: rollback failed during %s: %v", context, err)
+	}
 }
 
 // TransactionResponse represents the result of a transaction operation
@@ -103,12 +109,12 @@ func ExecuteInTransactionWithResult(c *gin.Context, db *sql.DB, operation string
 
 // allowedTables is the whitelist of table names that can be used in dynamic SQL.
 var allowedTables = map[string]bool{
-	"resources":          true,
-	"services":           true,
-	"middlewares":        true,
-	"resource_services":  true,
-	"mtls_clients":       true,
-	"mtls_config":        true,
+	"resources":         true,
+	"services":          true,
+	"middlewares":       true,
+	"resource_services": true,
+	"mtls_clients":      true,
+	"mtls_config":       true,
 }
 
 // DeleteInTransaction is a specialized helper for delete operations

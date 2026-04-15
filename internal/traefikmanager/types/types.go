@@ -16,6 +16,7 @@ type RuntimeConfig struct {
 	StaticConfigPath  string
 	AllowCORS         bool
 	CORSOrigin        string
+	TrustedProxies    []string
 	Debug             bool
 	GitHubRepo        string
 	SettingsDir       string

@@ -331,7 +331,7 @@ func TestMiddlewareHandler_GetMiddlewares_Empty(t *testing.T) {
 	}
 
 	var middlewares []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &middlewares)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &middlewares)
 
 	// Should return empty array, not null
 	if middlewares == nil {
@@ -357,7 +357,7 @@ func TestMiddlewareHandler_GetMiddlewares_ConfigParsing(t *testing.T) {
 	}
 
 	var middlewares []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &middlewares)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &middlewares)
 
 	if len(middlewares) != 1 {
 		t.Fatalf("expected 1 middleware, got %d", len(middlewares))

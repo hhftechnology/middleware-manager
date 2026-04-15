@@ -19,7 +19,7 @@ COPY traefik-ui/ ./
 RUN npm run build
 
 # Build Go stage - using Debian for glibc compatibility with go-sqlite3
-FROM golang:1.24-bookworm AS go-builder
+FROM golang:1.25.8-bookworm AS go-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -38,9 +38,9 @@ RUN go mod tidy && \
     go build -ldflags="-s -w -extldflags '-static'" -o middleware-manager .
 
 # Final stage - minimal runtime image
-FROM alpine:3.18
+FROM alpine:3.23
 
-RUN apk add --no-cache ca-certificates sqlite curl tzdata
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
@@ -65,6 +65,6 @@ ENV MODE=middleware-manager \
 EXPOSE 3456
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3456/health || exit 1
+    CMD wget -q -O /dev/null http://localhost:3456/health || exit 1
 
 CMD ["/app/middleware-manager"]

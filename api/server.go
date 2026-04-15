@@ -40,12 +40,13 @@ type Server struct {
 
 // ServerConfig contains configuration options for the server
 type ServerConfig struct {
-	Port        string
-	UIPath      string
-	Debug       bool
-	AllowCORS   bool
-	CORSOrigin  string
-	PangolinURL string // URL for Pangolin API (for config proxy)
+	Port           string
+	UIPath         string
+	Debug          bool
+	AllowCORS      bool
+	CORSOrigin     string
+	TrustedProxies []string
+	PangolinURL    string // URL for Pangolin API (for config proxy)
 }
 
 // NewServer creates a new API server
@@ -59,6 +60,9 @@ func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *servi
 	}
 
 	router := gin.New()
+	if err := router.SetTrustedProxies(config.TrustedProxies); err != nil {
+		log.Panicf("configure trusted proxies: %v", err)
+	}
 
 	// Use recovery and logger middleware
 	router.Use(gin.Recovery())

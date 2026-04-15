@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -53,7 +52,7 @@ func TestNewResourceWatcher(t *testing.T) {
 
 	// Create a mock server for the data source
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -88,7 +87,7 @@ func TestResourceWatcher_Stop(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -113,7 +112,7 @@ func TestResourceWatcher_RefreshFetcher(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -137,7 +136,7 @@ func TestResourceWatcher_StartStop(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -194,7 +193,7 @@ func TestResourceWatcher_CheckResources(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(config)
+		writeJSONResponse(w, config)
 	}))
 	defer server.Close()
 
@@ -238,7 +237,7 @@ func TestResourceWatcher_CheckResources_EmptyResult(t *testing.T) {
 
 	// Create a mock server that returns empty config
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -302,7 +301,7 @@ func TestResourceWatcher_UpdateOrCreateResource_New(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -347,7 +346,7 @@ func TestResourceWatcher_UpdateOrCreateResource_Update(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -402,7 +401,7 @@ func TestResourceWatcher_UpdateOrCreateResource_ByHost(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -470,7 +469,7 @@ func TestResourceWatcher_DisablesRemovedResources(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var cfg models.PangolinTraefikConfig
 		cfg.HTTP.Routers = map[string]models.PangolinRouter{}
-		json.NewEncoder(w).Encode(cfg)
+		writeJSONResponse(w, cfg)
 	}))
 	defer server.Close()
 
@@ -513,7 +512,7 @@ func TestResourceWatcher_FetchTraefikConfig(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/traefik-config" {
-			json.NewEncoder(w).Encode(expectedConfig)
+			writeJSONResponse(w, expectedConfig)
 		} else {
 			http.NotFound(w, r)
 		}
@@ -557,7 +556,7 @@ func TestResourceWatcher_FetchTraefikConfig_WithAuth(t *testing.T) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -592,7 +591,7 @@ func TestResourceWatcher_PreservesRouterPriorityManual(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -634,7 +633,7 @@ func TestResourceWatcher_CreateWithDefaults(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 

@@ -34,6 +34,14 @@ func LoadRuntimeConfig(debug bool) tmtypes.RuntimeConfig {
 	}
 
 	allowCORS := strings.EqualFold(strings.TrimSpace(os.Getenv("ALLOW_CORS")), "true")
+	var trustedProxies []string
+	if rawTrustedProxies := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES")); rawTrustedProxies != "" {
+		for _, proxy := range strings.Split(rawTrustedProxies, ",") {
+			if trimmed := strings.TrimSpace(proxy); trimmed != "" {
+				trustedProxies = append(trustedProxies, trimmed)
+			}
+		}
+	}
 
 	return tmtypes.RuntimeConfig{
 		Port:              firstNonEmpty(os.Getenv("PORT"), "3456"),
@@ -49,6 +57,7 @@ func LoadRuntimeConfig(debug bool) tmtypes.RuntimeConfig {
 		StaticConfigPath:  firstNonEmpty(os.Getenv("TM_STATIC_CONFIG_PATH"), "/app/traefik.yml"),
 		AllowCORS:         allowCORS,
 		CORSOrigin:        strings.TrimSpace(os.Getenv("CORS_ORIGIN")),
+		TrustedProxies:    trustedProxies,
 		Debug:             debug,
 		GitHubRepo:        "hhftechnology/middleware-manager",
 		SettingsDir:       settingsDir,

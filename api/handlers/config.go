@@ -250,7 +250,7 @@ func (h *ConfigHandler) UpdateTLSConfig(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update tls domains")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -350,7 +350,7 @@ func (h *ConfigHandler) UpdateTCPConfig(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update tcp config")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -461,7 +461,7 @@ func (h *ConfigHandler) UpdateMTLSConfig(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update mTLS config")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -602,7 +602,7 @@ func (h *ConfigHandler) UpdateMTLSWhitelistConfig(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "clear mTLS config")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -705,7 +705,7 @@ func (h *ConfigHandler) UpdateHeadersConfig(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update custom headers")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()

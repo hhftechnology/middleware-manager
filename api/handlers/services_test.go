@@ -94,7 +94,7 @@ func TestServiceHandler_GetServices_StatusFilter(t *testing.T) {
 			}
 
 			var services []map[string]interface{}
-			json.Unmarshal(rec.Body.Bytes(), &services)
+			mustUnmarshalResponse(t, rec.Body.Bytes(), &services)
 
 			if len(services) != tt.expectedCount {
 				t.Errorf("expected %d services, got %d", tt.expectedCount, len(services))
@@ -124,7 +124,7 @@ func TestServiceHandler_GetServices_Pagination(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	// Check pagination metadata
 	if response["total"] == nil {
@@ -157,7 +157,7 @@ func TestServiceHandler_GetService(t *testing.T) {
 	}
 
 	var service map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &service)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &service)
 
 	if service["name"] != "test-service" {
 		t.Errorf("expected name test-service, got %v", service["name"])
@@ -202,7 +202,7 @@ func TestServiceHandler_CreateService(t *testing.T) {
 	}
 
 	var created map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &created)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &created)
 
 	if created["id"] == nil || created["id"] == "" {
 		t.Error("expected generated ID")
@@ -276,7 +276,7 @@ func TestServiceHandler_UpdateService(t *testing.T) {
 	}
 
 	var updated map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &updated)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &updated)
 
 	if updated["name"] != "updated-name" {
 		t.Errorf("expected updated name, got %v", updated["name"])
@@ -303,7 +303,7 @@ func TestServiceHandler_DeleteService(t *testing.T) {
 
 	// Verify service is deleted
 	var count int
-	db.DB.QueryRow("SELECT COUNT(*) FROM services WHERE id = 'delete-test'").Scan(&count)
+	mustScan(t, db.DB.QueryRow("SELECT COUNT(*) FROM services WHERE id = 'delete-test'").Scan(&count), "failed to query deleted service count")
 	if count != 0 {
 		t.Error("service was not deleted")
 	}
@@ -336,7 +336,7 @@ func TestServiceHandler_GetServices_Empty(t *testing.T) {
 	}
 
 	var services []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &services)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &services)
 
 	// Should return empty array, not null
 	if services == nil {
@@ -362,7 +362,7 @@ func TestServiceHandler_GetServices_ConfigParsing(t *testing.T) {
 	}
 
 	var services []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &services)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &services)
 
 	if len(services) != 1 {
 		t.Fatalf("expected 1 service, got %d", len(services))
@@ -402,12 +402,12 @@ func TestServiceHandler_CreateService_SetsSourceTypeManual(t *testing.T) {
 	}
 
 	var created map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &created)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &created)
 
 	// Query the database to verify source_type
 	var sourceType string
 	id := created["id"].(string)
-	db.DB.QueryRow("SELECT source_type FROM services WHERE id = ?", id).Scan(&sourceType)
+	mustScan(t, db.DB.QueryRow("SELECT source_type FROM services WHERE id = ?", id).Scan(&sourceType), "failed to query service source_type")
 
 	if sourceType != "manual" {
 		t.Errorf("expected source_type 'manual', got %q", sourceType)

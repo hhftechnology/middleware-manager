@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -67,8 +66,8 @@ func newWeighted(name string, weight int) *struct {
 }
 
 func newMirroring(name string, percent int, service string) *struct {
-	Service    string `json:"service"`
-	Mirrors    []struct {
+	Service string `json:"service"`
+	Mirrors []struct {
 		Name    string `json:"name"`
 		Percent int    `json:"percent"`
 	} `json:"mirrors,omitempty"`
@@ -77,8 +76,8 @@ func newMirroring(name string, percent int, service string) *struct {
 	HealthCheck interface{} `json:"healthCheck,omitempty"`
 } {
 	return &struct {
-		Service    string `json:"service"`
-		Mirrors    []struct {
+		Service string `json:"service"`
+		Mirrors []struct {
 			Name    string `json:"name"`
 			Percent int    `json:"percent"`
 		} `json:"mirrors,omitempty"`
@@ -219,7 +218,7 @@ func TestPangolinServiceFetcher_FetchServices(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/traefik-config" {
-			json.NewEncoder(w).Encode(pangolinConfig)
+			writeJSONResponse(w, pangolinConfig)
 		} else {
 			http.NotFound(w, r)
 		}
@@ -254,7 +253,7 @@ func TestPangolinServiceFetcher_FetchServices_WithAuth(t *testing.T) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -301,8 +300,8 @@ func TestTraefikServiceFetcher_FetchServices(t *testing.T) {
 	// Create mock Traefik server
 	httpServices := []models.TraefikService{
 		{
-			Name:     "web-service@docker",
-			Provider: "docker",
+			Name:         "web-service@docker",
+			Provider:     "docker",
 			LoadBalancer: newLoadBalancer("http://backend:8080"),
 		},
 	}
@@ -310,11 +309,11 @@ func TestTraefikServiceFetcher_FetchServices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode(httpServices)
+			writeJSONResponse(w, httpServices)
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		case "/api/udp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		default:
 			http.NotFound(w, r)
 		}
@@ -346,7 +345,7 @@ func TestTraefikServiceFetcher_FetchServices_MapResponse(t *testing.T) {
 	// Some Traefik versions return services as a map
 	httpServices := map[string]models.TraefikService{
 		"web-service@docker": {
-			Provider: "docker",
+			Provider:     "docker",
 			LoadBalancer: newLoadBalancer("http://backend:8080"),
 		},
 	}
@@ -354,11 +353,11 @@ func TestTraefikServiceFetcher_FetchServices_MapResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode(httpServices)
+			writeJSONResponse(w, httpServices)
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			writeJSONResponse(w, map[string]interface{}{})
 		case "/api/udp/services":
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			writeJSONResponse(w, map[string]interface{}{})
 		default:
 			http.NotFound(w, r)
 		}
@@ -389,8 +388,8 @@ func TestTraefikServiceFetcher_FetchServices_SkipsInternal(t *testing.T) {
 			Provider: "internal",
 		},
 		{
-			Name:     "user-service@docker",
-			Provider: "docker",
+			Name:         "user-service@docker",
+			Provider:     "docker",
 			LoadBalancer: newLoadBalancer("http://backend:8080"),
 		},
 	}
@@ -398,11 +397,11 @@ func TestTraefikServiceFetcher_FetchServices_SkipsInternal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode(httpServices)
+			writeJSONResponse(w, httpServices)
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		case "/api/udp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		default:
 			http.NotFound(w, r)
 		}
@@ -430,7 +429,7 @@ func TestTraefikServiceFetcher_FetchServices_SkipsInternal(t *testing.T) {
 func TestTraefikServiceFetcher_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second)
-		json.NewEncoder(w).Encode([]models.TraefikService{})
+		writeJSONResponse(w, []models.TraefikService{})
 	}))
 	defer server.Close()
 
@@ -587,9 +586,9 @@ func TestProcessTraefikService(t *testing.T) {
 		{
 			name: "mirroring service",
 			service: models.TraefikService{
-				Name:       "mirror@file",
-				Provider:   "file",
-				Mirroring:  newMirroring("mirror1", 10, "main-service"),
+				Name:      "mirror@file",
+				Provider:  "file",
+				Mirroring: newMirroring("mirror1", 10, "main-service"),
 			},
 			wantNil:  false,
 			wantType: string(models.MirroringType),
@@ -646,11 +645,11 @@ func TestTraefikServiceFetcher_FallbackURLs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode([]models.TraefikService{})
+			writeJSONResponse(w, []models.TraefikService{})
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		case "/api/udp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		default:
 			http.NotFound(w, r)
 		}
@@ -692,11 +691,11 @@ func TestTraefikServiceFetcher_TCPServices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode([]models.TraefikService{})
+			writeJSONResponse(w, []models.TraefikService{})
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode(tcpServices)
+			writeJSONResponse(w, tcpServices)
 		case "/api/udp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		default:
 			http.NotFound(w, r)
 		}
@@ -737,11 +736,11 @@ func TestTraefikServiceFetcher_UDPServices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode([]models.TraefikService{})
+			writeJSONResponse(w, []models.TraefikService{})
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		case "/api/udp/services":
-			json.NewEncoder(w).Encode(udpServices)
+			writeJSONResponse(w, udpServices)
 		default:
 			http.NotFound(w, r)
 		}
@@ -770,9 +769,9 @@ func TestTraefikServiceFetcher_UDPNotSupported(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/services":
-			json.NewEncoder(w).Encode([]models.TraefikService{})
+			writeJSONResponse(w, []models.TraefikService{})
 		case "/api/tcp/services":
-			json.NewEncoder(w).Encode([]interface{}{})
+			writeJSONResponse(w, []interface{}{})
 		case "/api/udp/services":
 			http.NotFound(w, r) // UDP not supported
 		default:

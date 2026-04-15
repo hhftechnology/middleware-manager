@@ -26,6 +26,9 @@ func New(cfg tmtypes.RuntimeConfig, files *tmconfig.FileStore, settings *tmconfi
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Panicf("configure trusted proxies: %v", err)
+	}
 	router.Use(gin.Recovery())
 	if cfg.Debug {
 		router.Use(gin.Logger())

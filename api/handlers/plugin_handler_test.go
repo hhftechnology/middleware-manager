@@ -113,7 +113,7 @@ experimental:
 	}
 
 	var plugins []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &plugins)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &plugins)
 
 	// Should find the plugin from local config
 	found := false

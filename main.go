@@ -33,6 +33,7 @@ type Configuration struct {
 	Debug                   bool
 	AllowCORS               bool
 	CORSOrigin              string
+	TrustedProxies          []string
 	ActiveDataSource        string
 	TraefikStaticConfigPath string
 }
@@ -151,12 +152,13 @@ func main() {
 	}
 
 	serverConfig := api.ServerConfig{
-		Port:        cfg.Port,
-		UIPath:      cfg.UIPath,
-		Debug:       cfg.Debug,
-		AllowCORS:   cfg.AllowCORS,
-		CORSOrigin:  cfg.CORSOrigin,
-		PangolinURL: cfg.PangolinAPIURL,
+		Port:           cfg.Port,
+		UIPath:         cfg.UIPath,
+		Debug:          cfg.Debug,
+		AllowCORS:      cfg.AllowCORS,
+		CORSOrigin:     cfg.CORSOrigin,
+		TrustedProxies: cfg.TrustedProxies,
+		PangolinURL:    cfg.PangolinAPIURL,
 	}
 
 	server := api.NewServer(db, serverConfig, configManager, cfg.TraefikStaticConfigPath)
@@ -226,6 +228,15 @@ func loadConfiguration(debug bool) Configuration {
 		debug = strings.ToLower(debugStr) == "true"
 	}
 
+	var trustedProxies []string
+	if rawTrustedProxies := getEnv("TRUSTED_PROXIES", ""); rawTrustedProxies != "" {
+		for _, proxy := range strings.Split(rawTrustedProxies, ",") {
+			if trimmed := strings.TrimSpace(proxy); trimmed != "" {
+				trustedProxies = append(trustedProxies, trimmed)
+			}
+		}
+	}
+
 	return Configuration{
 		PangolinAPIURL: getEnv("PANGOLIN_API_URL", "http://pangolin:3001/api/v1"),
 		// Default to in-network Traefik service; host.docker.internal often fails inside containers
@@ -242,6 +253,7 @@ func loadConfiguration(debug bool) Configuration {
 		Debug:                   debug,
 		AllowCORS:               allowCORS,
 		CORSOrigin:              getEnv("CORS_ORIGIN", ""),
+		TrustedProxies:          trustedProxies,
 		TraefikStaticConfigPath: getEnv("TRAEFIK_STATIC_CONFIG_PATH", "/etc/traefik/traefik.yml"),
 	}
 }

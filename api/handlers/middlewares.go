@@ -132,30 +132,30 @@ func (h *MiddlewareHandler) CreateMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "create middleware")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
-	log.Printf("Attempting to insert middleware with ID=%s, name=%s, type=%s", 
+
+	log.Printf("Attempting to insert middleware with ID=%s, name=%s, type=%s",
 		id, middleware.Name, middleware.Type)
-	
+
 	result, txErr := tx.Exec(
 		"INSERT INTO middlewares (id, name, type, config) VALUES (?, ?, ?, ?)",
 		id, middleware.Name, middleware.Type, string(configJSON),
 	)
-	
+
 	if txErr != nil {
 		log.Printf("Error inserting middleware: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to save middleware")
 		return
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err == nil {
 		log.Printf("Insert affected %d rows", rowsAffected)
@@ -265,30 +265,30 @@ func (h *MiddlewareHandler) UpdateMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update middleware")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
-	log.Printf("Attempting to update middleware %s with name=%s, type=%s", 
+
+	log.Printf("Attempting to update middleware %s with name=%s, type=%s",
 		id, middleware.Name, middleware.Type)
-	
+
 	result, txErr := tx.Exec(
 		"UPDATE middlewares SET name = ?, type = ?, config = ?, updated_at = ? WHERE id = ?",
 		middleware.Name, middleware.Type, string(configJSON), time.Now(), id,
 	)
-	
+
 	if txErr != nil {
 		log.Printf("Error updating middleware: %v", txErr)
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to update middleware")
 		return
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err == nil {
 		log.Printf("Update affected %d rows", rowsAffected)
@@ -296,7 +296,7 @@ func (h *MiddlewareHandler) UpdateMiddleware(c *gin.Context) {
 			log.Printf("Warning: Update query succeeded but no rows were affected")
 		}
 	}
-	
+
 	// Commit the transaction
 	if txErr = tx.Commit(); txErr != nil {
 		log.Printf("Error committing transaction: %v", txErr)
@@ -353,16 +353,16 @@ func (h *MiddlewareHandler) DeleteMiddleware(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	
+
 	// If something goes wrong, rollback
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "delete middleware")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
-	
+
 	log.Printf("Attempting to delete middleware %s", id)
 
 	result, txErr := tx.Exec("DELETE FROM middlewares WHERE id = ?", id)

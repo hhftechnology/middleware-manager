@@ -93,7 +93,7 @@ func TestMTLSHandler_DisableMTLS(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["enabled"] != false {
 		t.Errorf("expected enabled false, got %v", response["enabled"])

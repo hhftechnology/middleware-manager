@@ -156,7 +156,7 @@ func (h *ServiceHandler) CreateService(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "create service")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -291,7 +291,7 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "update service")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -389,7 +389,7 @@ func (h *ServiceHandler) DeleteService(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "delete service")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -494,7 +494,7 @@ func (h *ServiceHandler) AssignServiceToResource(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "enable service")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -567,7 +567,7 @@ func (h *ServiceHandler) RemoveServiceFromResource(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			rollbackTransaction(tx, "disable service")
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()

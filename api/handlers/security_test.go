@@ -72,7 +72,7 @@ func TestSecurityHandler_GetConfig_WithExistingData(t *testing.T) {
 	}
 
 	var config map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &config)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &config)
 
 	if config["tls_hardening_enabled"] != true {
 		t.Errorf("expected tls_hardening_enabled true, got %v", config["tls_hardening_enabled"])
@@ -96,7 +96,7 @@ func TestSecurityHandler_EnableTLSHardening(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["enabled"] != true {
 		t.Errorf("expected enabled true, got %v", response["enabled"])
@@ -127,7 +127,7 @@ func TestSecurityHandler_DisableTLSHardening(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["enabled"] != false {
 		t.Errorf("expected enabled false, got %v", response["enabled"])
@@ -135,7 +135,7 @@ func TestSecurityHandler_DisableTLSHardening(t *testing.T) {
 
 	// Verify database was updated
 	var enabled int
-	db.DB.QueryRow("SELECT tls_hardening_enabled FROM security_config WHERE id = 1").Scan(&enabled)
+	mustScan(t, db.DB.QueryRow("SELECT tls_hardening_enabled FROM security_config WHERE id = 1").Scan(&enabled), "failed to query tls_hardening_enabled after disable")
 	if enabled != 0 {
 		t.Errorf("expected db tls_hardening_enabled 0, got %d", enabled)
 	}
@@ -155,7 +155,7 @@ func TestSecurityHandler_EnableSecureHeaders(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["enabled"] != true {
 		t.Errorf("expected enabled true, got %v", response["enabled"])
@@ -163,7 +163,7 @@ func TestSecurityHandler_EnableSecureHeaders(t *testing.T) {
 
 	// Verify database was updated
 	var enabled int
-	db.DB.QueryRow("SELECT secure_headers_enabled FROM security_config WHERE id = 1").Scan(&enabled)
+	mustScan(t, db.DB.QueryRow("SELECT secure_headers_enabled FROM security_config WHERE id = 1").Scan(&enabled), "failed to query secure_headers_enabled")
 	if enabled != 1 {
 		t.Errorf("expected db secure_headers_enabled 1, got %d", enabled)
 	}
@@ -186,7 +186,7 @@ func TestSecurityHandler_DisableSecureHeaders(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["enabled"] != false {
 		t.Errorf("expected enabled false, got %v", response["enabled"])
@@ -218,7 +218,7 @@ func TestSecurityHandler_UpdateSecureHeadersConfig(t *testing.T) {
 
 	// Verify database was updated
 	var xFrameOptions string
-	db.DB.QueryRow("SELECT secure_headers_x_frame_options FROM security_config WHERE id = 1").Scan(&xFrameOptions)
+	mustScan(t, db.DB.QueryRow("SELECT secure_headers_x_frame_options FROM security_config WHERE id = 1").Scan(&xFrameOptions), "failed to query secure_headers_x_frame_options")
 	if xFrameOptions != "DENY" {
 		t.Errorf("expected x_frame_options 'DENY', got %q", xFrameOptions)
 	}

@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -87,7 +86,7 @@ func TestPluginFetcher_FetchPlugins_WithBasicAuth(t *testing.T) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode([]models.TraefikMiddleware{})
+		writeJSONResponse(w, []models.TraefikMiddleware{})
 	}))
 	defer server.Close()
 
@@ -141,9 +140,9 @@ func TestPluginFetcher_RateLimiting(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		if r.URL.Path == "/api/http/middlewares" {
-			json.NewEncoder(w).Encode([]models.TraefikMiddleware{})
+			writeJSONResponse(w, []models.TraefikMiddleware{})
 		} else if r.URL.Path == "/api/overview" {
-			json.NewEncoder(w).Encode(models.TraefikPluginOverview{})
+			writeJSONResponse(w, models.TraefikPluginOverview{})
 		}
 	}))
 	defer server.Close()
@@ -225,7 +224,7 @@ func TestPluginFetcher_InvalidateCache(t *testing.T) {
 func TestPluginFetcher_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second) // Simulate slow response
-		json.NewEncoder(w).Encode([]models.TraefikMiddleware{})
+		writeJSONResponse(w, []models.TraefikMiddleware{})
 	}))
 	defer server.Close()
 

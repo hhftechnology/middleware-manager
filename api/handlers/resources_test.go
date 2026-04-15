@@ -99,7 +99,7 @@ func TestResourceHandler_GetResources_StatusFilter(t *testing.T) {
 			}
 
 			var resources []map[string]interface{}
-			json.Unmarshal(rec.Body.Bytes(), &resources)
+			mustUnmarshalResponse(t, rec.Body.Bytes(), &resources)
 
 			if len(resources) != tt.expectedCount {
 				t.Errorf("expected %d resources, got %d", tt.expectedCount, len(resources))
@@ -130,7 +130,7 @@ func TestResourceHandler_GetResources_SourceTypeFilter(t *testing.T) {
 	}
 
 	var resources []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &resources)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &resources)
 
 	if len(resources) != 1 {
 		t.Errorf("expected 1 pangolin resource, got %d", len(resources))
@@ -162,7 +162,7 @@ func TestResourceHandler_GetResources_Pagination(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	// Check pagination metadata
 	if response["total"] == nil {
@@ -195,7 +195,7 @@ func TestResourceHandler_GetResource(t *testing.T) {
 	}
 
 	var resource map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &resource)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &resource)
 
 	if resource["host"] != "test.example.com" {
 		t.Errorf("expected host test.example.com, got %v", resource["host"])
@@ -286,7 +286,7 @@ func TestResourceHandler_GetResources_Empty(t *testing.T) {
 	}
 
 	var resources []map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &resources)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &resources)
 
 	// Empty result is acceptable (nil or empty slice)
 }

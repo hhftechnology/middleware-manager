@@ -52,7 +52,7 @@ func TestProxyHandler_InvalidateCache(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["message"] == nil {
 		t.Error("expected message in response")
@@ -72,7 +72,7 @@ func TestProxyHandler_GetProxyStatus(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &response)
 
 	if response["status"] == nil {
 		t.Error("expected status in response")
