@@ -6,7 +6,6 @@ import (
 
 // TestDecodeArrayOrMap tests the generic JSON decoder that handles both array and map formats
 func TestDecodeArrayOrMap(t *testing.T) {
-	t.Skip("skipping due to nil handling changes")
 	type TestItem struct {
 		Name  string `json:"name"`
 		Value int    `json:"value"`
@@ -79,7 +78,8 @@ func TestDecodeArrayOrMap(t *testing.T) {
 		{
 			name:    "null value",
 			data:    `null`,
-			wantErr: true,
+			wantErr: false, // json.Unmarshal(null, &[]T{}) succeeds with a nil slice; DecodeArrayOrMap returns nil, nil
+			wantLen: 0,
 		},
 	}
 

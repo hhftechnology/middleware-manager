@@ -129,6 +129,11 @@ func (sw *ServiceWatcher) checkServices() error {
 	if err != nil {
 		return fmt.Errorf("failed to query existing services: %w", err)
 	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Printf("Error closing existing services rows: %v", closeErr)
+		}
+	}()
 
 	for rows.Next() {
 		var id string
@@ -138,7 +143,9 @@ func (sw *ServiceWatcher) checkServices() error {
 		}
 		existingServices = append(existingServices, id)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed iterating existing services: %w", err)
+	}
 
 	// Keep track of services we find
 	foundServices := make(map[string]bool)
@@ -146,7 +153,6 @@ func (sw *ServiceWatcher) checkServices() error {
 	// Check if there are any services
 	if len(services.Services) == 0 {
 		log.Println("No services found in data source")
-		return nil
 	}
 
 	// Process services

@@ -72,7 +72,7 @@ func TestNewResourceWatcher(t *testing.T) {
 	if watcher.configManager == nil {
 		t.Error("watcher.configManager is nil")
 	}
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher.isRunning should be false initially")
 	}
 	if watcher.httpClient == nil {
@@ -100,7 +100,7 @@ func TestResourceWatcher_Stop(t *testing.T) {
 	// Should not panic when stopping a non-running watcher
 	watcher.Stop()
 
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher.isRunning should be false after Stop()")
 	}
 }
@@ -152,7 +152,7 @@ func TestResourceWatcher_StartStop(t *testing.T) {
 	// Wait a bit for it to start
 	time.Sleep(50 * time.Millisecond)
 
-	if !watcher.isRunning {
+	if !watcher.isRunning.Load() {
 		t.Error("watcher should be running after Start()")
 	}
 
@@ -162,7 +162,7 @@ func TestResourceWatcher_StartStop(t *testing.T) {
 	// Wait for stop to complete
 	time.Sleep(50 * time.Millisecond)
 
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher should not be running after Stop()")
 	}
 }
@@ -222,14 +222,13 @@ func TestResourceWatcher_CheckResources(t *testing.T) {
 
 // TestResourceWatcher_CheckResources_EmptyResult tests handling empty results
 func TestResourceWatcher_CheckResources_EmptyResult(t *testing.T) {
-	t.Skip("skipping pending resource watcher updates")
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)
 
 	// Create a resource that will be disabled
 	_, err := db.Exec(`
-		INSERT INTO resources (id, host, service_id, status, created_at, updated_at)
-		VALUES ('test-id', 'old.example.com', 'old-service', 'active', ?, ?)
+		INSERT INTO resources (id, host, service_id, org_id, site_id, status, created_at, updated_at)
+		VALUES ('test-id', 'old.example.com', 'old-service', 'unknown', 'unknown', 'active', ?, ?)
 	`, time.Now(), time.Now())
 	if err != nil {
 		t.Fatalf("failed to create test resource: %v", err)
@@ -342,7 +341,6 @@ func TestResourceWatcher_UpdateOrCreateResource_New(t *testing.T) {
 
 // TestResourceWatcher_UpdateOrCreateResource_Update tests updating existing resource
 func TestResourceWatcher_UpdateOrCreateResource_Update(t *testing.T) {
-	t.Skip("skipping pending resource watcher updates")
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)
 
@@ -356,8 +354,8 @@ func TestResourceWatcher_UpdateOrCreateResource_Update(t *testing.T) {
 	// Create existing resource
 	existingID := "existing-uuid-123"
 	_, err := db.Exec(`
-		INSERT INTO resources (id, pangolin_router_id, host, service_id, status, source_type, created_at, updated_at)
-		VALUES (?, 'existing-router', 'existing.example.com', 'old-service', 'active', 'pangolin', ?, ?)
+		INSERT INTO resources (id, pangolin_router_id, host, service_id, org_id, site_id, status, source_type, created_at, updated_at)
+		VALUES (?, 'existing-router', 'existing.example.com', 'old-service', 'unknown', 'unknown', 'active', 'pangolin', ?, ?)
 	`, existingID, time.Now(), time.Now())
 	if err != nil {
 		t.Fatalf("failed to create existing resource: %v", err)
@@ -398,7 +396,6 @@ func TestResourceWatcher_UpdateOrCreateResource_Update(t *testing.T) {
 
 // TestResourceWatcher_UpdateOrCreateResource_ByHost tests finding by host
 func TestResourceWatcher_UpdateOrCreateResource_ByHost(t *testing.T) {
-	t.Skip("skipping pending resource watcher updates")
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)
 
@@ -412,8 +409,8 @@ func TestResourceWatcher_UpdateOrCreateResource_ByHost(t *testing.T) {
 	// Create existing resource with old pangolin_router_id
 	existingID := "existing-uuid-456"
 	_, err := db.Exec(`
-		INSERT INTO resources (id, pangolin_router_id, host, service_id, status, source_type, created_at, updated_at)
-		VALUES (?, 'old-router-id', 'findme.example.com', 'service', 'active', 'pangolin', ?, ?)
+		INSERT INTO resources (id, pangolin_router_id, host, service_id, org_id, site_id, status, source_type, created_at, updated_at)
+		VALUES (?, 'old-router-id', 'findme.example.com', 'service', 'unknown', 'unknown', 'active', 'pangolin', ?, ?)
 	`, existingID, time.Now(), time.Now())
 	if err != nil {
 		t.Fatalf("failed to create existing resource: %v", err)
@@ -455,14 +452,13 @@ func TestResourceWatcher_UpdateOrCreateResource_ByHost(t *testing.T) {
 
 // TestResourceWatcher_DisablesRemovedResources tests marking removed resources as disabled
 func TestResourceWatcher_DisablesRemovedResources(t *testing.T) {
-	t.Skip("skipping pending resource watcher updates")
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)
 
 	// Create a resource that will be "removed"
 	_, err := db.Exec(`
-		INSERT INTO resources (id, pangolin_router_id, host, service_id, status, created_at, updated_at)
-		VALUES ('old-resource', 'old-router', 'old.example.com', 'old-service', 'active', ?, ?)
+		INSERT INTO resources (id, pangolin_router_id, host, service_id, org_id, site_id, status, created_at, updated_at)
+		VALUES ('old-resource', 'old-router', 'old.example.com', 'old-service', 'unknown', 'unknown', 'active', ?, ?)
 	`, time.Now(), time.Now())
 	if err != nil {
 		t.Fatalf("failed to create test resource: %v", err)
@@ -580,15 +576,14 @@ func TestResourceWatcher_FetchTraefikConfig_WithAuth(t *testing.T) {
 
 // TestResourceWatcher_PreservesRouterPriorityManual tests manual priority preservation
 func TestResourceWatcher_PreservesRouterPriorityManual(t *testing.T) {
-	t.Skip("skipping pending resource watcher updates")
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)
 
 	// Create existing resource with manual priority
 	existingID := "priority-test-uuid"
 	_, err := db.Exec(`
-		INSERT INTO resources (id, pangolin_router_id, host, service_id, status, router_priority, router_priority_manual, created_at, updated_at)
-		VALUES (?, 'priority-router', 'priority.example.com', 'service', 'active', 500, 1, ?, ?)
+		INSERT INTO resources (id, pangolin_router_id, host, service_id, org_id, site_id, status, router_priority, router_priority_manual, created_at, updated_at)
+		VALUES (?, 'priority-router', 'priority.example.com', 'service', 'unknown', 'unknown', 'active', 500, 1, ?, ?)
 	`, existingID, time.Now(), time.Now())
 	if err != nil {
 		t.Fatalf("failed to create existing resource: %v", err)

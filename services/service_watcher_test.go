@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,7 +49,7 @@ func TestNewServiceWatcher(t *testing.T) {
 
 	// Create a mock server for the data source
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -83,7 +82,7 @@ func TestServiceWatcher_Stop(t *testing.T) {
 
 	// Create a mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -297,7 +296,7 @@ func TestServiceWatcher_CheckServices(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(services)
+		writeJSONResponse(w, services)
 	}))
 	defer server.Close()
 
@@ -332,7 +331,7 @@ func TestServiceWatcher_CheckServices_EmptyResult(t *testing.T) {
 
 	// Create a mock server that returns empty services
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -356,7 +355,7 @@ func TestServiceWatcher_RefreshFetcher(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -380,7 +379,7 @@ func TestServiceWatcher_StartStop(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -418,7 +417,7 @@ func TestServiceWatcher_UpdateOrCreateService(t *testing.T) {
 	cm := newTestConfigManager(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(models.PangolinTraefikConfig{})
+		writeJSONResponse(w, models.PangolinTraefikConfig{})
 	}))
 	defer server.Close()
 
@@ -471,7 +470,6 @@ func TestServiceWatcher_UpdateOrCreateService(t *testing.T) {
 
 // TestServiceWatcher_DisablesRemovedServices tests marking removed services as disabled
 func TestServiceWatcher_DisablesRemovedServices(t *testing.T) {
-	t.Skip("skipping pending service watcher updates")
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)
 
@@ -488,7 +486,7 @@ func TestServiceWatcher_DisablesRemovedServices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var cfg models.PangolinTraefikConfig
 		cfg.HTTP.Services = map[string]models.PangolinService{}
-		json.NewEncoder(w).Encode(cfg)
+		writeJSONResponse(w, cfg)
 	}))
 	defer server.Close()
 
@@ -534,7 +532,7 @@ func TestServiceWatcher_PreservesManualServices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var cfg models.PangolinTraefikConfig
 		cfg.HTTP.Services = map[string]models.PangolinService{}
-		json.NewEncoder(w).Encode(cfg)
+		writeJSONResponse(w, cfg)
 	}))
 	defer server.Close()
 

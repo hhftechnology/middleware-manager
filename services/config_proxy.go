@@ -152,6 +152,20 @@ func NewConfigProxy(db *database.DB, configManager *ConfigManager, pangolinURL s
 	}
 }
 
+// buildStandaloneTraefikConfig produces a merged config without fetching from Pangolin.
+// Used when the active data source is Traefik (no Pangolin to proxy).
+func (cp *ConfigProxy) buildStandaloneTraefikConfig() (*ProxiedTraefikConfig, error) {
+	config := &ProxiedTraefikConfig{}
+	cp.initializeConfigMaps(config)
+	if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
+		return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
+	}
+	cp.pruneEmptySections(config)
+	cp.normalizeRouterOrder(config)
+	cp.normalizeMiddlewareOrder(config)
+	return config, nil
+}
+
 // GetMergedConfig returns the merged Pangolin + MW-manager configuration
 func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	// Try to use cached config
@@ -163,30 +177,40 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	staleCache := cp.cache
 	cp.cacheMutex.RUnlock()
 
-	// Fetch fresh config OUTSIDE the lock to avoid blocking readers
-	config, err := cp.fetchPangolinConfig()
+	// Resolve the active data source to determine fetch strategy
+	active, err := cp.configManager.GetActiveDataSourceConfig()
 	if err != nil {
-		// Return stale cache on error if available
-		if staleCache != nil {
-			log.Printf("Warning: Pangolin fetch failed, using stale cache: %v", err)
-			return staleCache, nil
+		return nil, fmt.Errorf("failed to resolve active data source: %w", err)
+	}
+
+	// Fetch fresh config OUTSIDE the lock to avoid blocking readers
+	var config *ProxiedTraefikConfig
+	switch active.Type {
+	case models.TraefikAPI:
+		// Standalone mode: no Pangolin network call, no stale-cache fallback needed
+		config, err = cp.buildStandaloneTraefikConfig()
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
+	case models.PangolinAPI, "":
+		// Pangolin path: fetch from Pangolin, merge, with stale-cache fallback on error
+		config, err = cp.fetchPangolinConfig()
+		if err != nil {
+			if staleCache != nil {
+				log.Printf("Warning: Pangolin fetch failed, using stale cache: %v", err)
+				return staleCache, nil
+			}
+			return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
+		}
+		if err = cp.mergeMiddlewareManagerConfig(config); err != nil {
+			return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
+		}
+		cp.pruneEmptySections(config)
+		cp.normalizeRouterOrder(config)
+		cp.normalizeMiddlewareOrder(config)
+	default:
+		return nil, fmt.Errorf("unsupported data source type: %s", active.Type)
 	}
-
-	// Merge MW-manager additions (no lock needed, operates on local config)
-	if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
-		return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
-	}
-
-	// Remove empty protocol sections so Traefik doesn't reject blank configs
-	cp.pruneEmptySections(config)
-
-	// Normalize router field ordering to match Pangolin's JSON format
-	cp.normalizeRouterOrder(config)
-
-	// Normalize middleware field ordering to match Pangolin's JSON format
-	cp.normalizeMiddlewareOrder(config)
 
 	// Lock only to swap the cache
 	cp.cacheMutex.Lock()

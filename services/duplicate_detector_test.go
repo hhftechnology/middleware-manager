@@ -142,7 +142,6 @@ func TestDuplicateCheckResult(t *testing.T) {
 
 // TestGetTraefikFetcher tests fetcher retrieval from config manager
 func TestGetTraefikFetcher(t *testing.T) {
-	t.Skip("skipping outdated fetcher expectations")
 	t.Run("nil config manager", func(t *testing.T) {
 		detector := &DuplicateDetector{configManager: nil}
 		fetcher := detector.getTraefikFetcher()
@@ -151,13 +150,12 @@ func TestGetTraefikFetcher(t *testing.T) {
 		}
 	})
 
-	t.Run("config manager without traefik source", func(t *testing.T) {
+	t.Run("config manager with traefik source returns fetcher", func(t *testing.T) {
 		cm := newTestConfigManager(t)
 		detector := NewDuplicateDetector(cm)
 		fetcher := detector.getTraefikFetcher()
-		// Without setting up a traefik data source, should return nil
-		if fetcher != nil {
-			t.Error("Expected nil fetcher when no traefik source configured")
+		if fetcher == nil {
+			t.Error("Expected non-nil fetcher when default traefik source is present")
 		}
 	})
 }

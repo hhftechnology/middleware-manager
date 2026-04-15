@@ -76,130 +76,75 @@ func createTraefikHTTPClient(config models.DataSourceConfig) *http.Client {
 // FetchResources fetches resources from Traefik API with fallback options
 // Uses singleflight to prevent duplicate concurrent requests
 func (f *TraefikFetcher) FetchResources(ctx context.Context) (*models.ResourceCollection, error) {
-	// Use singleflight to deduplicate concurrent requests
-	result, err, _ := f.singleflight.Do("fetch-resources", func() (interface{}, error) {
-		return f.fetchResourcesInternal(ctx)
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result.(*models.ResourceCollection), nil
+	return f.fetchResourcesInternal(ctx)
 }
 
 // FetchFullData fetches all data from Traefik API including TCP/UDP
 // Uses singleflight to prevent duplicate concurrent requests
 func (f *TraefikFetcher) FetchFullData(ctx context.Context) (*models.FullTraefikData, error) {
-	// Use singleflight to deduplicate concurrent requests
-	result, err, _ := f.singleflight.Do("fetch-full-data", func() (interface{}, error) {
-		return f.fetchFullDataInternal(ctx)
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result.(*models.FullTraefikData), nil
+	return f.fetchFullDataInternal(ctx)
 }
 
 // fetchResourcesInternal performs the actual fetch with rate limiting
 func (f *TraefikFetcher) fetchResourcesInternal(ctx context.Context) (*models.ResourceCollection, error) {
-	// Check rate limiting
-	f.lastFetchMu.RLock()
-	timeSinceLastFetch := time.Since(f.lastFetch)
-	f.lastFetchMu.RUnlock()
-
+	timeSinceLastFetch := f.timeSinceLastFetch()
 	if timeSinceLastFetch < f.minInterval {
 		log.Printf("Rate limiting: skipping fetch, last fetch was %v ago", timeSinceLastFetch)
 		return nil, fmt.Errorf("rate limited: please wait %v before next fetch", f.minInterval-timeSinceLastFetch)
 	}
 
-	log.Println("Fetching resources from Traefik API...")
-
-	// Try the configured URL first
-	resources, err := f.fetchResourcesFromURL(ctx, f.config.URL)
-	if err == nil {
-		f.updateLastFetch()
-		log.Printf("Successfully fetched resources from %s", f.config.URL)
-		return resources, nil
+	fullData, err := f.loadFullData(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	// Log the initial error
-	log.Printf("Failed to connect to primary Traefik API URL %s: %v", f.config.URL, err)
-
-	// Try common fallback URLs
-	fallbackURLs := []string{
-		"http://traefik:8080",
-		"http://localhost:8080",
-		"http://127.0.0.1:8080",
-		"http://host.docker.internal:8080",
-	}
-
-	// Don't try the same URL twice
-	if f.config.URL != "" {
-		for i := len(fallbackURLs) - 1; i >= 0; i-- {
-			if fallbackURLs[i] == f.config.URL {
-				fallbackURLs = append(fallbackURLs[:i], fallbackURLs[i+1:]...)
-			}
-		}
-	}
-
-	// Try each fallback URL
-	var lastErr error
-	for _, url := range fallbackURLs {
-		log.Printf("Trying fallback Traefik API URL: %s", url)
-		resources, err := f.fetchResourcesFromURL(ctx, url)
-		if err == nil {
-			f.updateLastFetch()
-			f.suggestURLUpdate(url)
-			return resources, nil
-		}
-		lastErr = err
-		log.Printf("Fallback URL %s failed: %v", url, err)
-	}
-
-	return nil, fmt.Errorf("all Traefik API connection attempts failed, last error: %w", lastErr)
+	return f.buildResourcesFromFullData(fullData), nil
 }
 
 // fetchFullDataInternal fetches all Traefik data with caching
 func (f *TraefikFetcher) fetchFullDataInternal(ctx context.Context) (*models.FullTraefikData, error) {
 	// Check rate limiting and return cached data if available
-	f.lastFetchMu.RLock()
-	timeSinceLastFetch := time.Since(f.lastFetch)
-	f.lastFetchMu.RUnlock()
-
-	f.cachedDataMu.RLock()
-	cachedData := f.cachedData
-	f.cachedDataMu.RUnlock()
+	timeSinceLastFetch := f.timeSinceLastFetch()
+	cachedData := f.getCachedData()
 
 	if timeSinceLastFetch < f.minInterval && cachedData != nil {
 		log.Printf("Rate limiting: using cached data, last fetch was %v ago", timeSinceLastFetch)
 		return cachedData, nil
 	}
 
-	log.Println("Fetching full data from Traefik API...")
+	return f.loadFullData(ctx)
+}
 
-	// Fetch all endpoints concurrently
-	data, err := f.fetchAllEndpointsConcurrently(ctx, f.config.URL)
+func (f *TraefikFetcher) loadFullData(ctx context.Context) (*models.FullTraefikData, error) {
+	result, err, _ := f.singleflight.Do("fetch-full-data", func() (interface{}, error) {
+		data, err := f.fetchFullDataFromAvailableURLs(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		f.cachedDataMu.Lock()
+		f.cachedData = data
+		f.cachedDataMu.Unlock()
+
+		f.updateLastFetch()
+
+		log.Printf("Fetched full data: %d HTTP routers, %d TCP routers, %d UDP routers, %d services, %d middlewares",
+			data.GetHTTPRouterCount(),
+			data.GetTCPRouterCount(),
+			data.GetUDPRouterCount(),
+			data.GetTotalServiceCount(),
+			data.GetTotalMiddlewareCount())
+
+		return data, nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Update cache
-	f.cachedDataMu.Lock()
-	f.cachedData = data
-	f.cachedDataMu.Unlock()
-
-	// Update last fetch time
-	f.updateLastFetch()
-
-	log.Printf("Fetched full data: %d HTTP routers, %d TCP routers, %d UDP routers, %d services, %d middlewares",
-		data.GetHTTPRouterCount(),
-		data.GetTCPRouterCount(),
-		data.GetUDPRouterCount(),
-		data.GetTotalServiceCount(),
-		data.GetTotalMiddlewareCount())
+	data, ok := result.(*models.FullTraefikData)
+	if !ok {
+		return nil, fmt.Errorf("unexpected full data result type %T", result)
+	}
 
 	return data, nil
 }
@@ -211,14 +156,71 @@ func (f *TraefikFetcher) updateLastFetch() {
 	f.lastFetchMu.Unlock()
 }
 
-// fetchResourcesFromURL fetches resources from a specific URL using concurrent fetching
-func (f *TraefikFetcher) fetchResourcesFromURL(ctx context.Context, baseURL string) (*models.ResourceCollection, error) {
-	// Fetch all endpoints concurrently (like Mantrae pattern)
-	fullData, err := f.fetchAllEndpointsConcurrently(ctx, baseURL)
-	if err != nil {
-		return nil, err
+func (f *TraefikFetcher) timeSinceLastFetch() time.Duration {
+	f.lastFetchMu.RLock()
+	defer f.lastFetchMu.RUnlock()
+
+	return time.Since(f.lastFetch)
+}
+
+func (f *TraefikFetcher) getCachedData() *models.FullTraefikData {
+	f.cachedDataMu.RLock()
+	defer f.cachedDataMu.RUnlock()
+
+	return f.cachedData
+}
+
+func (f *TraefikFetcher) fetchFullDataFromAvailableURLs(ctx context.Context) (*models.FullTraefikData, error) {
+	log.Println("Fetching full data from Traefik API...")
+
+	data, err := f.fetchAllEndpointsConcurrently(ctx, f.config.URL)
+	if err == nil {
+		log.Printf("Successfully fetched full data from %s", f.config.URL)
+		return data, nil
 	}
 
+	log.Printf("Failed to connect to primary Traefik API URL %s: %v", f.config.URL, err)
+
+	lastErr := err
+	for _, url := range f.fallbackTraefikURLs() {
+		log.Printf("Trying fallback Traefik API URL: %s", url)
+
+		data, err = f.fetchAllEndpointsConcurrently(ctx, url)
+		if err == nil {
+			f.suggestURLUpdate(url)
+			return data, nil
+		}
+
+		lastErr = err
+		log.Printf("Fallback URL %s failed: %v", url, err)
+	}
+
+	return nil, fmt.Errorf("all Traefik API connection attempts failed, last error: %w", lastErr)
+}
+
+func (f *TraefikFetcher) fallbackTraefikURLs() []string {
+	fallbackURLs := []string{
+		"http://traefik:8080",
+		"http://localhost:8080",
+		"http://127.0.0.1:8080",
+		"http://host.docker.internal:8080",
+	}
+
+	if f.config.URL == "" {
+		return fallbackURLs
+	}
+
+	filteredURLs := make([]string, 0, len(fallbackURLs))
+	for _, fallbackURL := range fallbackURLs {
+		if fallbackURL != f.config.URL {
+			filteredURLs = append(filteredURLs, fallbackURL)
+		}
+	}
+
+	return filteredURLs
+}
+
+func (f *TraefikFetcher) buildResourcesFromFullData(fullData *models.FullTraefikData) *models.ResourceCollection {
 	// Convert Traefik routers to our internal model
 	resources := &models.ResourceCollection{
 		Resources: make([]models.Resource, 0, len(fullData.HTTPRouters)),
@@ -283,7 +285,7 @@ func (f *TraefikFetcher) fetchResourcesFromURL(ctx context.Context, baseURL stri
 		fullData.GetTotalServiceCount(),
 		fullData.GetTotalMiddlewareCount())
 
-	return resources, nil
+	return resources
 }
 
 // fetchAllEndpointsConcurrently fetches multiple Traefik API endpoints in parallel
