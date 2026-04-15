@@ -149,7 +149,9 @@ func runMigrations(db *sql.DB) error {
 	// If something goes wrong, rollback
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Printf("Failed to rollback migrations transaction: %v", rollbackErr)
+			}
 		}
 	}()
 
@@ -206,7 +208,9 @@ func runServiceMigrations(db *DB) error {
 		var txErr error
 		defer func() {
 			if txErr != nil {
-				tx.Rollback()
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					log.Printf("Failed to rollback service migrations transaction: %v", rollbackErr)
+				}
 			}
 		}()
 

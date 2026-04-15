@@ -17,6 +17,8 @@ type mockResourceFetcher struct {
 	err       error
 }
 
+var _ ResourceFetcher = (*mockResourceFetcher)(nil)
+
 func (m *mockResourceFetcher) FetchResources(ctx context.Context) (*models.ResourceCollection, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -274,14 +276,14 @@ func TestIsSystemRouter(t *testing.T) {
 		{"dashboard@internal", true},
 		{"acme-http@internal", true},
 		{"noop@internal", true},
-		{"api@file", true},              // Starts with api@
-		{"dashboard@docker", true},       // Starts with dashboard@
-		{"traefik@file", true},           // Starts with traefik@
-		{"my-router@file", false},        // User router
-		{"web-service@docker", false},    // User router
-		{"api-router@file", false},       // Allowed user pattern
-		{"next-router@file", false},      // Allowed user pattern
-		{"ws-router@file", false},        // Allowed user pattern
+		{"api@file", true},            // Starts with api@
+		{"dashboard@docker", true},    // Starts with dashboard@
+		{"traefik@file", true},        // Starts with traefik@
+		{"my-router@file", false},     // User router
+		{"web-service@docker", false}, // User router
+		{"api-router@file", false},    // Allowed user pattern
+		{"next-router@file", false},   // Allowed user pattern
+		{"ws-router@file", false},     // Allowed user pattern
 	}
 
 	for _, tt := range tests {

@@ -62,7 +62,9 @@ func TestDataSourceHandler_GetActiveDataSource(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	if response["name"] == nil {
 		t.Error("expected name in response")
@@ -135,7 +137,9 @@ func TestDataSourceHandler_SetActiveDataSource_Response(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	if response["message"] == nil {
 		t.Error("expected message in response")
@@ -168,7 +172,9 @@ func TestDataSourceHandler_UpdateDataSource(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	if response["message"] == nil {
 		t.Error("expected message in response")

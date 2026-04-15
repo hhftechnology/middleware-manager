@@ -44,7 +44,9 @@ func TestConfigHandler_UpdateRouterPriority(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	if response["router_priority"] != float64(500) {
 		t.Errorf("expected router_priority 500, got %v", response["router_priority"])
@@ -52,7 +54,9 @@ func TestConfigHandler_UpdateRouterPriority(t *testing.T) {
 
 	// Verify the database was updated and manual flag is set
 	var priority, manual int
-	db.DB.QueryRow("SELECT router_priority, router_priority_manual FROM resources WHERE id = 'test-res'").Scan(&priority, &manual)
+	if err := db.DB.QueryRow("SELECT router_priority, router_priority_manual FROM resources WHERE id = 'test-res'").Scan(&priority, &manual); err != nil {
+		t.Fatalf("failed to query router priority: %v", err)
+	}
 
 	if priority != 500 {
 		t.Errorf("expected db router_priority 500, got %d", priority)
@@ -173,7 +177,9 @@ func TestConfigHandler_UpdateHTTPConfig(t *testing.T) {
 
 	// Verify database was updated
 	var entrypoints string
-	db.DB.QueryRow("SELECT entrypoints FROM resources WHERE id = 'test-res'").Scan(&entrypoints)
+	if err := db.DB.QueryRow("SELECT entrypoints FROM resources WHERE id = 'test-res'").Scan(&entrypoints); err != nil {
+		t.Fatalf("failed to query entrypoints: %v", err)
+	}
 
 	if entrypoints != "web,websecure" {
 		t.Errorf("expected entrypoints 'web,websecure', got %q", entrypoints)
@@ -201,7 +207,9 @@ func TestConfigHandler_UpdateHTTPConfig_DefaultEntrypoints(t *testing.T) {
 	}
 
 	var entrypoints string
-	db.DB.QueryRow("SELECT entrypoints FROM resources WHERE id = 'test-res'").Scan(&entrypoints)
+	if err := db.DB.QueryRow("SELECT entrypoints FROM resources WHERE id = 'test-res'").Scan(&entrypoints); err != nil {
+		t.Fatalf("failed to query entrypoints: %v", err)
+	}
 
 	if entrypoints != "websecure" {
 		t.Errorf("expected default entrypoints 'websecure', got %q", entrypoints)

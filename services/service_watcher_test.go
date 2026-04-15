@@ -35,6 +35,8 @@ type mockServiceFetcher struct {
 	err      error
 }
 
+var _ ServiceFetcher = (*mockServiceFetcher)(nil)
+
 func (m *mockServiceFetcher) FetchServices(ctx context.Context) (*models.ServiceCollection, error) {
 	if m.err != nil {
 		return nil, m.err

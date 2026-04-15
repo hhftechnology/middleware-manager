@@ -109,7 +109,7 @@ func TestHTTPClientMakesRequests(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		writeResponseBody(w, `{"status": "ok"}`)
 	}))
 	defer server.Close()
 

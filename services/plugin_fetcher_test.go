@@ -52,11 +52,11 @@ func TestPluginFetcher_FetchPlugins(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/http/middlewares":
-			json.NewEncoder(w).Encode(middlewares)
+			writeJSONResponse(w, middlewares)
 		case "/api/overview":
 			var overview models.TraefikPluginOverview
 			overview.Plugins.Enabled = []string{"testPlugin"}
-			json.NewEncoder(w).Encode(overview)
+			writeJSONResponse(w, overview)
 		default:
 			http.NotFound(w, r)
 		}
@@ -183,7 +183,7 @@ func TestPluginFetcher_GetCachedPlugins(t *testing.T) {
 
 	// Should return nil or empty when no cache
 	cached := fetcher.GetCachedPlugins()
-	if cached != nil && len(cached) > 0 {
+	if len(cached) > 0 {
 		t.Error("expected nil or empty cache initially")
 	}
 }
@@ -192,9 +192,9 @@ func TestPluginFetcher_GetCachedPlugins(t *testing.T) {
 func TestPluginFetcher_InvalidateCache(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/http/middlewares" {
-			json.NewEncoder(w).Encode([]models.TraefikMiddleware{})
+			writeJSONResponse(w, []models.TraefikMiddleware{})
 		} else if r.URL.Path == "/api/overview" {
-			json.NewEncoder(w).Encode(models.TraefikPluginOverview{})
+			writeJSONResponse(w, models.TraefikPluginOverview{})
 		}
 	}))
 	defer server.Close()
@@ -207,14 +207,16 @@ func TestPluginFetcher_InvalidateCache(t *testing.T) {
 	ctx := context.Background()
 
 	// Fetch to populate cache
-	_, _ = fetcher.FetchPlugins(ctx)
+	if _, err := fetcher.FetchPlugins(ctx); err != nil {
+		t.Fatalf("FetchPlugins() error = %v", err)
+	}
 
 	// Invalidate cache
 	fetcher.InvalidateCache()
 
 	// Cache should be empty
 	cached := fetcher.GetCachedPlugins()
-	if cached != nil && len(cached) > 0 {
+	if len(cached) > 0 {
 		t.Error("expected nil or empty cache after invalidation")
 	}
 }
@@ -482,8 +484,8 @@ func TestPluginFetcher_BuildPluginResponses(t *testing.T) {
 		},
 	}
 
-overview := &models.TraefikPluginOverview{}
-overview.Plugins.Enabled = []string{"badger"}
+	overview := &models.TraefikPluginOverview{}
+	overview.Plugins.Enabled = []string{"badger"}
 
 	plugins := fetcher.buildPluginResponses(middlewares, overview)
 

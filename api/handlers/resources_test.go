@@ -253,7 +253,7 @@ func TestResourceHandler_DeleteResource(t *testing.T) {
 
 	// Verify resource is deleted
 	var count int
-	db.DB.QueryRow("SELECT COUNT(*) FROM resources WHERE id = 'delete-test'").Scan(&count)
+	mustScan(t, db.DB.QueryRow("SELECT COUNT(*) FROM resources WHERE id = 'delete-test'").Scan(&count), "failed to query deleted resource count")
 	if count != 0 {
 		t.Error("resource was not deleted")
 	}
@@ -393,7 +393,7 @@ func TestResourceHandler_RemoveExternalMiddleware(t *testing.T) {
 
 	// Verify it was removed
 	var count int
-	db.DB.QueryRow("SELECT COUNT(*) FROM resource_external_middlewares WHERE resource_id = 'ext-res-4'").Scan(&count)
+	mustScan(t, db.DB.QueryRow("SELECT COUNT(*) FROM resource_external_middlewares WHERE resource_id = 'ext-res-4'").Scan(&count), "failed to query external middleware assignment count")
 	if count != 0 {
 		t.Error("external middleware was not removed from database")
 	}

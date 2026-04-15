@@ -234,11 +234,6 @@ func TestConvertViaJSON(t *testing.T) {
 		Value int    `json:"value"`
 	}
 
-	type DifferentTarget struct {
-		Name    string `json:"name"`
-		Counter int    `json:"value"` // Different field name, same json tag
-	}
-
 	tests := []struct {
 		name    string
 		source  interface{}

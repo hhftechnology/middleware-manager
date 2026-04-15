@@ -361,16 +361,22 @@ func (cg *CertGenerator) DeleteCA() error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Printf("Failed to rollback CA deletion transaction: %v", rollbackErr)
+			}
+		}
+	}()
 
 	// Delete all clients
-	_, err = tx.Exec(`DELETE FROM mtls_clients`)
-	if err != nil {
-		return fmt.Errorf("failed to delete clients: %w", err)
+	if _, txErr = tx.Exec(`DELETE FROM mtls_clients`); txErr != nil {
+		return fmt.Errorf("failed to delete clients: %w", txErr)
 	}
 
 	// Reset CA config
-	_, err = tx.Exec(`
+	if _, txErr = tx.Exec(`
 		UPDATE mtls_config SET
 			enabled = 0,
 			ca_cert = '',
@@ -380,13 +386,12 @@ func (cg *CertGenerator) DeleteCA() error {
 			ca_expiry = NULL,
 			updated_at = ?
 		WHERE id = 1
-	`, time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to reset CA config: %w", err)
+	`, time.Now()); txErr != nil {
+		return fmt.Errorf("failed to reset CA config: %w", txErr)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	if txErr = tx.Commit(); txErr != nil {
+		return fmt.Errorf("failed to commit transaction: %w", txErr)
 	}
 
 	return nil

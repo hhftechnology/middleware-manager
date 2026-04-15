@@ -30,6 +30,14 @@ type ConfigGenerator struct {
 	lastConfig    []byte
 }
 
+var (
+	_ = (*ConfigGenerator).processResourcesWithServices
+	_ = (*ConfigGenerator).fetchTraefikServiceNames
+	_ = (*ConfigGenerator).processTCPRouters
+	_ = stringSliceContains
+	_ = determineServiceProtocol
+)
+
 // TraefikConfig represents the structure of the Traefik configuration
 type TraefikConfig struct {
 	HTTP struct {
@@ -261,63 +269,14 @@ func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
 	return rows.Err()
 }
 
-func (cg *ConfigGenerator) processServices(config *TraefikConfig) error {
-	rows, err := cg.db.Query("SELECT id, name, type, config FROM services")
-	if err != nil {
-		return fmt.Errorf("failed to fetch services: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var id, name, typ, configStr string
-		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-			// REPLACE: log.Printf("Failed to scan service row: %v", err)
-			if shouldLog() {
-				log.Printf("Failed to scan service row: %v", err)
-			}
-			continue
-		}
-		var serviceConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(configStr), &serviceConfig); err != nil {
-			// REPLACE: log.Printf("Failed to parse service config for %s: %v", name, err)
-			if shouldLog() {
-				log.Printf("Failed to parse service config for %s: %v", name, err)
-			}
-			continue
-		}
-
-		// Use the centralized processing logic from models package
-		serviceConfig = models.ProcessServiceConfig(typ, serviceConfig)
-
-		protocol := determineServiceProtocol(typ, serviceConfig)
-		serviceEntry := map[string]interface{}{typ: serviceConfig}
-
-		switch protocol {
-		case "http":
-			config.HTTP.Services[id] = serviceEntry
-		case "tcp":
-			config.TCP.Services[id] = serviceEntry
-		case "udp":
-			config.UDP.Services[id] = serviceEntry
-		}
-	}
-	return rows.Err()
-}
-
-// In services/config_generator.go
-
-// processResourcesWithServices processes resources with their assigned services
-// Helper function to extract the base name without provider suffixes
 func extractBaseName(id string) string {
-	// If the ID contains @ character, extract the part before it
 	if idx := strings.Index(id, "@"); idx > 0 {
 		return id[:idx]
 	}
+
 	return id
 }
 
-// processResourcesWithServices processes resources with their assigned services
-// processResourcesWithServices processes resources with their assigned services
 func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) error {
 	activeDSConfig, err := cg.configManager.GetActiveDataSourceConfig()
 	if err != nil {

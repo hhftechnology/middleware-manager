@@ -165,30 +165,30 @@ func cleanupRegexChars(s string) string {
 		from string
 		to   string
 	}{
-		{`\d+`, "N"},           // digit sequences
-		{`[0-9]+`, "N"},        // digit class sequences
-		{`[a-z0-9]+`, "x"},     // alphanumeric lowercase class
-		{`[a-zA-Z0-9]+`, "x"},  // alphanumeric class
-		{`[a-z]+`, "x"},        // alpha lowercase class
-		{`[A-Z]+`, "X"},        // alpha uppercase class
-		{`[a-zA-Z]+`, "X"},     // alpha class
-		{`\w+`, "x"},           // word char sequences
-		{`[^/]+`, "x"},         // non-slash sequences
-		{`.*`, "x"},            // any char sequences
-		{`.+`, "x"},            // one or more any char
-		{`^`, ""},              // start anchor
-		{`$`, ""},              // end anchor
-		{`\`, ""},              // escapes
-		{`(`, ""},              // groups
+		{`\d+`, "N"},          // digit sequences
+		{`[0-9]+`, "N"},       // digit class sequences
+		{`[a-z0-9]+`, "x"},    // alphanumeric lowercase class
+		{`[a-zA-Z0-9]+`, "x"}, // alphanumeric class
+		{`[a-z]+`, "x"},       // alpha lowercase class
+		{`[A-Z]+`, "X"},       // alpha uppercase class
+		{`[a-zA-Z]+`, "X"},    // alpha class
+		{`\w+`, "x"},          // word char sequences
+		{`[^/]+`, "x"},        // non-slash sequences
+		{`.*`, "x"},           // any char sequences
+		{`.+`, "x"},           // one or more any char
+		{`^`, ""},             // start anchor
+		{`$`, ""},             // end anchor
+		{`\`, ""},             // escapes
+		{`(`, ""},             // groups
 		{`)`, ""},
-		{`{`, ""},              // repetition
+		{`{`, ""}, // repetition
 		{`}`, ""},
-		{`[`, ""},              // character classes
+		{`[`, ""}, // character classes
 		{`]`, ""},
-		{`?`, ""},              // optional
-		{`*`, ""},              // zero or more
-		{`+`, ""},              // one or more
-		{`|`, "-"},             // alternation
+		{`?`, ""},  // optional
+		{`*`, ""},  // zero or more
+		{`+`, ""},  // one or more
+		{`|`, "-"}, // alternation
 	}
 
 	result := s
@@ -233,3 +233,5 @@ func joinTLSDomains(domains []models.TraefikTLSDomain) string {
 	// Call the function from the models package
 	return models.JoinTLSDomains(domains)
 }
+
+var _ = joinTLSDomains

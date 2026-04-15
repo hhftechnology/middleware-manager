@@ -89,9 +89,9 @@ func TestIsValidMiddlewareType(t *testing.T) {
 // TestSanitizeMiddlewareConfig tests config sanitization
 func TestSanitizeMiddlewareConfig(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  map[string]interface{}
-		check  func(t *testing.T, config map[string]interface{})
+		name  string
+		input map[string]interface{}
+		check func(t *testing.T, config map[string]interface{})
 	}{
 		{
 			name: "remove extra quotes from duration",
@@ -202,7 +202,9 @@ func TestResponseWithError(t *testing.T) {
 			}
 
 			var response map[string]interface{}
-			json.Unmarshal(rec.Body.Bytes(), &response)
+			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
 
 			if response["message"] == nil {
 				t.Error("response should contain 'message' field")

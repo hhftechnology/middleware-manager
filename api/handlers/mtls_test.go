@@ -229,7 +229,9 @@ func TestMTLSHandler_UpdateMiddlewareConfig(t *testing.T) {
 
 	// Verify database was updated
 	var rules string
-	db.DB.QueryRow("SELECT middleware_rules FROM mtls_config WHERE id = 1").Scan(&rules)
+	if err := db.DB.QueryRow("SELECT middleware_rules FROM mtls_config WHERE id = 1").Scan(&rules); err != nil {
+		t.Fatalf("failed to query middleware rules: %v", err)
+	}
 	if rules != "*.example.com" {
 		t.Errorf("expected rules '*.example.com', got %q", rules)
 	}

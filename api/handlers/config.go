@@ -68,7 +68,9 @@ func (h *ConfigHandler) UpdateRouterPriority(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Printf("Transaction rollback failed: %v", rollbackErr)
+			}
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()
@@ -159,7 +161,9 @@ func (h *ConfigHandler) UpdateHTTPConfig(c *gin.Context) {
 	var txErr error
 	defer func() {
 		if txErr != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Printf("Transaction rollback failed: %v", rollbackErr)
+			}
 			log.Printf("Transaction rolled back due to error: %v", txErr)
 		}
 	}()

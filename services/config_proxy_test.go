@@ -183,7 +183,7 @@ func TestConfigProxy_GetMergedConfig_TraefikStandalone_NoPangolinCall(t *testing
 	pangolinSpy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount.Add(1)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{}"))
+		writeResponseBody(w, "{}")
 	}))
 	defer pangolinSpy.Close()
 
@@ -211,8 +211,7 @@ func TestConfigProxy_GetMergedConfig_TraefikStandalone_NoPangolinCall(t *testing
 // fetch path continues to work after the branching change.
 func TestConfigProxy_GetMergedConfig_PangolinPath_StillWorks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONResponse(w, map[string]interface{}{
 			"http": map[string]interface{}{
 				"routers":     map[string]interface{}{},
 				"services":    map[string]interface{}{},

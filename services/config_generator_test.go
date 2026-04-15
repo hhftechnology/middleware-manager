@@ -195,10 +195,7 @@ func TestConfigGenerator_Start_Disabled(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-		// Good, Start returned
-	}
+	<-done
 
 	if cg.isRunning {
 		t.Error("cg.isRunning should be false when ENABLE_FILE_CONFIG != true")

@@ -87,6 +87,11 @@ type externalMiddlewareRef struct {
 	Priority int
 }
 
+var (
+	_ = (*ConfigProxy).applyServices
+	_ = (*ConfigProxy).determineServiceProtocol
+)
+
 type mtlsConfigData struct {
 	CACertPath      string
 	Rules           []interface{}
@@ -593,7 +598,7 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 			allAssigned = append(allAssigned, middlewareEntry{Name: mw.Name, Priority: mw.Priority})
 		}
 		for _, ext := range resource.ExternalMiddlewares {
-			allAssigned = append(allAssigned, middlewareEntry{Name: ext.Name, Priority: ext.Priority})
+			allAssigned = append(allAssigned, middlewareEntry(ext))
 		}
 		// Sort by priority (highest first) for consistent ordering
 		sort.SliceStable(allAssigned, func(i, j int) bool {

@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,8 +53,7 @@ func TestPangolinFetcher_FetchResources(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockConfig)
+		writeJSONResponse(w, mockConfig)
 	}))
 	defer server.Close()
 
@@ -94,7 +92,7 @@ func TestPangolinFetcher_FetchResources_BasicAuth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"http":{"routers":{},"services":{},"middlewares":{}}}`))
+		writeResponseBody(w, `{"http":{"routers":{},"services":{},"middlewares":{}}}`)
 	}))
 	defer server.Close()
 
@@ -155,7 +153,7 @@ func TestPangolinFetcher_FetchResources_Error(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.body))
+				writeResponseBody(w, tt.body)
 			}))
 			defer server.Close()
 
@@ -196,8 +194,7 @@ func TestPangolinFetcher_GetTraefikMiddlewares(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockConfig)
+		writeJSONResponse(w, mockConfig)
 	}))
 	defer server.Close()
 
@@ -254,8 +251,7 @@ func TestPangolinFetcher_GetTraefikServices(t *testing.T) {
 	mockConfig.HTTP.Middlewares = map[string]map[string]interface{}{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockConfig)
+		writeJSONResponse(w, mockConfig)
 	}))
 	defer server.Close()
 
@@ -346,7 +342,7 @@ func TestPangolinFetcher_RateLimiting(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"http":{"routers":{},"services":{},"middlewares":{}}}`))
+		writeResponseBody(w, `{"http":{"routers":{},"services":{},"middlewares":{}}}`)
 	}))
 	defer server.Close()
 

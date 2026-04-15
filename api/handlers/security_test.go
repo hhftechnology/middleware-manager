@@ -104,7 +104,7 @@ func TestSecurityHandler_EnableTLSHardening(t *testing.T) {
 
 	// Verify database was updated
 	var enabled int
-	db.DB.QueryRow("SELECT tls_hardening_enabled FROM security_config WHERE id = 1").Scan(&enabled)
+	mustScan(t, db.DB.QueryRow("SELECT tls_hardening_enabled FROM security_config WHERE id = 1").Scan(&enabled), "failed to query tls_hardening_enabled")
 	if enabled != 1 {
 		t.Errorf("expected db tls_hardening_enabled 1, got %d", enabled)
 	}

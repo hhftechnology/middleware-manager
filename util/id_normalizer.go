@@ -65,9 +65,7 @@ func normalizeIDInternal(id string) string {
 		// Handle redirect suffixes in routers
 		if strings.Contains(baseName, "-redirect") {
 			// Normalize router-redirect-auth to router-redirect
-			if strings.HasSuffix(baseName, "-auth") {
-				baseName = strings.TrimSuffix(baseName, "-auth")
-			}
+			baseName = strings.TrimSuffix(baseName, "-auth")
 		}
 	}
 
@@ -96,12 +94,12 @@ func AddProviderSuffix(id string, suffix string) string {
 	if suffix == "" || strings.Contains(id, "@") {
 		return id
 	}
-	
+
 	// Ensure suffix starts with @
 	if !strings.HasPrefix(suffix, "@") {
 		suffix = "@" + suffix
 	}
-	
+
 	return id + suffix
 }
 
@@ -111,12 +109,12 @@ func DetermineProviderSuffix(sourceType string, activeDataSourceType string) str
 	if sourceType == "file" {
 		return "@file"
 	}
-	
+
 	// For Traefik API, prefer docker provider for matching source types
 	if activeDataSourceType == "traefik" && sourceType == "traefik" {
 		return "@docker"
 	}
-	
+
 	// Default to http provider
 	return "@http"
 }

@@ -30,15 +30,15 @@ type DefaultTemplates struct {
 func LoadDefaultTemplates(db *database.DB) error {
 	// Determine the path to the templates file
 	templatesFile := "config/templates.yaml"
-	
+
 	// Check if the file exists in the current directory
 	if _, err := os.Stat(templatesFile); os.IsNotExist(err) {
 		// Try to find it in different locations
 		possiblePaths := []string{
-			"/app/config/templates.yaml",  // Docker container path
-			"templates.yaml",              // Current directory
+			"/app/config/templates.yaml", // Docker container path
+			"templates.yaml",             // Current directory
 		}
-		
+
 		found := false
 		for _, path := range possiblePaths {
 			if _, err := os.Stat(path); err == nil {
@@ -47,25 +47,25 @@ func LoadDefaultTemplates(db *database.DB) error {
 				break
 			}
 		}
-		
+
 		if !found {
 			log.Printf("Warning: templates.yaml not found, skipping default templates")
 			return nil
 		}
 	}
-	
+
 	// Read the templates file
 	data, err := os.ReadFile(templatesFile)
 	if err != nil {
 		return err
 	}
-	
+
 	// Parse the YAML
 	var templates DefaultTemplates
 	if err := yaml.Unmarshal(data, &templates); err != nil {
 		return err
 	}
-	
+
 	// Process templates to ensure proper value preservation based on middleware type
 	for i := range templates.Middlewares {
 		// Apply middleware-specific processing based on type
@@ -150,7 +150,7 @@ func preserveTraefikValues(data interface{}) interface{} {
 				} else {
 					v[key] = preserveTraefikValues(val)
 				}
-			
+
 			// Regex and replacement patterns
 			case key == "regex" || key == "replacement" || strings.HasSuffix(key, "Regex"):
 				// Ensure regex patterns are preserved exactly
@@ -160,11 +160,11 @@ func preserveTraefikValues(data interface{}) interface{} {
 				} else {
 					v[key] = preserveTraefikValues(val)
 				}
-			
+
 			// API keys and security tokens
-			case key == "key" || key == "token" || key == "secret" || 
-				 strings.Contains(key, "Key") || strings.Contains(key, "Token") || 
-				 strings.Contains(key, "Secret") || strings.Contains(key, "Password"):
+			case key == "key" || key == "token" || key == "secret" ||
+				strings.Contains(key, "Key") || strings.Contains(key, "Token") ||
+				strings.Contains(key, "Secret") || strings.Contains(key, "Password"):
 				// Ensure API keys and tokens are preserved exactly
 				if strVal, ok := val.(string); ok {
 					// Always preserve keys/tokens exactly as-is, even if empty
@@ -172,7 +172,7 @@ func preserveTraefikValues(data interface{}) interface{} {
 				} else {
 					v[key] = preserveTraefikValues(val)
 				}
-			
+
 			// Empty header values (common in security headers middleware)
 			case key == "Server" || key == "X-Powered-By" || strings.HasPrefix(key, "X-"):
 				// Empty string values are often used to remove headers
@@ -182,17 +182,17 @@ func preserveTraefikValues(data interface{}) interface{} {
 				} else {
 					v[key] = preserveTraefikValues(val)
 				}
-			
+
 			// IP addresses and networks
 			case key == "ip" || key == "clientIP" || strings.Contains(key, "IP") ||
-				 key == "sourceRange" || key == "excludedIPs":
+				key == "sourceRange" || key == "excludedIPs":
 				// IP addresses often need exact formatting
 				v[key] = preserveTraefikValues(val)
-			
+
 			// Boolean flags that control behavior
-			case strings.HasPrefix(key, "is") || strings.HasPrefix(key, "has") || 
-				 strings.HasPrefix(key, "enable") || strings.HasSuffix(key, "enabled") ||
-				 strings.HasSuffix(key, "Enabled") || key == "permanent" || key == "forceSlash":
+			case strings.HasPrefix(key, "is") || strings.HasPrefix(key, "has") ||
+				strings.HasPrefix(key, "enable") || strings.HasSuffix(key, "enabled") ||
+				strings.HasSuffix(key, "Enabled") || key == "permanent" || key == "forceSlash":
 				// Ensure boolean values are preserved as actual booleans
 				if boolVal, ok := val.(bool); ok {
 					v[key] = boolVal
@@ -208,13 +208,13 @@ func preserveTraefikValues(data interface{}) interface{} {
 				} else {
 					v[key] = preserveTraefikValues(val)
 				}
-			
+
 			// Integer values like timeouts, ports, limits
-			case key == "amount" || key == "burst" || key == "port" || 
-				 strings.HasSuffix(key, "Seconds") || strings.HasSuffix(key, "Limit") || 
-				 strings.HasSuffix(key, "Timeout") || strings.HasSuffix(key, "Size") ||
-				 key == "depth" || key == "priority" || key == "statusCode" || 
-				 key == "attempts" || key == "responseCode":
+			case key == "amount" || key == "burst" || key == "port" ||
+				strings.HasSuffix(key, "Seconds") || strings.HasSuffix(key, "Limit") ||
+				strings.HasSuffix(key, "Timeout") || strings.HasSuffix(key, "Size") ||
+				key == "depth" || key == "priority" || key == "statusCode" ||
+				key == "attempts" || key == "responseCode":
 				// Ensure numeric values are preserved as numbers
 				switch numVal := val.(type) {
 				case int:
@@ -238,29 +238,29 @@ func preserveTraefikValues(data interface{}) interface{} {
 				default:
 					v[key] = preserveTraefikValues(val)
 				}
-			
+
 			// Default handling for other keys
 			default:
 				v[key] = preserveTraefikValues(val)
 			}
 		}
 		return v
-	
+
 	case []interface{}:
 		// Process each element in the array
 		for i, item := range v {
 			v[i] = preserveTraefikValues(item)
 		}
 		return v
-	
+
 	case string:
 		// Preserve all string values exactly as they are
 		return v
-	
+
 	case int, float64, bool:
 		// Preserve primitive types as they are
 		return v
-	
+
 	default:
 		// For any other type, return as is
 		return v
@@ -278,7 +278,7 @@ func processHeadersMiddleware(config *map[string]interface{}) {
 			}
 		}
 	}
-	
+
 	// Special handling for request headers which might contain empty strings
 	if customRequestHeaders, ok := (*config)["customRequestHeaders"].(map[string]interface{}); ok {
 		for key, value := range customRequestHeaders {
@@ -288,20 +288,20 @@ func processHeadersMiddleware(config *map[string]interface{}) {
 			}
 		}
 	}
-	
+
 	// Process header fields that are often quoted strings
 	specialStringFields := []string{
-		"customFrameOptionsValue", "contentSecurityPolicy", 
+		"customFrameOptionsValue", "contentSecurityPolicy",
 		"referrerPolicy", "permissionsPolicy",
 	}
-	
+
 	for _, field := range specialStringFields {
 		if value, ok := (*config)[field].(string); ok {
 			// Preserve string exactly, especially if it contains quotes
 			(*config)[field] = value
 		}
 	}
-	
+
 	// Process other header configuration values
 	*config = preserveTraefikValues(*config).(map[string]interface{})
 }
@@ -320,7 +320,7 @@ func processChainingMiddleware(config *map[string]interface{}) {
 		}
 		(*config)["middlewares"] = middlewares
 	}
-	
+
 	// Process other chain configuration values
 	*config = preserveTraefikValues(*config).(map[string]interface{})
 }
@@ -339,19 +339,19 @@ func processPathMiddleware(config *map[string]interface{}, middlewareType string
 			}
 		}
 	}
-	
+
 	// Special handling for replacement patterns
 	if replacement, ok := (*config)["replacement"].(string); ok {
 		// Preserve replacement pattern exactly
 		(*config)["replacement"] = replacement
 	}
-	
+
 	// Special handling for path values
 	if path, ok := (*config)["path"].(string); ok {
 		// Preserve path exactly
 		(*config)["path"] = path
 	}
-	
+
 	// Special handling for prefixes arrays
 	if prefixes, ok := (*config)["prefixes"].([]interface{}); ok {
 		for i, prefix := range prefixes {
@@ -360,22 +360,22 @@ func processPathMiddleware(config *map[string]interface{}, middlewareType string
 			}
 		}
 	}
-	
+
 	// Special handling for scheme
 	if scheme, ok := (*config)["scheme"].(string); ok {
 		// Preserve scheme exactly
 		(*config)["scheme"] = scheme
 	}
-	
+
 	// Process boolean options
 	if forceSlash, ok := (*config)["forceSlash"].(bool); ok {
 		(*config)["forceSlash"] = forceSlash
 	}
-	
+
 	if permanent, ok := (*config)["permanent"].(bool); ok {
 		(*config)["permanent"] = permanent
 	}
-	
+
 	// Process other path manipulation configuration values
 	*config = preserveTraefikValues(*config).(map[string]interface{})
 }
@@ -388,12 +388,12 @@ func processAuthMiddleware(config *map[string]interface{}, middlewareType string
 			// Preserve address URL exactly
 			(*config)["address"] = address
 		}
-		
+
 		// Process trust settings
 		if trustForward, ok := (*config)["trustForwardHeader"].(bool); ok {
 			(*config)["trustForwardHeader"] = trustForward
 		}
-		
+
 		// Process headers array
 		if headers, ok := (*config)["authResponseHeaders"].([]interface{}); ok {
 			for i, header := range headers {
@@ -403,7 +403,7 @@ func processAuthMiddleware(config *map[string]interface{}, middlewareType string
 			}
 		}
 	}
-	
+
 	// BasicAuth/DigestAuth middleware special handling
 	if middlewareType == "basicAuth" || middlewareType == "digestAuth" {
 		// Preserve exact format of users array
@@ -415,7 +415,7 @@ func processAuthMiddleware(config *map[string]interface{}, middlewareType string
 			}
 		}
 	}
-	
+
 	// Process other auth configuration values
 	*config = preserveTraefikValues(*config).(map[string]interface{})
 }
@@ -423,16 +423,16 @@ func processAuthMiddleware(config *map[string]interface{}, middlewareType string
 // processPluginMiddleware handles plugin middleware special processing
 func processPluginMiddleware(config *map[string]interface{}) {
 	// Process plugins (including CrowdSec)
-	for _, pluginCfg := range *config {
+	for pluginName, pluginCfg := range *config {
 		if pluginConfig, ok := pluginCfg.(map[string]interface{}); ok {
 			// Process special fields in plugin configurations
-			
+
 			// Process API keys and secrets - must be preserved exactly
 			keyFields := []string{
-				"crowdsecLapiKey", "apiKey", "token", "secret", "password", 
+				"crowdsecLapiKey", "apiKey", "token", "secret", "password",
 				"key", "accessKey", "secretKey", "captchaSiteKey", "captchaSecretKey",
 			}
-			
+
 			for _, field := range keyFields {
 				if val, exists := pluginConfig[field]; exists {
 					if strVal, ok := val.(string); ok {
@@ -441,7 +441,7 @@ func processPluginMiddleware(config *map[string]interface{}) {
 					}
 				}
 			}
-			
+
 			// Process boolean options
 			boolFields := []string{
 				"enabled", "failureBlock", "unreachableBlock", "insecureVerify",
@@ -449,7 +449,7 @@ func processPluginMiddleware(config *map[string]interface{}) {
 				"logApiRequests", "silentStartUp", "forceMonthlyUpdate",
 				"allowUnknownCountries", "blackListMode", "addCountryHeader",
 			}
-			
+
 			for _, field := range boolFields {
 				for configKey, val := range pluginConfig {
 					if strings.Contains(configKey, field) {
@@ -459,12 +459,12 @@ func processPluginMiddleware(config *map[string]interface{}) {
 					}
 				}
 			}
-			
+
 			// Process arrays
 			arrayFields := []string{
 				"forwardedHeadersTrustedIPs", "clientTrustedIPs", "countries",
 			}
-			
+
 			for _, field := range arrayFields {
 				for configKey, val := range pluginConfig {
 					if strings.Contains(configKey, field) {
@@ -478,9 +478,9 @@ func processPluginMiddleware(config *map[string]interface{}) {
 					}
 				}
 			}
-			
+
 			// Process remaining fields
-			pluginConfig = preserveTraefikValues(pluginConfig).(map[string]interface{})
+			(*config)[pluginName] = preserveTraefikValues(pluginConfig).(map[string]interface{})
 		}
 	}
 
@@ -496,13 +496,13 @@ func EnsureConfigDirectory(path string) error {
 // SaveTemplateFile saves the default templates file if it doesn't exist
 func SaveTemplateFile(templatesDir string) error {
 	templatesFile := filepath.Join(templatesDir, "templates.yaml")
-	
+
 	// Check if file already exists
 	if _, err := os.Stat(templatesFile); err == nil {
 		// File exists, skip
 		return nil
 	}
-	
+
 	// Create default templates
 	templates := DefaultTemplates{
 		Middlewares: []DefaultMiddleware{
@@ -572,7 +572,7 @@ func SaveTemplateFile(templatesDir string) error {
 					},
 				},
 			},
-			
+
 			// Security middlewares
 			{
 				ID:   "ip-allowlist",
@@ -651,7 +651,7 @@ func SaveTemplateFile(templatesDir string) error {
 					"pem": true,
 				},
 			},
-			
+
 			// Path manipulation middlewares - with properly formatted regex patterns
 			{
 				ID:   "add-prefix",
@@ -700,7 +700,7 @@ func SaveTemplateFile(templatesDir string) error {
 					"replacement": "/bar/$1",
 				},
 			},
-			
+
 			// Redirect middlewares - with properly formatted regex patterns
 			{
 				ID:   "redirect-regex",
@@ -722,7 +722,7 @@ func SaveTemplateFile(templatesDir string) error {
 					"permanent": true,
 				},
 			},
-			
+
 			// Content processing middlewares
 			{
 				ID:   "compress",
@@ -757,23 +757,23 @@ func SaveTemplateFile(templatesDir string) error {
 				},
 			},
 			{
-				ID:   "content-type",
-				Name: "Content Type Auto-Detector",
-				Type: "contentType",
+				ID:     "content-type",
+				Name:   "Content Type Auto-Detector",
+				Type:   "contentType",
 				Config: map[string]interface{}{},
 			},
-			
+
 			// Error handling and reliability middlewares
 			{
 				ID:   "circuit-breaker",
 				Name: "Circuit Breaker",
 				Type: "circuitBreaker",
 				Config: map[string]interface{}{
-					"expression":        "NetworkErrorRatio() > 0.20 || ResponseCodeRatio(500, 600, 0, 600) > 0.25",
-					"checkPeriod":       "10s",
-					"fallbackDuration":  "30s",
-					"recoveryDuration":  "60s",
-					"responseCode":      int(503),
+					"expression":       "NetworkErrorRatio() > 0.20 || ResponseCodeRatio(500, 600, 0, 600) > 0.25",
+					"checkPeriod":      "10s",
+					"fallbackDuration": "30s",
+					"recoveryDuration": "60s",
+					"responseCode":     int(503),
 				},
 			},
 			{
@@ -807,7 +807,7 @@ func SaveTemplateFile(templatesDir string) error {
 					},
 				},
 			},
-			
+
 			// Chain middlewares
 			{
 				ID:   "security-chain",
@@ -820,7 +820,7 @@ func SaveTemplateFile(templatesDir string) error {
 					},
 				},
 			},
-			
+
 			// Crowdsec plugin middleware with proper API key handling
 			{
 				ID:   "crowdsec",
@@ -828,21 +828,21 @@ func SaveTemplateFile(templatesDir string) error {
 				Type: "plugin",
 				Config: map[string]interface{}{
 					"crowdsec": map[string]interface{}{
-						"enabled":                     true,
-						"logLevel":                    "INFO",
-						"updateIntervalSeconds":       int(15),
-						"updateMaxFailure":            int(0),
-						"defaultDecisionSeconds":      int(15),
-						"httpTimeoutSeconds":          int(10),
-						"crowdsecMode":                "live",
-						"crowdsecAppsecEnabled":       true,
-						"crowdsecAppsecHost":          "crowdsec:7422",
-						"crowdsecAppsecFailureBlock":  true,
+						"enabled":                        true,
+						"logLevel":                       "INFO",
+						"updateIntervalSeconds":          int(15),
+						"updateMaxFailure":               int(0),
+						"defaultDecisionSeconds":         int(15),
+						"httpTimeoutSeconds":             int(10),
+						"crowdsecMode":                   "live",
+						"crowdsecAppsecEnabled":          true,
+						"crowdsecAppsecHost":             "crowdsec:7422",
+						"crowdsecAppsecFailureBlock":     true,
 						"crowdsecAppsecUnreachableBlock": true,
-						"crowdsecAppsecBodyLimit":     int(10485760),  // Use int instead of integer to avoid scientific notation
-						"crowdsecLapiKey":             "PUT_YOUR_BOUNCER_KEY_HERE_OR_IT_WILL_NOT_WORK",
-						"crowdsecLapiHost":            "crowdsec:8080",
-						"crowdsecLapiScheme":          "http",
+						"crowdsecAppsecBodyLimit":        int(10485760), // Use int instead of integer to avoid scientific notation
+						"crowdsecLapiKey":                "PUT_YOUR_BOUNCER_KEY_HERE_OR_IT_WILL_NOT_WORK",
+						"crowdsecLapiHost":               "crowdsec:8080",
+						"crowdsecLapiScheme":             "http",
 						"forwardedHeadersTrustedIPs": []string{
 							"0.0.0.0/0",
 						},
@@ -854,7 +854,7 @@ func SaveTemplateFile(templatesDir string) error {
 					},
 				},
 			},
-			
+
 			// Special use case middlewares - with properly formatted regex pattern
 			{
 				ID:   "nextcloud-dav",
@@ -865,7 +865,7 @@ func SaveTemplateFile(templatesDir string) error {
 					"replacement": "/remote.php/dav/",
 				},
 			},
-			
+
 			// Custom headers example with empty string preservation
 			{
 				ID:   "custom-headers-example",
@@ -873,19 +873,19 @@ func SaveTemplateFile(templatesDir string) error {
 				Type: "headers",
 				Config: map[string]interface{}{
 					"customRequestHeaders": map[string]string{
-						"X-Script-Name":        "test",
-						"X-Custom-Value":       "value with spaces",
-						"X-Custom-Request-Header": "",  // Empty string to remove header
+						"X-Script-Name":           "test",
+						"X-Custom-Value":          "value with spaces",
+						"X-Custom-Request-Header": "", // Empty string to remove header
 					},
 					"customResponseHeaders": map[string]string{
 						"X-Custom-Response-Header": "value",
-						"Server":                  "",  // Empty string to remove header
+						"Server":                   "", // Empty string to remove header
 					},
 				},
 			},
 		},
 	}
-	
+
 	// Process all templates to ensure proper value preservation
 	for i := range templates.Middlewares {
 		// Apply middleware-specific processing based on type
@@ -905,23 +905,23 @@ func SaveTemplateFile(templatesDir string) error {
 			templates.Middlewares[i].Config = preserveTraefikValues(templates.Middlewares[i].Config).(map[string]interface{})
 		}
 	}
-	
+
 	// Create a custom YAML encoder that preserves string formatting
 	yamlNode := &yaml.Node{}
 	err := yamlNode.Encode(templates)
 	if err != nil {
 		return fmt.Errorf("failed to encode templates to YAML node: %w", err)
 	}
-	
+
 	// Apply additional string preservation to the YAML node
 	preserveStringsInYamlNode(yamlNode)
-	
+
 	// Marshal the processed node
 	data, err := yaml.Marshal(yamlNode)
 	if err != nil {
 		return fmt.Errorf("failed to marshal YAML node: %w", err)
 	}
-	
+
 	// Write to file
 	return os.WriteFile(templatesFile, data, 0644)
 }
@@ -932,7 +932,7 @@ func preserveStringsInYamlNode(node *yaml.Node) {
 	if node == nil {
 		return
 	}
-	
+
 	// Process node based on its kind
 	switch node.Kind {
 	case yaml.DocumentNode, yaml.SequenceNode:
@@ -940,35 +940,35 @@ func preserveStringsInYamlNode(node *yaml.Node) {
 		for i := range node.Content {
 			preserveStringsInYamlNode(node.Content[i])
 		}
-	
+
 	case yaml.MappingNode:
 		// Process all key-value pairs
 		for i := 0; i < len(node.Content); i += 2 {
 			// Get key and value
 			keyNode := node.Content[i]
 			valueNode := node.Content[i+1]
-			
+
 			// Process based on key content
-			if keyNode.Value == "Server" || keyNode.Value == "X-Powered-By" || 
-			   strings.HasPrefix(keyNode.Value, "X-") {
+			if keyNode.Value == "Server" || keyNode.Value == "X-Powered-By" ||
+				strings.HasPrefix(keyNode.Value, "X-") {
 				// These are likely header fields where empty strings are important
 				if valueNode.Kind == yaml.ScalarNode && valueNode.Value == "" {
 					// Ensure empty strings are properly encoded
 					valueNode.Style = yaml.DoubleQuotedStyle
 				}
 			}
-			
+
 			// Special handling for known fields that need exact string preservation
 			if containsSpecialField(keyNode.Value) && valueNode.Kind == yaml.ScalarNode {
 				// Use double quotes for these fields to ensure proper encoding
 				valueNode.Style = yaml.DoubleQuotedStyle
 			}
-			
+
 			// Continue recursion
 			preserveStringsInYamlNode(keyNode)
 			preserveStringsInYamlNode(valueNode)
 		}
-	
+
 	case yaml.ScalarNode:
 		// For scalar nodes (including strings), ensure empty strings are properly quoted
 		if node.Value == "" {
@@ -985,12 +985,12 @@ func containsSpecialField(fieldName string) bool {
 		"regex", "replacement", "Regex", "path", "scheme", "url", "address", "Path",
 		"prefix", "prefixes", "expression", "rule",
 	}
-	
+
 	for _, field := range specialFields {
 		if strings.Contains(fieldName, field) {
 			return true
 		}
 	}
-	
+
 	return false
 }

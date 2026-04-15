@@ -131,7 +131,9 @@ func main() {
 		log.Fatalf("Failed to initialize config manager: %v", err)
 	}
 
-	configManager.EnsureDefaultDataSources(cfg.PangolinAPIURL, cfg.TraefikAPIURL)
+	if err := configManager.EnsureDefaultDataSources(cfg.PangolinAPIURL, cfg.TraefikAPIURL); err != nil {
+		log.Printf("Warning: Failed to ensure default data sources: %v", err)
+	}
 
 	stopChan := make(chan struct{})
 

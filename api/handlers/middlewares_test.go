@@ -79,7 +79,9 @@ func TestMiddlewareHandler_GetMiddlewares_Pagination(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	// Check pagination metadata
 	if response["total"] == nil {
@@ -112,7 +114,7 @@ func TestMiddlewareHandler_GetMiddleware(t *testing.T) {
 	}
 
 	var middleware map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &middleware)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &middleware)
 
 	if middleware["name"] != "test-middleware" {
 		t.Errorf("expected name test-middleware, got %v", middleware["name"])
@@ -171,7 +173,7 @@ func TestMiddlewareHandler_CreateMiddleware(t *testing.T) {
 	}
 
 	var created map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &created)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &created)
 
 	if created["id"] == nil || created["id"] == "" {
 		t.Error("expected generated ID")
@@ -245,7 +247,7 @@ func TestMiddlewareHandler_UpdateMiddleware(t *testing.T) {
 	}
 
 	var updated map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &updated)
+	mustUnmarshalResponse(t, rec.Body.Bytes(), &updated)
 
 	if updated["name"] != "updated-name" {
 		t.Errorf("expected updated name, got %v", updated["name"])
@@ -272,14 +274,18 @@ func TestMiddlewareHandler_DeleteMiddleware(t *testing.T) {
 
 	// Verify middleware is deleted
 	var count int
-	db.DB.QueryRow("SELECT COUNT(*) FROM middlewares WHERE id = 'delete-test'").Scan(&count)
+	if err := db.DB.QueryRow("SELECT COUNT(*) FROM middlewares WHERE id = 'delete-test'").Scan(&count); err != nil {
+		t.Fatalf("failed to query deleted middleware count: %v", err)
+	}
 	if count != 0 {
 		t.Error("middleware was not deleted")
 	}
 
 	// Verify deleted_templates entry was created
 	var templateCount int
-	db.DB.QueryRow("SELECT COUNT(*) FROM deleted_templates WHERE id = 'delete-test' AND type = 'middleware'").Scan(&templateCount)
+	if err := db.DB.QueryRow("SELECT COUNT(*) FROM deleted_templates WHERE id = 'delete-test' AND type = 'middleware'").Scan(&templateCount); err != nil {
+		t.Fatalf("failed to query deleted template count: %v", err)
+	}
 	if templateCount != 1 {
 		t.Error("deleted_templates entry was not created")
 	}
