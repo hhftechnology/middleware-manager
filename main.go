@@ -72,6 +72,13 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.Parse()
 
+	mode := strings.ToLower(strings.TrimSpace(getEnv("MODE", "middleware-manager")))
+	if mode == "traefik-manager" {
+		log.Println("Starting in Traefik Manager mode")
+		startTraefikManager(debug)
+		return
+	}
+
 	cfg := loadConfiguration(debug)
 
 	if os.Getenv("TRAEFIK_API_URL") == "" {

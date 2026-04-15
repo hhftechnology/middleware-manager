@@ -1,0 +1,10 @@
+domains:
+  - example.com
+cert_resolver: cloudflare
+traefik_api_url: http://traefik:8080
+visible_tabs: {}
+disabled_routes: {}
+self_route:
+  domain: ""
+  service_url: ""
+  router_name: ""

@@ -34,10 +34,14 @@ go.work
 # Node modules and builds
 ui/node_modules/
 ui/dist/
+traefik-ui/node_modules/
+traefik-ui/dist/
 
 # Compiled vite config artifacts
 ui/vite.config.js
 ui/vite.config.d.ts
+traefik-ui/vite.config.js
+traefik-ui/vite.config.d.ts
 
 # SQLite database
 *.db

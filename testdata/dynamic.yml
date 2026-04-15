@@ -1,0 +1,12 @@
+http:
+  routers:
+    whoami:
+      rule: Host(`whoami.example.com`)
+      service: whoami-service
+      entryPoints:
+        - websecure
+  services:
+    whoami-service:
+      loadBalancer:
+        servers:
+          - url: http://whoami:80

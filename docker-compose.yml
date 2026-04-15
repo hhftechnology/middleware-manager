@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   middleware-manager:
@@ -11,6 +11,7 @@ services:
       - ./data:/data
       - ./config/traefik/conf:/conf
     environment:
+      - MODE=middleware-manager
       - PANGOLIN_API_URL=http://pangolin:3001/api/v1
       - TRAEFIK_CONF_DIR=/conf
       - DB_PATH=/data/middleware.db
@@ -20,7 +21,29 @@ services:
     networks:
       - pangolin
 
-  # For development/testing, you can include a mock Pangolin API
+  traefik-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: traefik-manager
+    restart: unless-stopped
+    volumes:
+      - ./traefik-config:/config
+      - ./traefik-manager-data:/app/config
+      - ./traefik-manager-backups:/app/backups
+    environment:
+      - MODE=traefik-manager
+      - PORT=3456
+      - TM_CONFIG_DIR=/config
+      - TM_SETTINGS_PATH=/app/config/manager.yml
+      - TM_BACKUP_DIR=/app/backups
+      - TRAEFIK_API_URL=http://traefik:8080
+      - TM_UI_PATH=/app/traefik-ui/dist
+    ports:
+      - "3457:3456"
+    networks:
+      - pangolin
+
   mock-pangolin:
     image: nginx:alpine
     container_name: mock-pangolin
@@ -33,5 +56,4 @@ services:
 
 networks:
   pangolin:
-    external: true  # In production, this should connect to your existing Pangolin network
-    # When testing standalone, remove the 'external' flag and it will create a new network
+    external: true

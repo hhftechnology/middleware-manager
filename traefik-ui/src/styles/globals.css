@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 35 30% 96%;
+    --foreground: 350 20% 12%;
+    --card: 36 33% 98%;
+    --card-foreground: 350 20% 12%;
+    --popover: 36 33% 98%;
+    --popover-foreground: 350 20% 12%;
+    --primary: 348 58% 28%;
+    --primary-foreground: 36 40% 96%;
+    --secondary: 34 25% 91%;
+    --secondary-foreground: 350 20% 12%;
+    --muted: 34 22% 92%;
+    --muted-foreground: 350 10% 46%;
+    --accent: 34 25% 89%;
+    --accent-foreground: 350 20% 12%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 69% 31%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 96% 89%;
+    --border: 33 18% 85%;
+    --input: 33 18% 85%;
+    --ring: 348 58% 28%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 350 30% 4%;
+    --foreground: 35 25% 92%;
+    --card: 348 22% 8%;
+    --card-foreground: 35 25% 92%;
+    --popover: 348 22% 8%;
+    --popover-foreground: 35 25% 92%;
+    --primary: 348 55% 55%;
+    --primary-foreground: 350 30% 4%;
+    --secondary: 348 15% 13%;
+    --secondary-foreground: 35 25% 92%;
+    --muted: 348 15% 13%;
+    --muted-foreground: 35 15% 55%;
+    --accent: 348 15% 15%;
+    --accent-foreground: 35 25% 92%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 35 25% 92%;
+    --success: 152 60% 40%;
+    --success-foreground: 152 80% 10%;
+    --warning: 48 96% 53%;
+    --warning-foreground: 36 45% 15%;
+    --border: 348 15% 16%;
+    --input: 348 15% 16%;
+    --ring: 348 55% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/25 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/40;
+}

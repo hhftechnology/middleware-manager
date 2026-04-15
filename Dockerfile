@@ -1,24 +1,26 @@
-# Build UI stage (Vite + TypeScript + Shadcn UI)
+# Build UI stage (existing middleware-manager UI)
 FROM node:18-alpine AS ui-builder
 
 WORKDIR /app
 
-# Copy package manifests for ui
 COPY ui/package.json ui/package-lock.json* ./
-
-# Install dependencies
 RUN npm install
-
-# Copy all ui source files
 COPY ui/ ./
+RUN npm run build
 
-# Build the UI
+# Build Traefik Manager UI stage
+FROM node:20-alpine AS traefik-ui-builder
+
+WORKDIR /app
+
+COPY traefik-ui/package.json traefik-ui/package-lock.json* ./
+RUN npm install
+COPY traefik-ui/ ./
 RUN npm run build
 
 # Build Go stage - using Debian for glibc compatibility with go-sqlite3
 FROM golang:1.24-bookworm AS go-builder
 
-# Install build dependencies for Go with CGO and static linking
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
@@ -26,18 +28,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy go.mod and go.sum files first for better layer caching
 COPY go.mod go.sum ./
-
-# Download Go dependencies (this layer is cached if go.mod/go.sum don't change)
 RUN go mod download
 
-# Copy the Go source code
 COPY . .
 
-# Ensure go.sum is up to date and build the application
-# Using CGO for SQLite support with static linking for Alpine compatibility
-# The -extldflags '-static' creates a statically linked binary
 RUN go mod tidy && \
     CGO_ENABLED=1 GOOS=linux \
     go build -ldflags="-s -w -extldflags '-static'" -o middleware-manager .
@@ -45,41 +40,31 @@ RUN go mod tidy && \
 # Final stage - minimal runtime image
 FROM alpine:3.18
 
-# Install runtime dependencies
 RUN apk add --no-cache ca-certificates sqlite curl tzdata
 
 WORKDIR /app
 
-# Copy the binary from the builder stage
 COPY --from=go-builder /app/middleware-manager /app/middleware-manager
-
-# Copy UI build files from UI builder stage
 COPY --from=ui-builder /app/dist /app/ui/dist
+COPY --from=traefik-ui-builder /app/dist /app/traefik-ui/dist
 
-# Copy configuration files
 COPY --from=go-builder /app/config/templates.yaml /app/config/templates.yaml
 COPY --from=go-builder /app/config/templates_services.yaml /app/config/templates_services.yaml
-
-# Copy database migrations file
 COPY --from=go-builder /app/database/migrations.sql /app/database/migrations.sql
-# Also copy to root as fallback
 COPY --from=go-builder /app/database/migrations.sql /app/migrations.sql
 
-# Create directories for data
-RUN mkdir -p /data /conf
+RUN mkdir -p /data /conf /app/config /app/backups
 
-# Set environment variables
-ENV PANGOLIN_API_URL=http://pangolin:3001/api/v1 \
+ENV MODE=middleware-manager \
+    PANGOLIN_API_URL=http://pangolin:3001/api/v1 \
     TRAEFIK_CONF_DIR=/conf \
     DB_PATH=/data/middleware.db \
-    PORT=3456
+    PORT=3456 \
+    TM_UI_PATH=/app/traefik-ui/dist
 
-# Expose the port
 EXPOSE 3456
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3456/health || exit 1
 
-# Run the application
 CMD ["/app/middleware-manager"]

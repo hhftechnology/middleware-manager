@@ -59,6 +59,17 @@ Middleware Manager lets you attach Traefik middlewares, manage custom services, 
 
 ---
 
+## Modes
+
+The `middleware-manager` binary ships two modes selected at runtime via the `MODE` env var:
+
+- `MODE=middleware-manager` (default) — the legacy Pangolin/Traefik middleware orchestrator.
+- `MODE=traefik-manager` — a standalone Traefik control plane (routes, middlewares, backups, certs, plugins, dashboard) with its own SPA at `traefik-ui/`.
+
+See [`docs/traefik-manager.md`](docs/traefik-manager.md) for the full env var reference, HTTP surface, compose snippet, and caveats.
+
+---
+
 ## Quick Start Guide
 
 ### 1. Prerequisites
