@@ -72,7 +72,7 @@ func TestNewResourceWatcher(t *testing.T) {
 	if watcher.configManager == nil {
 		t.Error("watcher.configManager is nil")
 	}
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher.isRunning should be false initially")
 	}
 	if watcher.httpClient == nil {
@@ -100,7 +100,7 @@ func TestResourceWatcher_Stop(t *testing.T) {
 	// Should not panic when stopping a non-running watcher
 	watcher.Stop()
 
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher.isRunning should be false after Stop()")
 	}
 }
@@ -152,7 +152,7 @@ func TestResourceWatcher_StartStop(t *testing.T) {
 	// Wait a bit for it to start
 	time.Sleep(50 * time.Millisecond)
 
-	if !watcher.isRunning {
+	if !watcher.isRunning.Load() {
 		t.Error("watcher should be running after Start()")
 	}
 
@@ -162,7 +162,7 @@ func TestResourceWatcher_StartStop(t *testing.T) {
 	// Wait for stop to complete
 	time.Sleep(50 * time.Millisecond)
 
-	if watcher.isRunning {
+	if watcher.isRunning.Load() {
 		t.Error("watcher should not be running after Stop()")
 	}
 }
@@ -275,14 +275,14 @@ func TestIsSystemRouter(t *testing.T) {
 		{"dashboard@internal", true},
 		{"acme-http@internal", true},
 		{"noop@internal", true},
-		{"api@file", true},              // Starts with api@
-		{"dashboard@docker", true},       // Starts with dashboard@
-		{"traefik@file", true},           // Starts with traefik@
-		{"my-router@file", false},        // User router
-		{"web-service@docker", false},    // User router
-		{"api-router@file", false},       // Allowed user pattern
-		{"next-router@file", false},      // Allowed user pattern
-		{"ws-router@file", false},        // Allowed user pattern
+		{"api@file", true},            // Starts with api@
+		{"dashboard@docker", true},    // Starts with dashboard@
+		{"traefik@file", true},        // Starts with traefik@
+		{"my-router@file", false},     // User router
+		{"web-service@docker", false}, // User router
+		{"api-router@file", false},    // Allowed user pattern
+		{"next-router@file", false},   // Allowed user pattern
+		{"ws-router@file", false},     // Allowed user pattern
 	}
 
 	for _, tt := range tests {
