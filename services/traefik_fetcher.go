@@ -199,25 +199,7 @@ func (f *TraefikFetcher) fetchFullDataFromAvailableURLs(ctx context.Context) (*m
 }
 
 func (f *TraefikFetcher) fallbackTraefikURLs() []string {
-	fallbackURLs := []string{
-		"http://traefik:8080",
-		"http://localhost:8080",
-		"http://127.0.0.1:8080",
-		"http://host.docker.internal:8080",
-	}
-
-	if f.config.URL == "" {
-		return fallbackURLs
-	}
-
-	filteredURLs := make([]string, 0, len(fallbackURLs))
-	for _, fallbackURL := range fallbackURLs {
-		if fallbackURL != f.config.URL {
-			filteredURLs = append(filteredURLs, fallbackURL)
-		}
-	}
-
-	return filteredURLs
+	return fallbackTraefikURLsFromEnv(f.config.URL)
 }
 
 func (f *TraefikFetcher) buildResourcesFromFullData(fullData *models.FullTraefikData) *models.ResourceCollection {
@@ -342,7 +324,6 @@ func (f *TraefikFetcher) fetchAllEndpointsConcurrently(ctx context.Context, base
 				criticalErrors = append(criticalErrors, fmt.Sprintf("%s: %v", result.name, result.err))
 			} else {
 				nonCriticalErrors = append(nonCriticalErrors, fmt.Sprintf("%s: %v", result.name, result.err))
-				log.Printf("Warning: non-critical endpoint failed: %s: %v", result.name, result.err)
 			}
 			continue
 		}

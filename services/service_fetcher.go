@@ -209,21 +209,9 @@ func (f *TraefikServiceFetcher) FetchServices(ctx context.Context) (*models.Serv
 	// Log the initial error
 	log.Printf("Failed to connect to primary Traefik API URL %s: %v", f.config.URL, err)
 
-	// Try common fallback URLs
-	fallbackURLs := []string{
-		"http://traefik:8080",
-		"http://localhost:8080",
-		"http://127.0.0.1:8080",
-		"http://host.docker.internal:8080",
-	}
-
-	// Don't try the same URL twice
-	if f.config.URL != "" {
-		for i := len(fallbackURLs) - 1; i >= 0; i-- {
-			if fallbackURLs[i] == f.config.URL {
-				fallbackURLs = append(fallbackURLs[:i], fallbackURLs[i+1:]...)
-			}
-		}
+	fallbackURLs := fallbackTraefikURLsFromEnv(f.config.URL)
+	if len(fallbackURLs) == 0 {
+		return nil, fmt.Errorf("failed to fetch services from %s: %w", f.config.URL, err)
 	}
 
 	// Try each fallback URL

@@ -82,7 +82,7 @@ func main() {
 
 	cfg := loadConfiguration(debug)
 
-	if os.Getenv("TRAEFIK_API_URL") == "" {
+	if os.Getenv("TRAEFIK_API_URL") == "" && strings.EqualFold(os.Getenv("TRAEFIK_API_DISCOVER"), "true") {
 		if discoveredURL, err := DiscoverTraefikAPI(); err == nil && discoveredURL != "" {
 			log.Printf("Auto-discovered Traefik API URL: %s", discoveredURL)
 			cfg.TraefikAPIURL = discoveredURL

@@ -19,6 +19,10 @@ on:
       - 'models/**'
       - 'services/**'
       - 'ui/**'
+      - 'internal/**'
+      - 'traefik-ui/**'
+      - 'util/**'
+      - 'cache/**'
 
     tags:
       - 'v*'

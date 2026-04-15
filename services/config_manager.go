@@ -52,7 +52,7 @@ func (cm *ConfigManager) loadConfig() error {
 				},
 				"traefik": {
 					Type: models.TraefikAPI,
-					URL:  "http://host.docker.internal:8080",
+					URL:  defaultTraefikURL(),
 				},
 			},
 		}
