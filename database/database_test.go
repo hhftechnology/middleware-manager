@@ -29,7 +29,7 @@ func mustExec(t *testing.T, db *DB, query string, args ...interface{}) {
 
 func TestWithTransactionCommitAndRollback(t *testing.T) {
 	db := newTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mustExec(t, db, `CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)`)
 
@@ -66,7 +66,7 @@ func TestWithTransactionCommitAndRollback(t *testing.T) {
 
 func TestWithTimeoutTransaction(t *testing.T) {
 	db := newTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	err := db.WithTimeoutTransaction(context.Background(), 10*time.Millisecond, func(tx *sql.Tx) error {
 		time.Sleep(50 * time.Millisecond)
@@ -81,7 +81,7 @@ func TestWithTimeoutTransaction(t *testing.T) {
 
 func TestCleanupDuplicateServices(t *testing.T) {
 	db := newTestDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Seed duplicate services and a relationship.
 	mustExec(t, db, `INSERT INTO services (id, name, type, config) VALUES (?, ?, ?, ?)`,

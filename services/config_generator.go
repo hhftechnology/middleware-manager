@@ -604,7 +604,7 @@ func (cg *ConfigGenerator) fetchTraefikServiceNames() map[string]string {
 		log.Printf("Warning: Failed to fetch services from Traefik API: %v", err)
 		return serviceMap
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Warning: Traefik API returned status %d", resp.StatusCode)

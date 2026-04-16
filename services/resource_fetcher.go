@@ -193,7 +193,7 @@ func cleanupRegexChars(s string) string {
 
 	result := s
 	for _, r := range replacements {
-		result = strings.Replace(result, r.from, r.to, -1)
+		result = strings.ReplaceAll(result, r.from, r.to)
 	}
 
 	return result

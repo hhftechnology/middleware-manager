@@ -95,7 +95,7 @@ func TestNormalizeServiceID(t *testing.T) {
 func TestShouldLog(t *testing.T) {
 	// Save original value
 	original := os.Getenv("LOG_LEVEL")
-	defer os.Setenv("LOG_LEVEL", original)
+	defer func() { _ = os.Setenv("LOG_LEVEL", original) }()
 
 	tests := []struct {
 		name     string
@@ -137,7 +137,7 @@ func TestShouldLog(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("LOG_LEVEL", tt.logLevel)
+			_ = os.Setenv("LOG_LEVEL", tt.logLevel)
 
 			if got := shouldLog(); got != tt.wantLog {
 				t.Errorf("shouldLog() = %v, want %v", got, tt.wantLog)
@@ -176,10 +176,10 @@ func TestTraefikConfig_Structure(t *testing.T) {
 func TestConfigGenerator_Start_Disabled(t *testing.T) {
 	// Save original value
 	original := os.Getenv("ENABLE_FILE_CONFIG")
-	defer os.Setenv("ENABLE_FILE_CONFIG", original)
+	defer func() { _ = os.Setenv("ENABLE_FILE_CONFIG", original) }()
 
 	// Disable file config
-	os.Setenv("ENABLE_FILE_CONFIG", "false")
+	_ = os.Setenv("ENABLE_FILE_CONFIG", "false")
 
 	db := newTestDB(t)
 	cm := newTestConfigManager(t)

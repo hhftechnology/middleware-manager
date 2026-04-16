@@ -202,7 +202,7 @@ func (h *PluginHandler) mergeWithLocalConfig(apiPlugins []models.PluginResponse,
 // getLocalInstalledPlugins reads the Traefik static config and returns installed plugins
 func (h *PluginHandler) getLocalInstalledPlugins() (map[string]map[string]interface{}, error) {
 	if h.TraefikStaticConfigPath == "" {
-		return nil, fmt.Errorf("Traefik static configuration path is not set")
+		return nil, fmt.Errorf("traefik static configuration path is not set")
 	}
 
 	cleanPath := filepath.Clean(h.TraefikStaticConfigPath)
@@ -538,13 +538,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("could not open source file %s: %w", src, err)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destinationFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("could not create destination file %s: %w", dst, err)
 	}
-	defer destinationFile.Close()
+	defer func() { _ = destinationFile.Close() }()
 
 	_, err = io.Copy(destinationFile, sourceFile)
 	if err != nil {

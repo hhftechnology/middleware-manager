@@ -268,7 +268,7 @@ func (cp *ConfigProxy) fetchPangolinConfig() (*ProxiedTraefikConfig, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024)) // 1MB limit for error body
-		return nil, fmt.Errorf("Pangolin returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("pangolin returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var config ProxiedTraefikConfig
@@ -854,7 +854,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	if err != nil {
 		log.Printf("Warning: failed to fetch external middlewares: %v", err)
 	} else {
-		defer extRows.Close()
+		defer func() { _ = extRows.Close() }()
 		for extRows.Next() {
 			var resID, name string
 			var priority int

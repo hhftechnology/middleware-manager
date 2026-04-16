@@ -139,9 +139,10 @@ func TestPluginFetcher_RateLimiting(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		if r.URL.Path == "/api/http/middlewares" {
+		switch r.URL.Path {
+		case "/api/http/middlewares":
 			writeJSONResponse(w, []models.TraefikMiddleware{})
-		} else if r.URL.Path == "/api/overview" {
+		case "/api/overview":
 			writeJSONResponse(w, models.TraefikPluginOverview{})
 		}
 	}))
@@ -190,9 +191,10 @@ func TestPluginFetcher_GetCachedPlugins(t *testing.T) {
 // TestPluginFetcher_InvalidateCache tests cache invalidation
 func TestPluginFetcher_InvalidateCache(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/http/middlewares" {
+		switch r.URL.Path {
+		case "/api/http/middlewares":
 			writeJSONResponse(w, []models.TraefikMiddleware{})
-		} else if r.URL.Path == "/api/overview" {
+		case "/api/overview":
 			writeJSONResponse(w, models.TraefikPluginOverview{})
 		}
 	}))

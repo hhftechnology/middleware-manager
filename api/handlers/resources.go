@@ -189,7 +189,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		if err != nil {
 			log.Printf("Warning: failed to fetch external middlewares: %v", err)
 		} else {
-			defer extRows.Close()
+			defer func() { _ = extRows.Close() }()
 			extMap := make(map[string][]string)
 			for extRows.Next() {
 				var resID, name, provider string
@@ -324,7 +324,7 @@ func (h *ResourceHandler) GetResource(c *gin.Context) {
 		log.Printf("Error fetching external middlewares for resource %s: %v", id, err)
 		resource["external_middlewares"] = ""
 	} else {
-		defer extRows.Close()
+		defer func() { _ = extRows.Close() }()
 		var extParts []string
 		for extRows.Next() {
 			var name, provider string

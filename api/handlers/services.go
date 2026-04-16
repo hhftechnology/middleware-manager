@@ -34,9 +34,10 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 	// Filter by status - default to active only
 	statusFilter := c.DefaultQuery("status", "active")
 	statusCondition := "WHERE status = 'active'"
-	if statusFilter == "all" {
+	switch statusFilter {
+	case "all":
 		statusCondition = ""
-	} else if statusFilter == "disabled" {
+	case "disabled":
 		statusCondition = "WHERE status = 'disabled'"
 	}
 

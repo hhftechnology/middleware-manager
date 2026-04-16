@@ -115,7 +115,7 @@ func (h *TraefikHandler) Logs(c *gin.Context) {
 		respondJSON(c, gin.H{"error": err.Error(), "lines": []string{}})
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	lines := make([]string, 0)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

@@ -198,11 +198,12 @@ func preserveTraefikValues(data interface{}) interface{} {
 					v[key] = boolVal
 				} else if strVal, ok := val.(string); ok {
 					// Convert string "true"/"false" to actual boolean if needed
-					if strVal == "true" {
+					switch strVal {
+					case "true":
 						v[key] = true
-					} else if strVal == "false" {
+					case "false":
 						v[key] = false
-					} else {
+					default:
 						v[key] = strVal // Keep as is if not a boolean string
 					}
 				} else {

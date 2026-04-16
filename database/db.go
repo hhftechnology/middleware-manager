@@ -699,7 +699,7 @@ func (db *DB) GetMiddlewares() ([]map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var middlewares []map[string]interface{}
 	for rows.Next() {

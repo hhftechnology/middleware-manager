@@ -138,12 +138,12 @@ func (cm *ConfigManager) EnsureDefaultDataSources(pangolinURL, traefikURL string
 		// Try the Traefik URL
 		resp, err := client.Get(traefikConfig.URL + "/api/version")
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			// Traefik is available, but not active - log a message
 			log.Printf("Note: Traefik API appears to be available at %s but is not the active source", traefikConfig.URL)
 		}
 		if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 

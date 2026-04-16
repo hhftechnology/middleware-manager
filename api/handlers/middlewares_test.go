@@ -304,7 +304,7 @@ func TestMiddlewareHandler_DeleteMiddleware_NotFound(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		db.Close()
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	})
 
 	handler := NewMiddlewareHandler(db.DB)

@@ -53,7 +53,7 @@ func (db *DB) CleanupDuplicateServices(opts CleanupOptions) error {
     if err != nil {
         return fmt.Errorf("failed to query services: %w", err)
     }
-    defer rows.Close()
+    defer func() { _ = rows.Close() }()
     
     // Map to track unique base names
     type serviceInfo struct {
@@ -267,7 +267,7 @@ func (db *DB) CleanupDuplicateResources(opts CleanupOptions) error {
     if err != nil {
         return fmt.Errorf("failed to query resources: %w", err)
     }
-    defer rows.Close()
+    defer func() { _ = rows.Close() }()
     
     // Map to track resources by normalized ID
     type resourceInfo struct {
