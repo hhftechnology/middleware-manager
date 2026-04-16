@@ -92,7 +92,7 @@ func InitDB(dbPath string) (*DB, error) {
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
-		db.Close() // Close the connection on failure
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -105,7 +105,7 @@ func InitDB(dbPath string) (*DB, error) {
 
 	// Run migrations
 	if err := runMigrations(db); err != nil {
-		db.Close() // Close the connection on failure
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
@@ -753,7 +753,7 @@ func (db *DB) GetResources() ([]map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var resources []map[string]interface{}
 	for rows.Next() {
@@ -904,7 +904,7 @@ func (db *DB) GetServices() ([]map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var services []map[string]interface{}
 	for rows.Next() {

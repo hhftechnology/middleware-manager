@@ -407,7 +407,7 @@ func (cg *CertGenerator) GetClients() ([]models.MTLSClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query clients: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var clients []models.MTLSClient
 	for rows.Next() {

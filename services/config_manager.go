@@ -309,7 +309,7 @@ func (cm *ConfigManager) testDataSourceConnection(ctx context.Context, config mo
 	if err != nil {
 		return fmt.Errorf("connection test failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("connection test failed with status code: %d", resp.StatusCode)
