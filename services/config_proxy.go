@@ -429,7 +429,7 @@ func (cp *ConfigProxy) applyMiddlewares(config *ProxiedTraefikConfig, allowedIDs
 	if err != nil {
 		return fmt.Errorf("failed to fetch middlewares: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var id, name, typ, configStr string
@@ -473,7 +473,7 @@ func (cp *ConfigProxy) applyServices(config *ProxiedTraefikConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch services: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var id, name, typ, configStr string
@@ -768,7 +768,7 @@ func (cp *ConfigProxy) fetchResourceData() ([]*resourceData, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	resourceMap := make(map[string]*resourceData)
 

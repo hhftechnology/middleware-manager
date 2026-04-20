@@ -68,7 +68,7 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch services")
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	services := []map[string]interface{}{}
 	for rows.Next() {

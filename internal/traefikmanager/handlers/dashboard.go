@@ -71,7 +71,7 @@ func (h *DashboardHandler) Icon(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		_ = os.WriteFile(missPath, []byte(""), 0o644)
 		c.Status(http.StatusNotFound)

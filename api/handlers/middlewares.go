@@ -53,7 +53,7 @@ func (h *MiddlewareHandler) GetMiddlewares(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch middlewares")
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	middlewares := []map[string]interface{}{}
 	for rows.Next() {

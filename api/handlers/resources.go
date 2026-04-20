@@ -96,7 +96,7 @@ func (h *ResourceHandler) GetResources(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch resources")
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var resources []map[string]interface{}
 	for rows.Next() {
@@ -471,7 +471,7 @@ func (h *ResourceHandler) DeleteDisabledResources(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Database error")
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	allowed := map[string]struct{}{}
 	for rows.Next() {
@@ -1039,7 +1039,7 @@ func (h *ResourceHandler) GetExternalMiddlewares(c *gin.Context) {
 		ResponseWithError(c, http.StatusInternalServerError, "Failed to fetch external middlewares")
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var externalMiddlewares []gin.H
 	for rows.Next() {

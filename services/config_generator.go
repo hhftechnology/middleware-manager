@@ -239,7 +239,7 @@ func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch middlewares: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var id, name, typ, configStr string
@@ -302,7 +302,7 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 	if err != nil {
 		return fmt.Errorf("failed to fetch resources for HTTP routers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type resourceProcessedData struct {
 		Info            models.Resource
@@ -648,7 +648,7 @@ func (cg *ConfigGenerator) processTCPRouters(config *TraefikConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch TCP resources: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var id, host, serviceID, tcpEntrypointsStr, tcpSNIRule, sourceType string

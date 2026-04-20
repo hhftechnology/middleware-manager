@@ -24,7 +24,7 @@ func (h *ManagerHandler) Version(c *gin.Context) {
 		respondJSON(c, gin.H{"version": "", "repo": h.repo})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respondJSON(c, gin.H{"version": "", "repo": h.repo})
 		return

@@ -54,7 +54,7 @@ func (h *TraefikHandler) Ping(c *gin.Context) {
 		respondJSON(c, gin.H{"ok": false, "latency_ms": nil})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respondJSON(c, gin.H{"ok": false, "latency_ms": nil})
 		return
@@ -163,7 +163,7 @@ func (h *TraefikHandler) proxyJSON(c *gin.Context, path string) {
 		respondJSON(c, gin.H{})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respondJSON(c, gin.H{})
 		return
@@ -188,12 +188,12 @@ func (h *TraefikHandler) multiProxy(c *gin.Context, paths, keys []string) {
 		if err != nil || resp.StatusCode != http.StatusOK {
 			result[keys[idx]] = []any{}
 			if resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 			continue
 		}
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			result[keys[idx]] = []any{}
 			continue

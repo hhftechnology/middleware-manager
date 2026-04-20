@@ -21,7 +21,9 @@ func NewTempDB(t *testing.T) *database.DB {
 		t.Fatalf("failed to init temp db: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Close()
+		if err := db.Close(); err != nil {
+			t.Errorf("failed to close temp db: %v", err)
+		}
 	})
 	return db
 }

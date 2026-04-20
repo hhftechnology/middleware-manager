@@ -117,7 +117,7 @@ func (f *PluginFetcher) fetchMiddlewares(ctx context.Context) ([]models.TraefikM
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -151,7 +151,7 @@ func (f *PluginFetcher) fetchOverview(ctx context.Context) (*models.TraefikPlugi
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -393,20 +393,20 @@ func (f *PluginFetcher) InvalidateCache() {
 
 // CataloguePlugin represents a plugin from the Traefik plugin catalogue
 type CataloguePlugin struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	DisplayName  string   `json:"displayName"`
-	Author       string   `json:"author"`
-	Type         string   `json:"type"`
-	Import       string   `json:"import"`
-	Summary      string   `json:"summary"`
-	IconURL      string   `json:"iconUrl,omitempty"`
-	BannerURL    string   `json:"bannerUrl,omitempty"`
-	Readme       string   `json:"readme,omitempty"`
-	LatestVersion string  `json:"latestVersion"`
-	Versions     []string `json:"versions,omitempty"`
-	Stars        int      `json:"stars"`
-	Snippet      struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	DisplayName   string   `json:"displayName"`
+	Author        string   `json:"author"`
+	Type          string   `json:"type"`
+	Import        string   `json:"import"`
+	Summary       string   `json:"summary"`
+	IconURL       string   `json:"iconUrl,omitempty"`
+	BannerURL     string   `json:"bannerUrl,omitempty"`
+	Readme        string   `json:"readme,omitempty"`
+	LatestVersion string   `json:"latestVersion"`
+	Versions      []string `json:"versions,omitempty"`
+	Stars         int      `json:"stars"`
+	Snippet       struct {
 		YAML       string `json:"yaml,omitempty"`
 		TOML       string `json:"toml,omitempty"`
 		Kubernetes string `json:"kubernetes,omitempty"`
@@ -436,7 +436,7 @@ func FetchPluginCatalogue(ctx context.Context) ([]CataloguePlugin, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch plugin catalogue: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("plugin catalogue returned status %d", resp.StatusCode)

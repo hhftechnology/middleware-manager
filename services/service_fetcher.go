@@ -62,7 +62,7 @@ func (f *PangolinServiceFetcher) FetchServices(ctx context.Context) (*models.Ser
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
@@ -293,7 +293,7 @@ func (f *TraefikServiceFetcher) fetchHTTPServices(ctx context.Context, baseURL s
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
@@ -372,7 +372,7 @@ func (f *TraefikServiceFetcher) fetchTCPServices(ctx context.Context, baseURL st
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
@@ -506,7 +506,7 @@ func (f *TraefikServiceFetcher) fetchUDPServices(ctx context.Context, baseURL st
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {

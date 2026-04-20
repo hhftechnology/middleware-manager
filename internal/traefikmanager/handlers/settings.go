@@ -170,7 +170,7 @@ func (h *SettingsHandler) TestConnection(c *gin.Context) {
 		respondJSON(c, gin.H{"ok": false, "error": "Connection failed"})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respondJSON(c, gin.H{"ok": false, "error": resp.Status})
 		return

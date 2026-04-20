@@ -303,7 +303,9 @@ func TestMiddlewareHandler_DeleteMiddleware_NotFound(t *testing.T) {
 		t.Fatalf("failed to init temp db: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Close()
+		if err := db.Close(); err != nil {
+			t.Errorf("failed to close temp db: %v", err)
+		}
 		_ = os.RemoveAll(tmpDir)
 	})
 

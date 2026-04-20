@@ -55,12 +55,12 @@ func DiscoverTraefikAPI() (string, error) {
 		testURL := url + "/api/version"
 		resp, err := client.Get(testURL)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			log.Printf("Discovered Traefik API at %s", url)
 			return url, nil
 		}
 		if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 	return "", nil
@@ -93,7 +93,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Warning: Failed to close database: %v", err)
+		}
+	}()
 
 	configDir := cfg.ConfigDir
 	if err := config.EnsureConfigDirectory(configDir); err != nil {
