@@ -139,3 +139,42 @@ export interface ApiErrorShape {
   details?: string
   error?: string
 }
+
+export interface ProviderFieldSchema {
+  key: string
+  label: string
+  placeholder: string
+  required?: boolean
+}
+
+export interface ProviderConfigDraft {
+  enabled: boolean
+  fields: Record<string, string>
+}
+
+export interface ServiceSummary {
+  id: string
+  name: string
+  protocol: 'http' | 'tcp' | 'udp'
+  target: string
+  routeCount: number
+  middlewares: string[]
+  enabled: boolean
+}
+
+export interface RouteMapNode {
+  id: string
+  label: string
+  kind: 'route' | 'service' | 'middleware'
+}
+
+export interface RouteMapEdge {
+  id: string
+  from: string
+  to: string
+}
+
+export interface RouteMapGraph {
+  nodes: RouteMapNode[]
+  edges: RouteMapEdge[]
+}

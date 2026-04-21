@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { Settings } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
+import { SettingsModal } from '@/components/modals/SettingsModal'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -181,13 +182,36 @@ function SettingsForm({ initial }: { initial: Settings }) {
 }
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
   const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: api.settings.get })
+  const [panelModalOpen, setPanelModalOpen] = useState(false)
+
+  const panelSaveMutation = useMutation({
+    mutationFn: (payload: Partial<Settings>) => api.settings.save(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['settings'] })
+      toast({ title: 'Panel settings saved' })
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to save panel settings',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      })
+    },
+  })
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Settings"
         description="Update domains, Traefik API settings, file paths, and the optional self-route."
+        actions={
+          <Button variant="outline" onClick={() => setPanelModalOpen(true)}>
+            Open Settings Panel
+          </Button>
+        }
       />
       {settingsQuery.data ? (
         <SettingsForm key={settingsQuery.dataUpdatedAt} initial={settingsQuery.data} />
@@ -196,6 +220,18 @@ export default function SettingsPage() {
           <CardContent className="pt-6 text-sm text-muted-foreground">Loading settings...</CardContent>
         </Card>
       )}
+      {settingsQuery.data ? (
+        <SettingsModal
+          key={`settings-panel-${settingsQuery.dataUpdatedAt}`}
+          open={panelModalOpen}
+          onOpenChange={setPanelModalOpen}
+          settings={settingsQuery.data}
+          pending={panelSaveMutation.isPending}
+          onSubmit={async (payload) => {
+            await panelSaveMutation.mutateAsync(payload)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

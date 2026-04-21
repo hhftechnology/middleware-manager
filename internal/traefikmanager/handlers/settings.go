@@ -160,19 +160,13 @@ func (h *SettingsHandler) TestConnection(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "Invalid request", err)
 		return
 	}
-	url := strings.TrimRight(strings.TrimSpace(request.URL), "/")
-	if url == "" {
+	if strings.TrimSpace(request.URL) == "" {
 		respondError(c, http.StatusBadRequest, "url is required", nil)
 		return
 	}
-	resp, err := h.client.Get(url + "/api/version")
-	if err != nil {
-		respondJSON(c, gin.H{"ok": false, "error": "Connection failed"})
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respondJSON(c, gin.H{"ok": false, "error": resp.Status})
+	result := probeTraefik(h.client, request.URL)
+	if !result.ok {
+		respondJSON(c, gin.H{"ok": false, "error": result.errorText})
 		return
 	}
 	respondJSON(c, gin.H{"ok": true})

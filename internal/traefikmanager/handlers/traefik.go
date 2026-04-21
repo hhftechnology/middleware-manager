@@ -8,7 +8,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	tmconfig "github.com/hhftechnology/middleware-manager/internal/traefikmanager/config"
@@ -48,18 +47,12 @@ func (h *TraefikHandler) Ping(c *gin.Context) {
 		respondError(c, http.StatusInternalServerError, "Failed to load settings", err)
 		return
 	}
-	start := time.Now()
-	resp, err := h.client.Get(strings.TrimRight(settings.TraefikAPIURL, "/") + "/ping")
-	if err != nil {
+	result := probeTraefik(h.client, settings.TraefikAPIURL)
+	if !result.ok {
 		respondJSON(c, gin.H{"ok": false, "latency_ms": nil})
 		return
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respondJSON(c, gin.H{"ok": false, "latency_ms": nil})
-		return
-	}
-	respondJSON(c, gin.H{"ok": true, "latency_ms": time.Since(start).Milliseconds()})
+	respondJSON(c, gin.H{"ok": true, "latency_ms": result.latencyMS})
 }
 
 func (h *TraefikHandler) RouterDetail(c *gin.Context) {

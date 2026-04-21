@@ -6,9 +6,12 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { Card, CardContent } from '@/components/ui/card'
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
+const ServicesPage = lazy(() => import('@/pages/ServicesPage'))
+const RouteMapPage = lazy(() => import('@/pages/RouteMapPage'))
 const RoutesPage = lazy(() => import('@/pages/RoutesPage'))
 const MiddlewaresPage = lazy(() => import('@/pages/MiddlewaresPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+const ProvidersPage = lazy(() => import('@/pages/ProvidersPage'))
 const CertificatesPage = lazy(() => import('@/pages/CertificatesPage'))
 const LogsPage = lazy(() => import('@/pages/LogsPage'))
 const PluginsPage = lazy(() => import('@/pages/PluginsPage'))
@@ -34,9 +37,13 @@ export default function App() {
             <Suspense fallback={<PageFallback />}>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
+                <Route path="/services" element={<ServicesPage />} />
+                <Route path="/routemap" element={<RouteMapPage />} />
                 <Route path="/routes" element={<RoutesPage />} />
                 <Route path="/middlewares" element={<MiddlewaresPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/providers" element={<ProvidersPage />} />
+                <Route path="/providers/:provider" element={<ProvidersPage />} />
                 <Route path="/certificates" element={<CertificatesPage />} />
                 <Route path="/logs" element={<LogsPage />} />
                 <Route path="/plugins" element={<PluginsPage />} />
