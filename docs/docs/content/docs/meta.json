@@ -19,6 +19,8 @@
     "ui-guides/traefik-explorer",
     "ui-guides/settings",
     "security/risks",
+    "security/tls-hardening",
+    "security/secure-headers",
     "operations/runbook",
     "operations/troubleshooting",
     "operations/backups",
