@@ -1,0 +1,47 @@
+---
+title: Security & TLS Hardening
+description: Configure TLS hardening settings for enhanced security.
+---
+
+## Global TLS Hardening
+
+- Enable/disable globally via Security Hub; stores settings in database.
+- Applies secure TLS configurations to all entrypoints by default.
+- Uses modern TLS configurations with strong cipher suites and protocols.
+
+## Per-resource TLS Hardening
+
+- Toggle **TLS Hardening** on a resource to apply enhanced TLS settings.
+- When enabled globally, resources inherit the global TLS hardening configuration.
+- Cannot be enabled simultaneously with mTLS (mTLS already includes TLS hardening).
+
+## Configuration Options
+
+TLS hardening applies the following security enhancements:
+
+- **Minimum TLS Version**: Enforces TLS 1.2 or higher
+- **Cipher Suites**: Restricts to strong, modern cipher suites only
+- **Curve Preferences**: Uses elliptic curves with strong security properties
+- **Session Tickets**: Configures secure session resumption
+- **Prefer Server Ciphers**: Ensures server cipher preferences are respected
+
+## Plugin Requirement
+
+No additional plugins required - TLS hardening is built into Traefik's core functionality.
+
+## Interaction with mTLS
+
+<Callout type="info" title="mTLS includes TLS hardening">
+When mTLS is enabled on a resource, TLS hardening is automatically applied through the `mtls-verify` TLS option. You cannot enable both simultaneously as it would be redundant.
+</Callout>
+
+## Best Practices
+
+- Enable TLS hardening globally for baseline security across all services
+- Disable per-resource TLS hardening only when specific legacy compatibility is required
+- Always test TLS changes in a staging environment before applying to production
+- Monitor TLS handshake success rates after enabling hardening
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — Security Hub TLS hardening toggle and configuration.
+</div>

@@ -1,0 +1,82 @@
+---
+title: Middlewares & External Middlewares
+description: Assign Traefik-native middlewares (rate limiting, headers, etc.) to resources.
+---
+
+## Overview
+
+External Middlewares allow you to assign Traefik-native middlewares (those defined in Traefik's dynamic configuration or via plugins) to resources managed by Middleware Manager. This feature bridges the gap between Middleware Manager's internal middleware definitions and Traefik's native middleware ecosystem.
+
+## How It Works
+
+1. **Discovery**: Middleware Manager reads Traefik's dynamic configuration to discover available middlewares
+2. **Assignment**: You assign discovered middlewares to resources via the UI or API
+3. **Storage**: Assignments are stored in the `resource_external_middlewares` database table
+4. **Rendering**: Assigned external middlewares are included in the middleware chain when generating Traefik configuration
+
+## Workflow
+
+### Via UI
+1. Navigate to **Resources** and open any resource detail page
+2. Scroll to the **External / Traefik-Native Middlewares** section
+3. Click **Add External Middleware** to see available options
+4. Select a middleware and set its priority
+5. Save - the assignment takes effect immediately
+
+### Via API
+```http
+POST /api/resources/{resourceId}/external-middlewares
+Content-Type: application/json
+
+{
+  "middleware_name": "rate-limit@file",
+  "priority": 10
+}
+```
+
+## Available Middlewares
+
+External middlewares come from two sources:
+
+### File Provider Middlewares
+Middlewares defined in Traefik's dynamic configuration files (typically in the `/conf` directory mounted to Middleware Manager):
+- `rate-limit@file`: Traefik's built-in rate limiting middleware
+- `headers@file`: Custom headers middleware
+- `redirectscheme@file`: Redirect to HTTPS middleware
+- Any custom middlewares you've defined in your Traefik dynamic config
+
+### Plugin Middlewares
+Middlewares provided by Traefik plugins installed via the **Plugin Hub**:
+- `crowdsec@file`: CrowdSec security bouncer
+- `mtlswhitelist@file`: mTLS validation middleware
+- `basic-auth@file`: HTTP basic authentication
+- Any other plugin middleware you've installed
+
+## Priority System
+
+External middlewares follow the same priority system as internal middlewares:
+- Higher numbers run first in the middleware chain
+- Priority is stored alongside the middleware name and provider
+- When multiple external middlewares are assigned, they execute in priority order
+
+## Best Practices
+
+- Use descriptive middleware names when defining your own in Traefik dynamic config
+- Test middleware assignments on staging resources before applying to production
+- Be aware that some middlewares (like rate limiting) may affect legitimate traffic if misconfigured
+- Check Traefik logs if assigned middlewares don't appear to be taking effect
+- Remember that plugin middlewares require Traefik restart after installation via Plugin Hub
+
+## Troubleshooting
+
+<Callout type="warning" title="Middleware not appearing">
+If an assigned external middleware doesn't seem to be active:
+1. Verify the middleware exists in Traefik's dynamic config (check Traefik Explorer)
+2. Confirm the plugin is installed and Traefik has been restarted (for plugin middlewares)
+3. Check that the priority doesn't conflict with other middleware assignments
+4. Look for errors in Traefik logs related to middleware loading
+</Callout>
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — External middlewares assignment interface.
+</div>

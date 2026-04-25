@@ -11,11 +11,19 @@ Key variables (defaults shown where applicable):
 - `TRAEFIK_STATIC_CONFIG_PATH` — path to Traefik static config inside MM container (required for plugin install)
 - `ACTIVE_DATA_SOURCE` — `pangolin` or `traefik` (default `pangolin`)
 - `PANGOLIN_API_URL` — Pangolin API base when active (`http://pangolin:3001/api/v1` if empty)
-- `TRAEFIK_API_URL` — Traefik API base when active (`http://host.docker.internal:8080` if empty)
+- `TRAEFIK_API_URL` — Traefik API base when active (`http://traefik:8080` if empty)
 - `CHECK_INTERVAL_SECONDS` — resource poll interval (default `30`)
 - `SERVICE_INTERVAL_SECONDS` — service poll interval (default `30`)
 - `DEBUG` — `true/false` toggles Gin logger
 - `ALLOW_CORS` — enable CORS; `CORS_ORIGIN` to scope
+- `DOCKER_HOSTS` — Comma-separated list of Docker host URLs for multi-host management
+- `PANGOLIN_DIR` — Pangolin integration directory path
+- `GEOAPIFY_API_KEY` — API key for geolocation services used in threat maps
+- `CAPTCHA_PROVIDER` — Captcha provider selection (turnstile, hcaptcha, recaptcha)
+- `RETENTION_DAYS` — Number of days to retain data (default: 30)
+- `CROWDSEC_ACQUIS_FILE` — Path to CrowdSec acquisition configuration file
+- `BACKUP_DIR` — Directory for storing backups
+- `ENABLE_FILE_CONFIG` — Set to `true` to enable file provider mode (writes to Traefik's dynamic config file); otherwise, API proxy mode is used (default: `false`)
 
 <Callout type="warning" title="Static config path">
 If `TRAEFIK_STATIC_CONFIG_PATH` is wrong, plugin install/remove and mTLS plugin checks will fail. Match the path to your mounted `/etc/traefik/*.yml` inside the MM container.

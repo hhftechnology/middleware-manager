@@ -1,6 +1,8 @@
 {
   "title": "Security",
   "pages": [
-    "risks"
+    "risks",
+    "tls-hardening",
+    "secure-headers"
   ]
 }
