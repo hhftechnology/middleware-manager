@@ -1,0 +1,44 @@
+---
+title: Security & Secure Headers
+description: Configure HTTP security headers for enhanced protection.
+---
+
+## Global Secure Headers
+
+- Enable/disable globally via Security Hub; stores configuration in database.
+- Applies security headers to all HTTP responses by default.
+- Provides defense-in-depth against common web vulnerabilities.
+
+## Per-resource Secure Headers
+
+- Toggle **Secure Headers** on a resource to apply custom header configurations.
+- When enabled globally, resources inherit the global secure headers configuration.
+- Requires global secure headers to be enabled before per-resource configuration takes effect.
+
+## Configuration Options
+
+The secure headers feature allows you to configure the following HTTP security headers:
+
+- **X-Content-Type-Options**: Prevents MIME type sniffing (nosniff)
+- **X-Frame-Options**: Protects against clickjacking (DENY, SAMEORIGIN, ALLOW-FROM)
+- **X-XSS-Protection**: Enables XSS filtering in legacy browsers (1; mode=block)
+- **Strict-Transport-Security (HSTS)**: Enforces HTTPS with max-age, includeSubDomains, and preload options
+- **Referrer-Policy**: Controls referrer information sent with requests
+- **Content-Security-Policy (CSP)**: Defines approved sources of content to prevent XSS
+- **Permissions-Policy**: Controls access to browser features and APIs
+
+## Plugin Requirement
+
+No additional plugins required - secure headers are built into Traefik's headers middleware.
+
+## Best Practices
+
+- Start with conservative values and adjust based on your application requirements
+- Test header changes in a staging environment before deploying to production
+- Monitor for any compatibility issues with legacy browsers or integrations
+- Consider using reporting directives (like CSP report-uri) to monitor violations
+- Keep HSTS max-age values appropriate for your infrastructure change frequency
+
+<div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/70">
+  Screenshot placeholder — Security Hub secure headers toggle and configuration form.
+</div>

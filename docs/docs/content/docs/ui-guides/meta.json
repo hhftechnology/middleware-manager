@@ -8,6 +8,7 @@
     "plugin-hub",
     "security-mtls",
     "traefik-explorer",
-    "settings"
+    "settings",
+    "external-middlewares"
   ]
 }

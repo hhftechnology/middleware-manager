@@ -35,6 +35,26 @@ Routers and middlewares directly affect live traffic. Start in a staging environ
 
 Switch via **Settings → Active Data Source**. Middleware Manager writes overrides to Traefik’s file provider directory (default `/conf`).
 
+## Configuration Modes
+
+Middleware Manager operates in two distinct modes based on the `ENABLE_FILE_CONFIG` environment variable:
+
+### API Proxy Mode (Default)
+When `ENABLE_FILE_CONFIG=false` (default):
+- Middlewares are managed via the API and stored in the database
+- Changes are applied by creating an override API that Traefik polls
+- No direct writes to Traefik's dynamic configuration files
+- Recommended for most users as it provides safer, reversible changes
+
+### File Provider Mode
+When `ENABLE_FILE_CONFIG=true`:
+- Middlewares are written directly to Traefik's dynamic config file directory (`/conf` by default)
+- Requires Traefik to be configured with a file provider watching this directory
+- Provides lower latency but less safety net for mistakes
+- Use when you need immediate propagation of changes or have specific file provider requirements
+
+You can check which mode is active in **Settings → Configuration**.
+
 ## Safe first changes
 
 - Create a non-critical middleware (e.g., `headers` with `X-Debug: 1`) and assign it to a staging router.
