@@ -986,6 +986,33 @@ func (cp *ConfigProxy) findRouterByPangolinID(routers map[string]interface{}, pa
 // findMatchingRouter finds a router that matches the given host.
 // Prefers the main websecure router over redirect routers (-redirect suffix).
 // This ensures middlewares are applied to the HTTPS router, not the HTTP->HTTPS redirect router.
+//
+// This function only matches on the Host(...) predicate of a router's rule.
+// When a single host is served by more than one non-redirect router - which
+// happens with Pangolin's multi-target path routing, where one resource with
+// several Targets produces multiple routers that share an identical Host()
+// but differ only in PathPrefix() - this function cannot tell which router
+// actually corresponds to the resource being processed, because it has no
+// visibility into anything beyond the host.
+//
+// Previously, in that ambiguous case, the function returned whichever router
+// Go's randomized map iteration over `routers` happened to place first in
+// `matches`. Since `routers` is freshly deserialized from JSON on every cache
+// refresh, the iteration order (and therefore the returned router) changed
+// from call to call. The caller (applyResourceOverrides) mutates the
+// returned router's `priority` field in place, so a resource's
+// RouterPriority override could silently land on an unrelated sibling
+// router instead of the one it belongs to - corrupting that router's
+// priority and creating a priority tie between routers whose relative order
+// must stay fixed (catch-all vs. more specific path). See GH issue #113.
+//
+// To fix this without guessing, matches are now sorted deterministically
+// before selection, and if more than one non-redirect candidate remains
+// (i.e. the host genuinely doesn't identify a single router), the function
+// returns no match at all. The caller then simply skips the override for
+// that resource on that cycle rather than risking it on the wrong router -
+// leaving Pangolin's own router configuration (including its own priority)
+// untouched, which is always safer than corrupting it.
 func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host string) (string, map[string]interface{}) {
 	// Host matching regex
 	hostRegex := regexp.MustCompile(`Host\(\x60([^` + "`" + `]+)\x60\)`)
@@ -1019,25 +1046,46 @@ func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host s
 		return "", nil
 	}
 
-	// Prefer the main router (websecure) over redirect routers
-	// Main routers don't have the "-redirect" suffix
+	// Make the selection below deterministic regardless of the (randomized)
+	// order in which the `routers` map was iterated above.
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].name < matches[j].name
+	})
+
+	// Prefer the main router (websecure) over redirect routers.
+	// Main routers don't have the "-redirect" suffix.
+	var nonRedirect []matchedRouter
 	for _, m := range matches {
 		if !strings.HasSuffix(m.name, "-redirect") {
-			// Also verify it has websecure entrypoint for extra safety
-			if eps := cp.getRouterEntryPoints(m.router); len(eps) > 0 {
-				for _, ep := range eps {
-					if ep == "websecure" {
-						return m.name, m.router
-					}
-				}
-			}
-			// Even without websecure check, prefer non-redirect routers
-			return m.name, m.router
+			nonRedirect = append(nonRedirect, m)
 		}
 	}
 
-	// Fallback to first match if no non-redirect router found
-	return matches[0].name, matches[0].router
+	switch len(nonRedirect) {
+	case 0:
+		// No non-redirect router found (unexpected, but keep the previous
+		// fallback behavior) - pick the first match in deterministic order.
+		return matches[0].name, matches[0].router
+	case 1:
+		m := nonRedirect[0]
+		// Also verify it has websecure entrypoint for extra safety.
+		if eps := cp.getRouterEntryPoints(m.router); len(eps) > 0 {
+			for _, ep := range eps {
+				if ep == "websecure" {
+					return m.name, m.router
+				}
+			}
+		}
+		// Even without websecure check, prefer the non-redirect router.
+		return m.name, m.router
+	default:
+		// Ambiguous: multiple non-redirect routers share this host (e.g.
+		// Pangolin multi-target path routing). Host alone cannot
+		// disambiguate which router belongs to the resource being
+		// processed, so report no match instead of guessing (see doc
+		// comment above and GH issue #113).
+		return "", nil
+	}
 }
 
 // getRouterEntryPoints extracts the entryPoints list from a router config
