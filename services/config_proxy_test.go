@@ -229,6 +229,35 @@ func TestConfigProxyFindMatchingRouter(t *testing.T) {
 		}
 	})
 
+	t.Run("only redirect routers match the host: deterministic fallback to first match", func(t *testing.T) {
+		// Every router matching this host has the "-redirect" suffix, so
+		// nonRedirect is empty (case 0) and the function falls back to
+		// matches[0] in the deterministic (name-sorted) order established
+		// before the redirect filter runs. Regression guard: this fallback
+		// must stay deterministic across repeated calls despite `routers`
+		// being a Go map with randomized iteration order.
+		routers := map[string]interface{}{
+			"zzz-redirect": map[string]interface{}{
+				"rule":        "Host(`redirect-only.example.com`)",
+				"entryPoints": []interface{}{"web"},
+			},
+			"aaa-redirect": map[string]interface{}{
+				"rule":        "Host(`redirect-only.example.com`)",
+				"entryPoints": []interface{}{"web"},
+			},
+		}
+
+		for i := 0; i < 20; i++ {
+			name, router := cp.findMatchingRouter(routers, "redirect-only.example.com")
+			if name != "aaa-redirect" {
+				t.Fatalf("iteration %d: expected deterministic fallback to %q, got %q", i, "aaa-redirect", name)
+			}
+			if router == nil {
+				t.Fatalf("iteration %d: expected a non-nil router", i)
+			}
+		}
+	})
+
 	t.Run("ambiguous host including redirect companions still returns no match", func(t *testing.T) {
 		routers := map[string]interface{}{
 			"catch-all": map[string]interface{}{

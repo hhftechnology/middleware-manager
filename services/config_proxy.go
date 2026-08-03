@@ -1068,15 +1068,6 @@ func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host s
 		return matches[0].name, matches[0].router
 	case 1:
 		m := nonRedirect[0]
-		// Also verify it has websecure entrypoint for extra safety.
-		if eps := cp.getRouterEntryPoints(m.router); len(eps) > 0 {
-			for _, ep := range eps {
-				if ep == "websecure" {
-					return m.name, m.router
-				}
-			}
-		}
-		// Even without websecure check, prefer the non-redirect router.
 		return m.name, m.router
 	default:
 		// Ambiguous: multiple non-redirect routers share this host (e.g.
