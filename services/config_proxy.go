@@ -64,9 +64,9 @@ type OrderedRouter struct {
 
 // OrderedTLSConfig represents TLS config for a router with Pangolin's field order.
 type OrderedTLSConfig struct {
-	CertResolver string   `json:"certResolver,omitempty"`
-	Domains      []string `json:"domains,omitempty"`
-	Options      string   `json:"options,omitempty"`
+	CertResolver string        `json:"certResolver,omitempty"`
+	Domains      []interface{} `json:"domains,omitempty"`
+	Options      string        `json:"options,omitempty"`
 }
 
 // OrderedMiddleware represents a middleware with Pangolin's field order.
@@ -164,19 +164,14 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	cp.cacheMutex.RUnlock()
 
 	// Fetch fresh config OUTSIDE the lock to avoid blocking readers
-	config, err := cp.fetchPangolinConfig()
+	config, err := cp.buildBaseConfig()
 	if err != nil {
 		// Return stale cache on error if available
 		if staleCache != nil {
-			log.Printf("Warning: Pangolin fetch failed, using stale cache: %v", err)
+			log.Printf("Warning: base config fetch failed, using stale cache: %v", err)
 			return staleCache, nil
 		}
-		return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
-	}
-
-	// Merge MW-manager additions (no lock needed, operates on local config)
-	if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
-		return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
+		return nil, fmt.Errorf("failed to build base config: %w", err)
 	}
 
 	// Remove empty protocol sections so Traefik doesn't reject blank configs
@@ -194,6 +189,88 @@ func (cp *ConfigProxy) GetMergedConfig() (*ProxiedTraefikConfig, error) {
 	cp.cacheExpiry = time.Now().Add(cp.cacheDuration)
 	cp.cacheMutex.Unlock()
 
+	return config, nil
+}
+
+// buildBaseConfig selects the appropriate config source for the active data source.
+func (cp *ConfigProxy) buildBaseConfig() (*ProxiedTraefikConfig, error) {
+	activeType := models.PangolinAPI
+	if cp.configManager != nil {
+		if dsConfig, err := cp.configManager.GetActiveDataSourceConfig(); err == nil {
+			activeType = dsConfig.Type
+		} else if shouldLogInfo() {
+			log.Printf("Warning: failed to read active data source for config proxy, defaulting to Pangolin: %v", err)
+		}
+	}
+
+	switch activeType {
+	case models.TraefikAPI:
+		if shouldLogInfo() {
+			log.Printf("Building standalone Traefik config from Middleware Manager state")
+		}
+		return cp.buildStandaloneTraefikConfig()
+	case models.PangolinAPI:
+		fallthrough
+	default:
+		config, err := cp.fetchPangolinConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch Pangolin config: %w", err)
+		}
+		if err := cp.mergeMiddlewareManagerConfig(config); err != nil {
+			return nil, fmt.Errorf("failed to merge MW-manager config: %w", err)
+		}
+		return config, nil
+	}
+}
+
+// buildStandaloneTraefikConfig builds the dynamic config directly from Middleware Manager state.
+func (cp *ConfigProxy) buildStandaloneTraefikConfig() (*ProxiedTraefikConfig, error) {
+	generatorConfig := &TraefikConfig{}
+	generatorConfig.HTTP.Middlewares = make(map[string]interface{})
+	generatorConfig.HTTP.Routers = make(map[string]interface{})
+	generatorConfig.HTTP.Services = make(map[string]interface{})
+	generatorConfig.TCP.Routers = make(map[string]interface{})
+	generatorConfig.TCP.Services = make(map[string]interface{})
+	generatorConfig.UDP.Services = make(map[string]interface{})
+	generatorConfig.TLS.Options = make(map[string]interface{})
+
+	generator := NewConfigGenerator(cp.db, "", cp.configManager)
+
+	if err := generator.processMiddlewares(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process middlewares for standalone config: %w", err)
+	}
+	if err := generator.processMTLSOptions(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process mTLS options for standalone config: %w", err)
+	}
+	if err := generator.processServices(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process services for standalone config: %w", err)
+	}
+	if err := generator.processResourcesWithServices(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process HTTP resources for standalone config: %w", err)
+	}
+	if err := generator.processTCPRouters(generatorConfig); err != nil {
+		return nil, fmt.Errorf("failed to process TCP resources for standalone config: %w", err)
+	}
+
+	config := &ProxiedTraefikConfig{
+		HTTP: &HTTPConfig{
+			Middlewares: generatorConfig.HTTP.Middlewares,
+			Routers:     generatorConfig.HTTP.Routers,
+			Services:    generatorConfig.HTTP.Services,
+		},
+		TCP: &TCPConfig{
+			Routers:  generatorConfig.TCP.Routers,
+			Services: generatorConfig.TCP.Services,
+		},
+		UDP: &UDPConfig{
+			Services: generatorConfig.UDP.Services,
+		},
+		TLS: &TLSConfig{
+			Options: generatorConfig.TLS.Options,
+		},
+	}
+
+	cp.initializeConfigMaps(config)
 	return config, nil
 }
 
@@ -986,6 +1063,33 @@ func (cp *ConfigProxy) findRouterByPangolinID(routers map[string]interface{}, pa
 // findMatchingRouter finds a router that matches the given host.
 // Prefers the main websecure router over redirect routers (-redirect suffix).
 // This ensures middlewares are applied to the HTTPS router, not the HTTP->HTTPS redirect router.
+//
+// This function only matches on the Host(...) predicate of a router's rule.
+// When a single host is served by more than one non-redirect router - which
+// happens with Pangolin's multi-target path routing, where one resource with
+// several Targets produces multiple routers that share an identical Host()
+// but differ only in PathPrefix() - this function cannot tell which router
+// actually corresponds to the resource being processed, because it has no
+// visibility into anything beyond the host.
+//
+// Previously, in that ambiguous case, the function returned whichever router
+// Go's randomized map iteration over `routers` happened to place first in
+// `matches`. Since `routers` is freshly deserialized from JSON on every cache
+// refresh, the iteration order (and therefore the returned router) changed
+// from call to call. The caller (applyResourceOverrides) mutates the
+// returned router's `priority` field in place, so a resource's
+// RouterPriority override could silently land on an unrelated sibling
+// router instead of the one it belongs to - corrupting that router's
+// priority and creating a priority tie between routers whose relative order
+// must stay fixed (catch-all vs. more specific path). See GH issue #113.
+//
+// To fix this without guessing, matches are now sorted deterministically
+// before selection, and if more than one non-redirect candidate remains
+// (i.e. the host genuinely doesn't identify a single router), the function
+// returns no match at all. The caller then simply skips the override for
+// that resource on that cycle rather than risking it on the wrong router -
+// leaving Pangolin's own router configuration (including its own priority)
+// untouched, which is always safer than corrupting it.
 func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host string) (string, map[string]interface{}) {
 	// Host matching regex
 	hostRegex := regexp.MustCompile(`Host\(\x60([^` + "`" + `]+)\x60\)`)
@@ -1019,25 +1123,37 @@ func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host s
 		return "", nil
 	}
 
-	// Prefer the main router (websecure) over redirect routers
-	// Main routers don't have the "-redirect" suffix
+	// Make the selection below deterministic regardless of the (randomized)
+	// order in which the `routers` map was iterated above.
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].name < matches[j].name
+	})
+
+	// Prefer the main router (websecure) over redirect routers.
+	// Main routers don't have the "-redirect" suffix.
+	var nonRedirect []matchedRouter
 	for _, m := range matches {
 		if !strings.HasSuffix(m.name, "-redirect") {
-			// Also verify it has websecure entrypoint for extra safety
-			if eps := cp.getRouterEntryPoints(m.router); len(eps) > 0 {
-				for _, ep := range eps {
-					if ep == "websecure" {
-						return m.name, m.router
-					}
-				}
-			}
-			// Even without websecure check, prefer non-redirect routers
-			return m.name, m.router
+			nonRedirect = append(nonRedirect, m)
 		}
 	}
 
-	// Fallback to first match if no non-redirect router found
-	return matches[0].name, matches[0].router
+	switch len(nonRedirect) {
+	case 0:
+		// No non-redirect router found (unexpected, but keep the previous
+		// fallback behavior) - pick the first match in deterministic order.
+		return matches[0].name, matches[0].router
+	case 1:
+		m := nonRedirect[0]
+		return m.name, m.router
+	default:
+		// Ambiguous: multiple non-redirect routers share this host (e.g.
+		// Pangolin multi-target path routing). Host alone cannot
+		// disambiguate which router belongs to the resource being
+		// processed, so report no match instead of guessing (see doc
+		// comment above and GH issue #113).
+		return "", nil
+	}
 }
 
 // getRouterEntryPoints extracts the entryPoints list from a router config
@@ -1261,13 +1377,17 @@ func (cp *ConfigProxy) mapToOrderedTLS(tls map[string]interface{}) *OrderedTLSCo
 	if domains, ok := tls["domains"]; ok {
 		switch v := domains.(type) {
 		case []interface{}:
-			for _, d := range v {
-				if s, ok := d.(string); ok {
-					ordered.Domains = append(ordered.Domains, s)
-				}
-			}
-		case []string:
 			ordered.Domains = v
+		case []string:
+			ordered.Domains = make([]interface{}, len(v))
+			for i, domain := range v {
+				ordered.Domains[i] = domain
+			}
+		case []map[string]interface{}:
+			ordered.Domains = make([]interface{}, len(v))
+			for i, domain := range v {
+				ordered.Domains[i] = domain
+			}
 		}
 	}
 

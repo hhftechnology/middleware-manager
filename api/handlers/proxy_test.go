@@ -3,9 +3,11 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/hhftechnology/middleware-manager/internal/testutil"
+	"github.com/hhftechnology/middleware-manager/models"
 	"github.com/hhftechnology/middleware-manager/services"
 )
 
@@ -15,6 +17,35 @@ func newTestConfigProxy(t *testing.T) *services.ConfigProxy {
 	db := testutil.NewTempDB(t)
 	cm := testutil.NewTestConfigManager(t)
 	return services.NewConfigProxy(db, cm, "")
+}
+
+func newTraefikActiveTestConfigProxy(t *testing.T) (*services.ConfigProxy, func()) {
+	t.Helper()
+
+	db := testutil.NewTempDB(t)
+	cm := testutil.NewTestConfigManager(t)
+
+	traefikServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/version" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"Version": "3.6.12",
+		})
+	}))
+	if err := cm.UpdateDataSource("traefik", models.DataSourceConfig{
+		Type: models.TraefikAPI,
+		URL:  traefikServer.URL,
+	}); err != nil {
+		t.Fatalf("UpdateDataSource(traefik) failed: %v", err)
+	}
+	if err := cm.SetActiveDataSource("traefik"); err != nil {
+		t.Fatalf("SetActiveDataSource(traefik) failed: %v", err)
+	}
+
+	return services.NewConfigProxy(db, cm, ""), traefikServer.Close
 }
 
 // TestNewProxyHandler tests proxy handler creation
@@ -70,6 +101,48 @@ func TestProxyHandler_GetProxyStatus(t *testing.T) {
 	}
 	if response["message"] == nil {
 		t.Error("expected message in response")
+	}
+}
+
+func TestProxyHandler_GetProxyStatus_TraefikActiveHealthy(t *testing.T) {
+	configProxy, cleanup := newTraefikActiveTestConfigProxy(t)
+	defer cleanup()
+	handler := NewProxyHandler(configProxy)
+
+	c, rec := testutil.NewContext(t, http.MethodGet, "/api/traefik-config/status", nil)
+	handler.GetProxyStatus(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response map[string]interface{}
+	json.Unmarshal(rec.Body.Bytes(), &response)
+
+	if got := response["status"]; got != "healthy" {
+		t.Fatalf("expected healthy status, got %#v", got)
+	}
+}
+
+func TestProxyHandler_GetTraefikConfig_TraefikActive(t *testing.T) {
+	configProxy, cleanup := newTraefikActiveTestConfigProxy(t)
+	defer cleanup()
+	handler := NewProxyHandler(configProxy)
+
+	c, rec := testutil.NewContext(t, http.MethodGet, "/api/traefik-config", nil)
+	handler.GetTraefikConfig(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if response["http"] == nil {
+		t.Fatal("expected http section in response")
 	}
 }
 

@@ -453,7 +453,7 @@ export function PluginHub() {
                   <select
                     value={catalogueFilter}
                     onChange={(e) => setCatalogueFilter(e.target.value as CatalogueFilter)}
-                    className="h-10 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-colors"
+                    className="h-10 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-colors"
                   >
                     <option value="all">All Plugins</option>
                     <option value="not_installed">Not Installed</option>
