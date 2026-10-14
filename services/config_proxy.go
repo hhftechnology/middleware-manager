@@ -394,48 +394,34 @@ func (cp *ConfigProxy) mergeMiddlewareManagerConfig(config *ProxiedTraefikConfig
 	return nil
 }
 
-// applyMiddlewares adds custom middlewares from the database
+// applyMiddlewares adds custom middlewares from the database.
+// Definitions are keyed by middleware ID. Display names are not valid Traefik
+// identifiers when they contain spaces or punctuation, and chain entries that
+// stored those names are rewritten to IDs here.
 func (cp *ConfigProxy) applyMiddlewares(config *ProxiedTraefikConfig, allowedIDs map[string]struct{}) error {
-	rows, err := cp.db.Query("SELECT id, name, type, config FROM middlewares")
+	records, err := loadMiddlewareRecords(cp.db)
 	if err != nil {
 		return fmt.Errorf("failed to fetch middlewares: %w", err)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var id, name, typ, configStr string
-		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-			log.Printf("Failed to scan middleware: %v", err)
-			continue
-		}
-
-		// Skip middlewares not assigned to any resource/router
-		if allowedIDs != nil {
-			if _, ok := allowedIDs[id]; !ok {
-				continue
+	if allowedIDs != nil {
+		allowedIDs = expandChainMemberIDs(records, allowedIDs)
+		filtered := make([]middlewareRecord, 0, len(allowedIDs))
+		for _, mw := range records {
+			if _, ok := allowedIDs[mw.ID]; ok {
+				filtered = append(filtered, mw)
 			}
 		}
-
-		var middlewareConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(configStr), &middlewareConfig); err != nil {
-			log.Printf("Failed to parse middleware config for %s: %v", name, err)
-			continue
-		}
-
-		// Use the centralized processing logic from models package
-		middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
-
-		// Add middleware using its name as the key (so chain references by name work)
-		config.HTTP.Middlewares[name] = map[string]interface{}{
-			typ: middlewareConfig,
-		}
-
-		if shouldLog() {
-			log.Printf("Added middleware %s [%s] (%s) to config", name, id, typ)
-		}
+		records = filtered
 	}
 
-	return rows.Err()
+	for id, entry := range emitMiddlewareConfigs(records, chainRefProxy) {
+		config.HTTP.Middlewares[id] = entry
+		if shouldLog() {
+			log.Printf("Added middleware %s to config", id)
+		}
+	}
+	return nil
 }
 
 // applyServices adds custom services from the database
@@ -566,7 +552,7 @@ func (cp *ConfigProxy) applyResourceOverrides(config *ProxiedTraefikConfig, reso
 		}
 		var allAssigned []middlewareEntry
 		for _, mw := range resource.Middlewares {
-			allAssigned = append(allAssigned, middlewareEntry{Name: mw.Name, Priority: mw.Priority})
+			allAssigned = append(allAssigned, middlewareEntry{Name: mw.ID, Priority: mw.Priority})
 		}
 		for _, ext := range resource.ExternalMiddlewares {
 			allAssigned = append(allAssigned, middlewareEntry{Name: ext.Name, Priority: ext.Priority})

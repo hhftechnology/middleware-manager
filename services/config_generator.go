@@ -227,38 +227,14 @@ func (cg *ConfigGenerator) generateConfig() error {
 }
 
 func (cg *ConfigGenerator) processMiddlewares(config *TraefikConfig) error {
-	rows, err := cg.db.Query("SELECT id, name, type, config FROM middlewares")
+	records, err := loadMiddlewareRecords(cg.db)
 	if err != nil {
 		return fmt.Errorf("failed to fetch middlewares: %w", err)
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var id, name, typ, configStr string
-		if err := rows.Scan(&id, &name, &typ, &configStr); err != nil {
-			// REPLACE: log.Printf("Failed to scan middleware: %v", err)
-			if shouldLog() {
-				log.Printf("Failed to scan middleware: %v", err)
-			}
-			continue
-		}
-		var middlewareConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(configStr), &middlewareConfig); err != nil {
-			// REPLACE: log.Printf("Failed to parse middleware config for %s: %v", name, err)
-			if shouldLog() {
-				log.Printf("Failed to parse middleware config for %s: %v", name, err)
-			}
-			continue
-		}
-
-		// Use the centralized processing logic from models package
-		middlewareConfig = models.ProcessMiddlewareConfig(typ, middlewareConfig)
-
-		config.HTTP.Middlewares[name] = map[string]interface{}{
-			typ: middlewareConfig,
-		}
+	for id, entry := range emitMiddlewareConfigs(records, chainRefFile) {
+		config.HTTP.Middlewares[id] = entry
 	}
-	return rows.Err()
+	return nil
 }
 
 func (cg *ConfigGenerator) processServices(config *TraefikConfig) error {
@@ -448,8 +424,8 @@ func (cg *ConfigGenerator) processResourcesWithServices(config *TraefikConfig) e
 			finalMiddlewares = append(finalMiddlewares, customHeadersMiddlewareID)
 		}
 		for _, mw := range assignedMiddlewares {
-			middlewareName := extractBaseName(mw.Name)
-			finalMiddlewares = append(finalMiddlewares, fmt.Sprintf("%s@file", middlewareName))
+			middlewareID := extractBaseName(mw.ID)
+			finalMiddlewares = append(finalMiddlewares, fmt.Sprintf("%s@file", middlewareID))
 		}
 
 		// Only add the badger middleware when using Pangolin data source

@@ -19,6 +19,7 @@ import { PageLoader } from '@/components/common/LoadingSpinner'
 import { ErrorMessage } from '@/components/common/ErrorMessage'
 import { InlineError } from '@/components/common/ErrorMessage'
 import { ArrowLeft, Save, Loader2, GripVertical, X } from 'lucide-react'
+import { resolveChainMemberId } from '@/lib/middlewareChain'
 import { MIDDLEWARE_TYPE_LABELS } from '@/types'
 import type { MiddlewareType, Middleware } from '@/types'
 
@@ -32,35 +33,31 @@ interface ChainBuilderProps {
 }
 
 function ChainBuilder({ selectedMiddlewares, availableMiddlewares, onChange }: ChainBuilderProps) {
-  // Get middleware names for the selected ones (handles both IDs and names)
-  const resolveMiddlewareName = (idOrName: string) => {
-    // First try to find by ID
-    const byId = availableMiddlewares.find((m) => m.id === idOrName)
-    if (byId) return byId.name
-    // Then try by name
-    const byName = availableMiddlewares.find((m) => m.name === idOrName)
-    if (byName) return byName.name
-    // Return as-is if not found (external middleware reference)
-    return idOrName
+  // Persist IDs. Display names contain spaces and capitals and are rejected by Traefik.
+  const selectedIds = selectedMiddlewares.map((ref) => resolveChainMemberId(ref, availableMiddlewares))
+
+  const labelFor = (id: string) => {
+    const mw = availableMiddlewares.find((m) => m.id === id)
+    return mw?.name ?? id
   }
 
-  const handleToggle = (middlewareName: string) => {
-    if (selectedMiddlewares.includes(middlewareName)) {
-      onChange(selectedMiddlewares.filter((m) => m !== middlewareName))
+  const handleToggle = (middlewareId: string) => {
+    if (selectedIds.includes(middlewareId)) {
+      onChange(selectedIds.filter((m) => m !== middlewareId))
     } else {
-      onChange([...selectedMiddlewares, middlewareName])
+      onChange([...selectedIds, middlewareId])
     }
   }
 
   const handleRemove = (index: number) => {
-    const newList = [...selectedMiddlewares]
+    const newList = [...selectedIds]
     newList.splice(index, 1)
     onChange(newList)
   }
 
   const handleMoveUp = (index: number) => {
     if (index === 0) return
-    const newList = [...selectedMiddlewares]
+    const newList = [...selectedIds]
     const temp = newList[index - 1] as string
     newList[index - 1] = newList[index] as string
     newList[index] = temp
@@ -68,16 +65,15 @@ function ChainBuilder({ selectedMiddlewares, availableMiddlewares, onChange }: C
   }
 
   const handleMoveDown = (index: number) => {
-    if (index === selectedMiddlewares.length - 1) return
-    const newList = [...selectedMiddlewares]
+    if (index === selectedIds.length - 1) return
+    const newList = [...selectedIds]
     const temp = newList[index] as string
     newList[index] = newList[index + 1] as string
     newList[index + 1] = temp
     onChange(newList)
   }
 
-  // Convert any IDs in selectedMiddlewares to names
-  const normalizedSelected = selectedMiddlewares.map(resolveMiddlewareName)
+  const normalizedSelected = selectedIds
 
   // Filter out chain middlewares to prevent circular references
   const selectableMiddlewares = availableMiddlewares.filter((m) => m.type !== 'chain')
@@ -93,15 +89,15 @@ function ChainBuilder({ selectedMiddlewares, availableMiddlewares, onChange }: C
           </p>
         ) : (
           <div className="space-y-1 border rounded-md p-2">
-            {normalizedSelected.map((name, index) => {
-              const mw = availableMiddlewares.find((m) => m.name === name)
+            {normalizedSelected.map((id, index) => {
+              const mw = availableMiddlewares.find((m) => m.id === id)
               return (
                 <div
-                  key={`${name}-${index}`}
+                  key={`${id}-${index}`}
                   className="flex items-center gap-2 p-2 bg-muted/50 rounded hover:bg-muted"
                 >
                   <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                  <span className="flex-1 font-medium">{name}</span>
+                  <span className="flex-1 font-medium">{labelFor(id)}</span>
                   {mw && (
                     <Badge variant="outline" className="text-xs">
                       {MIDDLEWARE_TYPE_LABELS[mw.type as MiddlewareType] || mw.type}
@@ -160,8 +156,8 @@ function ChainBuilder({ selectedMiddlewares, availableMiddlewares, onChange }: C
                 className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer"
               >
                 <Checkbox
-                  checked={normalizedSelected.includes(mw.name)}
-                  onCheckedChange={() => handleToggle(mw.name)}
+                  checked={normalizedSelected.includes(mw.id)}
+                  onCheckedChange={() => handleToggle(mw.id)}
                 />
                 <span className="flex-1">{mw.name}</span>
                 <Badge variant="outline" className="text-xs">
