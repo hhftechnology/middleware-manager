@@ -984,13 +984,14 @@ func (cp *ConfigProxy) findRouterByPangolinID(routers map[string]interface{}, pa
 }
 
 // findMatchingRouter finds a router that matches the given host.
-// Prefers the main websecure router over redirect routers (-redirect suffix).
-// This ensures middlewares are applied to the HTTPS router, not the HTTP->HTTPS redirect router.
+// Host-only matching cannot tell sibling routers apart (multi-target path
+// routing shares one Host() across several PathPrefix routers). When more
+// than one non-redirect router matches, this returns no match so callers
+// leave Pangolin's own router config untouched instead of mutating a
+// randomly chosen sibling. Map iteration order is never used as a tie-break.
 func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host string) (string, map[string]interface{}) {
-	// Host matching regex
 	hostRegex := regexp.MustCompile(`Host\(\x60([^` + "`" + `]+)\x60\)`)
 
-	// Collect all matching routers first
 	type matchedRouter struct {
 		name   string
 		router map[string]interface{}
@@ -1008,7 +1009,6 @@ func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host s
 			continue
 		}
 
-		// Extract host from rule
 		hostMatches := hostRegex.FindStringSubmatch(rule)
 		if len(hostMatches) > 1 && hostMatches[1] == host {
 			matches = append(matches, matchedRouter{name: routerName, router: router})
@@ -1019,24 +1019,28 @@ func (cp *ConfigProxy) findMatchingRouter(routers map[string]interface{}, host s
 		return "", nil
 	}
 
-	// Prefer the main router (websecure) over redirect routers
-	// Main routers don't have the "-redirect" suffix
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].name < matches[j].name
+	})
+
+	nonRedirect := make([]matchedRouter, 0, len(matches))
 	for _, m := range matches {
 		if !strings.HasSuffix(m.name, "-redirect") {
-			// Also verify it has websecure entrypoint for extra safety
-			if eps := cp.getRouterEntryPoints(m.router); len(eps) > 0 {
-				for _, ep := range eps {
-					if ep == "websecure" {
-						return m.name, m.router
-					}
-				}
-			}
-			// Even without websecure check, prefer non-redirect routers
-			return m.name, m.router
+			nonRedirect = append(nonRedirect, m)
 		}
 	}
 
-	// Fallback to first match if no non-redirect router found
+	// A single non-redirect router is unambiguous.
+	if len(nonRedirect) == 1 {
+		return nonRedirect[0].name, nonRedirect[0].router
+	}
+	// Several non-redirect routers share this host. Host alone cannot
+	// identify the right one, so refuse to guess.
+	if len(nonRedirect) > 1 {
+		return "", nil
+	}
+
+	// Only redirect routers matched. Fall back to the alphabetically first.
 	return matches[0].name, matches[0].router
 }
 
