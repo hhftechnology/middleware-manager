@@ -36,6 +36,7 @@ type Server struct {
 	configManager           *services.ConfigManager
 	configProxy             *services.ConfigProxy
 	traefikStaticConfigPath string
+	auth                    AuthConfig
 }
 
 // ServerConfig contains configuration options for the server
@@ -46,6 +47,7 @@ type ServerConfig struct {
 	AllowCORS   bool
 	CORSOrigin  string
 	PangolinURL string // URL for Pangolin API (for config proxy)
+	Auth        AuthConfig
 }
 
 // NewServer creates a new API server
@@ -127,6 +129,7 @@ func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *servi
 		configManager:           configManager,
 		configProxy:             configProxy,
 		traefikStaticConfigPath: traefikStaticConfigPath,
+		auth:                    config.Auth,
 		srv: &http.Server{
 			Addr:              ":" + config.Port,
 			Handler:           router,
@@ -145,6 +148,12 @@ func NewServer(dbWrapper *database.DB, config ServerConfig, configManager *servi
 
 // setupRoutes configures all the routes for the API server
 func (s *Server) setupRoutes(uiPath string) {
+	// Optional basic auth covers the UI, SPA fallback, and every API route.
+	// /health stays open so the image healthcheck does not need credentials.
+	if s.auth.Enabled {
+		s.router.Use(basicAuthMiddleware(s.auth.Username, s.auth.Token))
+	}
+
 	// Health check endpoint
 	s.router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

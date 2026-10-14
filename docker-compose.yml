@@ -15,6 +15,10 @@ services:
       - TRAEFIK_CONF_DIR=/conf
       - DB_PATH=/data/middleware.db
       - PORT=3456
+      # Optional admin auth. Leave unset to keep the historical open API.
+      # - MM_AUTH_ENABLED=true
+      # - MM_AUTH_USER=admin
+      # - MM_AUTH_TOKEN=replace-with-a-long-random-token
     ports:
       - "3456:3456"
     networks:

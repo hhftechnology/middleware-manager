@@ -141,6 +141,14 @@ func main() {
 		log.Println("File config generator disabled (ENABLE_FILE_CONFIG not true); relying on API proxy only")
 	}
 
+	authCfg, err := api.AuthConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Invalid auth configuration: %v", err)
+	}
+	if authCfg.Enabled {
+		log.Printf("Admin authentication enabled for user %q; /health stays open for the container healthcheck", authCfg.Username)
+	}
+
 	serverConfig := api.ServerConfig{
 		Port:        cfg.Port,
 		UIPath:      cfg.UIPath,
@@ -148,6 +156,7 @@ func main() {
 		AllowCORS:   cfg.AllowCORS,
 		CORSOrigin:  cfg.CORSOrigin,
 		PangolinURL: cfg.PangolinAPIURL,
+		Auth:        authCfg,
 	}
 
 	server := api.NewServer(db, serverConfig, configManager, cfg.TraefikStaticConfigPath)
