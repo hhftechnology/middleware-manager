@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hhftechnology/middleware-manager/internal/testutil"
+	"github.com/hhftechnology/middleware-manager/models"
 )
 
 // TestNewDataSourceHandler tests data source handler creation
@@ -230,5 +232,48 @@ func TestDataSourceHandler_TestDataSourceConnection_NotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestDataSourceHandler_TestDataSourceConnection_SuccessFlag(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/traefik-config" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"http":{}}`))
+	}))
+	defer server.Close()
+
+	cm := testutil.NewTestConfigManager(t)
+	handler := NewDataSourceHandler(cm)
+
+	cfg := cm.GetDataSources()["pangolin"]
+	cfg.Type = models.PangolinAPI
+	cfg.URL = server.URL
+	if err := cm.UpdateDataSource("pangolin", cfg); err != nil {
+		t.Fatalf("update data source: %v", err)
+	}
+
+	c, rec := testutil.NewContext(t, http.MethodPost, "/api/datasource/pangolin/test", nil)
+	c.Params = gin.Params{{Key: "name", Value: "pangolin"}}
+	handler.TestDataSourceConnection(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	success, ok := response["success"].(bool)
+	if !ok || !success {
+		t.Fatalf("expected success=true, got %#v", response["success"])
+	}
+	if response["message"] != "Connection test successful" {
+		t.Fatalf("unexpected message: %#v", response["message"])
 	}
 }

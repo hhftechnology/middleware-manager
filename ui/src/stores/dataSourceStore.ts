@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { connectionTestOutcome } from '@/lib/connectionResult'
 import { dataSourceApi } from '@/services/api'
 import type { DataSourceInfo, DataSourceConfig } from '@/types'
 
@@ -124,11 +125,12 @@ export const useDataSourceStore = create<DataSourceState>((set) => ({
     set({ testing: true, error: null, testResult: null })
     try {
       const result = await dataSourceApi.testConnection(name)
+      const outcome = connectionTestOutcome(result)
       set({
-        testResult: { success: result.success, message: result.message || result.error },
+        testResult: outcome,
         testing: false,
       })
-      return result.success
+      return outcome.success
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Connection test failed'
       set({

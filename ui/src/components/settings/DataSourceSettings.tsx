@@ -119,7 +119,7 @@ export function DataSourceSettings() {
               )}
 
               {testResult && (
-                <Alert variant={testResult.success ? 'default' : 'destructive'}>
+                <Alert variant={testResult.success ? 'success' : 'destructive'}>
                   <AlertDescription className="flex items-center gap-2">
                     {testResult.success ? (
                       <CheckCircle className="h-4 w-4 text-success" />
