@@ -4,9 +4,22 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hhftechnology/middleware-manager/database"
 )
+
+func waitUntil(t *testing.T, cond func() bool, message string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal(message)
+}
 
 func newTestDB(t *testing.T) *database.DB {
 	t.Helper()

@@ -391,21 +391,11 @@ func TestServiceWatcher_StartStop(t *testing.T) {
 		t.Fatalf("NewServiceWatcher() error = %v", err)
 	}
 
-	// Start in goroutine
 	go watcher.Start(100 * time.Millisecond)
+	waitUntil(t, func() bool { return watcher.isRunning.Load() }, "watcher should be running after Start()")
 
-	// Wait a bit for it to start
-	time.Sleep(50 * time.Millisecond)
-
-	if !watcher.isRunning.Load() {
-		t.Error("watcher should be running after Start()")
-	}
-
-	// Stop it
 	watcher.Stop()
-
-	// Wait for stop to complete
-	time.Sleep(50 * time.Millisecond)
+	waitUntil(t, func() bool { return !watcher.isRunning.Load() }, "watcher should not be running after Stop()")
 
 	if watcher.isRunning.Load() {
 		t.Error("watcher should not be running after Stop()")

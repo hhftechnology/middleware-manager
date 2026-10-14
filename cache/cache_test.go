@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+func waitForExpiry(t *testing.T, c *Cache, key string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := c.Get(key); !ok {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("key %s did not expire", key)
+}
+
 func TestCache_SetAndGet(t *testing.T) {
 	c := New()
 	defer c.Stop()
@@ -25,7 +37,7 @@ func TestCache_Get_Expired(t *testing.T) {
 	defer c.Stop()
 
 	c.Set("key1", "value1", 10*time.Millisecond)
-	time.Sleep(20 * time.Millisecond)
+	waitForExpiry(t, c, "key1")
 
 	_, ok := c.Get("key1")
 	if ok {
@@ -106,7 +118,7 @@ func TestCache_Has(t *testing.T) {
 
 	c.Set("exists", "val", time.Minute)
 	c.Set("expired", "val", 10*time.Millisecond)
-	time.Sleep(20 * time.Millisecond)
+	waitForExpiry(t, c, "expired")
 
 	if !c.Has("exists") {
 		t.Error("Has(exists) = false, want true")
@@ -125,7 +137,7 @@ func TestCache_Len(t *testing.T) {
 
 	c.Set("k1", "v1", time.Minute)
 	c.Set("k2", "v2", 10*time.Millisecond)
-	time.Sleep(20 * time.Millisecond)
+	waitForExpiry(t, c, "k2")
 
 	// Len includes expired items per implementation
 	if c.Len() != 2 {
@@ -140,7 +152,7 @@ func TestCache_Keys(t *testing.T) {
 	c.Set("active1", "v1", time.Minute)
 	c.Set("active2", "v2", time.Minute)
 	c.Set("expired", "v3", 10*time.Millisecond)
-	time.Sleep(20 * time.Millisecond)
+	waitForExpiry(t, c, "expired")
 
 	keys := c.Keys()
 	if len(keys) != 2 {
@@ -214,7 +226,7 @@ func TestCache_SetIfNotExists(t *testing.T) {
 
 	// Overwrite expired
 	c.Set("expiring", "old", 10*time.Millisecond)
-	time.Sleep(20 * time.Millisecond)
+	waitForExpiry(t, c, "expiring")
 	ok = c.SetIfNotExists("expiring", "new", time.Minute)
 	if !ok {
 		t.Error("SetIfNotExists should return true for expired key")
