@@ -267,6 +267,8 @@ For full guides on configuration, security, operations, and API usage, please re
 ```bash
 go run main.go
 # Build: go build -o middleware-manager main.go
+
+[![Discuss on the HHF forum](https://img.shields.io/badge/discuss-forum.hhf.technology-E65100?logo=discourse&logoColor=white)](https://forum.hhf.technology/c/pangolin-newt-tools/middleware-manager)
 ```
 
 ### Frontend
